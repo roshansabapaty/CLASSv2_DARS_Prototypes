@@ -1,0 +1,71 @@
+# ── Dependencies ─────────────────────────────────────────────────────
+node_modules/
+
+# ── Build output ─────────────────────────────────────────────────────
+build/
+dist/
+*.tsbuildinfo
+
+# ── Vite / dev cache ─────────────────────────────────────────────────
+.vite/
+.cache/
+.parcel-cache/
+
+# ── Test / coverage ──────────────────────────────────────────────────
+coverage/
+.nyc_output/
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# ── Environment + secrets ────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── IDE / editor ─────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# ── One-off backups + snapshots in the repo root ─────────────────────
+src.zip
+*.zip
+*.tar
+*.tar.gz
+
+# ── Debug screenshots in the repo root (kept out of version control;
+#    move into /docs or /docs/screenshots if any should be tracked) ───
+/*.png
+/*.jpg
+/*.jpeg
+/*.gif
+# …but DO keep images that live inside src/ (UI assets) or docs/.
+!/src/**/*.png
+!/src/**/*.jpg
+!/src/**/*.jpeg
+!/src/**/*.gif
+!/docs/**/*.png
+!/docs/**/*.jpg
+!/docs/**/*.jpeg
+!/docs/**/*.gif
+
+# ── Playwright snapshot YAMLs at the repo root ───────────────────────
+/*.yml
+!.github/**/*.yml
+!/docs/**/*.yml
+
+# ── Claude / agent scratch ───────────────────────────────────────────
+.claude/

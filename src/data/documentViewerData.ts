@@ -1,0 +1,51 @@
+/** Default available documents for the document viewer panel */
+export const DEFAULT_AVAILABLE_DOCUMENTS = [
+  {
+    id: 'warrant-1',
+    name: 'Search Warrant',
+    type: 'Legal Document',
+    pages: 2,
+    documentId: 'DOC-2024-SW-001640545',
+    documentName: 'Search Warrant - Electronic Data',
+    documentType: 'Search Warrant',
+    documentStatus: 'Valid',
+    startDate: new Date(2024, 8, 25),
+    expirationDate: new Date(2024, 8, 28),
+    approverName: 'Magistrate John P. Williams',
+    approvalDateTime: new Date(2024, 8, 25, 10, 45),
+    approvalReason: 'Probable cause established based on submitted affidavit. Investigation shows sufficient evidence of criminal activity requiring search of electronic communications and stored data. Scope of warrant is appropriately limited to relevant time period and data categories.',
+    documentDesiredStatus: 'Approved'
+  },
+  {
+    id: 'subpoena-1',
+    name: 'Court Subpoena',
+    type: 'Legal Document',
+    pages: 1,
+    documentId: 'DOC-2024-CS-001640545',
+    documentName: 'Court Subpoena - Subscriber Records',
+    documentType: 'Court Subpoena',
+    documentStatus: 'Valid',
+    startDate: new Date(2024, 8, 25),
+    expirationDate: new Date(2024, 11, 25),
+    approverName: 'Clerk of Court - Maria Rodriguez',
+    approvalDateTime: new Date(2024, 8, 25, 9, 15),
+    approvalReason: 'Court subpoena issued pursuant to court order. Request for subscriber information and transactional records meets legal requirements. Service provider must comply within statutory timeframe.',
+    documentDesiredStatus: 'Approved'
+  },
+  {
+    id: 'ndo-1',
+    name: 'Nondisclosure Order',
+    type: 'Court Order',
+    pages: 2,
+    documentId: 'DOC-2024-NDO-001640545',
+    documentName: 'Nondisclosure Order - 180 Day',
+    documentType: 'Nondisclosure Order',
+    documentStatus: 'Active',
+    startDate: new Date(2024, 8, 25),
+    expirationDate: new Date(2025, 2, 24),
+    approverName: 'Hon. Judge Sarah K. Mitchell',
+    approvalDateTime: new Date(2024, 8, 25, 11, 30),
+    approvalReason: 'Government demonstrated compelling need for nondisclosure pursuant to 18 U.S.C. § 2705(b). Disclosure would seriously jeopardize ongoing criminal investigation. Order limited to 180 days with option for extension upon showing of continued need.',
+    documentDesiredStatus: 'Approved'
+  },
+];

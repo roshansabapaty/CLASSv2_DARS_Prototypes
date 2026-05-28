@@ -1,0 +1,184 @@
+/**
+ * useEaWindowExpiry — auto-fires EA-review-window lifecycle events on the
+ * active case form.
+ *
+ * Watches the case's GFR block against the live wall-clock tick and
+ * dispatches three lifecycle effects that the spec requires (Workflow 2 /
+ * Art. 8 + 10(2) Reg. 2023/1543) but that nothing else in the codebase
+ * currently triggers:
+ *
+ *   1. Day-10 lapse: when `eaReviewWindowExpiresAt` passes with no
+ *      decision and no `windowLapsed` flag yet → sets `windowLapsed: true`,
+ *      stamps `windowLapsedAt`, and appends an `EaWindowExpired` audit
+ *      event.
+ *
+ *   2. EA cleared (Form1Review path): when an inbound GFR with
+ *      `decision.kind === "None"` and `trigger === "Form1Review"` lands
+ *      and no `GfrCleared` audit has been written yet → appends the
+ *      `GfrCleared` audit event so the trail captures the moment.
+ *
+ * Both writes are idempotent: re-mounting the hook or re-running the
+ * effect after the audit is already present is a no-op. The dispatcher
+ * dedupes by inspecting `escalationAuditEvents` before appending.
+ *
+ * The hook ticks at the same cadence as the SLA chip (1/min via
+ * `useCountdownTick`), which is enough for a 10-day window.
+ */
+
+import { useEffect, useRef } from "react";
+import { CURRENT_USER } from "../constants/caseConstants";
+import type {
+  EscalationAuditEvent,
+  FormData,
+} from "../types/caseTypes";
+import { useCountdownTick } from "./useCountdownTick";
+import {
+  gfrApplies,
+  gfrBlock,
+  currentDecision,
+  gfrTrigger,
+} from "../utils/groundsForRefusal";
+
+interface UseEaWindowExpiryArgs {
+  formData: FormData | null | undefined;
+  setSharedFormData: ((next: FormData) => void) | undefined;
+}
+
+/** Whether the audit log already carries an event of the given kind. */
+function hasAuditKind(
+  events: EscalationAuditEvent[] | undefined,
+  kind: EscalationAuditEvent["kind"],
+): boolean {
+  if (!events) return false;
+  return events.some((ev) => ev.kind === kind);
+}
+
+export function useEaWindowExpiry({
+  formData,
+  setSharedFormData,
+}: UseEaWindowExpiryArgs): void {
+  const now = useCountdownTick();
+  // Stable refs so the effect closure reads the latest props without
+  // resubscribing or re-running on each render.
+  const formDataRef = useRef(formData);
+  const setFormDataRef = useRef(setSharedFormData);
+  formDataRef.current = formData;
+  setFormDataRef.current = setSharedFormData;
+
+  useEffect(() => {
+    const fd = formDataRef.current;
+    const setFd = setFormDataRef.current;
+    if (!fd || !setFd) return;
+    if (!gfrApplies(fd)) return;
+    const block = gfrBlock(fd);
+    if (!block) return;
+
+    let next: FormData = fd;
+    let changed = false;
+    const auditEvents = next.escalationAuditEvents ?? [];
+
+    // ── Effect 1: Day-10 lapse ───────────────────────────────────────
+    const decision = currentDecision(next);
+    const expiresAt = new Date(block.eaReviewWindowExpiresAt).getTime();
+    const windowHasPassed = expiresAt < now.getTime();
+    if (
+      !decision &&
+      windowHasPassed &&
+      !block.windowLapsed &&
+      !hasAuditKind(auditEvents, "EaWindowExpired")
+    ) {
+      const lapsedAt = new Date();
+      const lapseAudit: EscalationAuditEvent = {
+        id: `audit-ea-window-expired-${lapsedAt.getTime().toString(36)}`,
+        kind: "EaWindowExpired",
+        actor: "System",
+        performedAt: lapsedAt,
+        note:
+          "EA review window expired with no decision. Hold lapsed by " +
+          "operation of Art. 8 + 10(2), EU Reg. 2023/1543. Delivery is " +
+          "now permitted; Specialist must manually initiate delivery.",
+      };
+      next = {
+        ...next,
+        eevidenceGroundsForRefusal: {
+          ...block,
+          windowLapsed: true,
+          windowLapsedAt: lapsedAt,
+        },
+        escalationAuditEvents: [...auditEvents, lapseAudit],
+      };
+      changed = true;
+    }
+
+    // ── Effect 2: EA cleared (Form1Review + None) ────────────────────
+    const trigger = gfrTrigger(next);
+    const decisionAfter = currentDecision(next);
+    if (
+      decisionAfter?.kind === "None" &&
+      trigger === "Form1Review" &&
+      !hasAuditKind(next.escalationAuditEvents, "GfrCleared")
+    ) {
+      const clearedAuditAt =
+        decisionAfter.decidedAt instanceof Date
+          ? decisionAfter.decidedAt
+          : new Date(decisionAfter.decidedAt);
+      const clearedAudit: EscalationAuditEvent = {
+        id: `audit-gfr-cleared-${Date.now().toString(36)}`,
+        kind: "GfrCleared",
+        actor: decisionAfter.decidedBy ?? "Enforcing Authority",
+        performedAt: clearedAuditAt,
+        note:
+          "EA confirmed no grounds for refusal (NoGroundsForRefusal). " +
+          "Production may proceed.",
+      };
+      next = {
+        ...next,
+        escalationAuditEvents: [
+          ...(next.escalationAuditEvents ?? []),
+          clearedAudit,
+        ],
+      };
+      changed = true;
+    }
+
+    if (changed) {
+      setFd(next);
+    }
+    // Re-run on every tick so the window-passed check stays current. The
+    // body short-circuits when nothing needs to change, so it's cheap.
+  }, [now]);
+}
+
+/** Pure helper used by the GFR Panel's Resume Delivery CTA. Sets the
+ *  `manualDeliveryResumed` block flags + appends a
+ *  `GfrDeliveryResumedManually` audit event. Idempotent — re-calling
+ *  after the flag is already set returns the formData unchanged. */
+export function applyManualDeliveryResume(formData: FormData): FormData {
+  const block = formData.eevidenceGroundsForRefusal;
+  if (!block) return formData;
+  if (block.manualDeliveryResumed) return formData;
+  const now = new Date();
+  const audit: EscalationAuditEvent = {
+    id: `audit-gfr-resumed-${now.getTime().toString(36)}`,
+    kind: "GfrDeliveryResumedManually",
+    actor: CURRENT_USER,
+    actorRole: "ResponseSpecialist",
+    performedAt: now,
+    note:
+      "Specialist manually resumed delivery after the 10-day EA review " +
+      "window lapsed (Art. 8 + 10(2), EU Reg. 2023/1543).",
+  };
+  return {
+    ...formData,
+    eevidenceGroundsForRefusal: {
+      ...block,
+      manualDeliveryResumed: true,
+      manualDeliveryResumedAt: now,
+      manualDeliveryResumedBy: CURRENT_USER,
+    },
+    escalationAuditEvents: [
+      ...(formData.escalationAuditEvents ?? []),
+      audit,
+    ],
+  };
+}

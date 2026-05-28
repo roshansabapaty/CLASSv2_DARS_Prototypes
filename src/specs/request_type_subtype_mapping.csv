@@ -1,0 +1,42 @@
+request_type,request_sub_type,is_default
+Search Warrant,Microsoft Business Records,false
+Search Warrant,None,true
+Court Order,Microsoft Business Records,false
+Court Order,None,true
+Preservation,Extension,false
+Preservation,Digital Safety (was Evidence Hold),false
+Preservation,None,true
+Preservation,eEvidence,false
+Subpoena,Defense Counsel,false
+Subpoena,Civil,false
+Subpoena,Administrative,false
+Subpoena,Microsoft Business Records,false
+Subpoena,None,true
+Civil,Preservation,false
+Civil,Content Disclosure,false
+Civil,Non-Content Disclosure,false
+Civil,Consent Release,false
+IREQ,Preservation,false
+IREQ,Content Disclosure,false
+IREQ,Non-Content Disclosure,false
+IREQ,PRTT,false
+IREQ,Lawful Intercept,false
+Summons,Administrative,false
+Summons,None,true
+Emergency Letter,eEvidence,false
+Emergency Letter,None,true
+International Order,Judicial Order,false
+International Order,Non-Judicial Order,false
+International Order,None,true
+International Order,eEvidence,false
+International Order,UK COPO,false
+International Order,AU Cloud,false
+International Order,Urgent,false
+Consent Release,FACTA,false
+Consent Release,None,true
+Lawful Intercept,Start,false
+Lawful Intercept,Renewal,false
+Lawful Intercept,Stop,false
+PRTT,Start,false
+PRTT,Renewal,false
+PRTT,Stop,false

@@ -1,0 +1,22 @@
+# Feature Spec: UK COPO Task & Document Handling for Claude Code Integration
+
+**Author:** Lisa Wu  
+**Role:** Principal Product Manager  
+**Audience:** Engineering, Applied AI, Compliance  
+**Status:** Final  
+**Scope:** UK COPO only
+
+---
+
+## 1. Background
+
+This feature enables correct integration with **Claude Code** for processing  
+**UK COPO (Communications Data Production Order)** requests.
+
+During discussions with **UK COPO NTAC**, several UK‑specific rules were confirmed that differ materially from other request types (e.g., US COPO, MLAT).  
+These rules **override legacy assumptions** and must be enforced to prevent incorrect automation behavior.
+
+This document defines the **authoritative detection logic**, **task model**, and **automation boundaries** for UK COPO processing.
+
+---
+
