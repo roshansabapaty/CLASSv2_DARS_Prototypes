@@ -1,0 +1,44 @@
+{
+  // Minimal TypeScript config — exists so VS Code's TS service and
+  // `npm run typecheck` apply consistent scoping rules to the source.
+  // Primary purpose: catch forward-reference / temporal-dead-zone bugs
+  // before they hit runtime (e.g. a `useEffect` deps array reading a
+  // `const` declared further down in the same function body — the kind
+  // of bug that surfaced twice in CollectionTracker.tsx with `formData`
+  // and `allPipelineJobs`).
+  //
+  // Strict mode is deliberately OFF so the codebase's existing `any`
+  // usage doesn't drown out the structural errors we care about. The
+  // default analysis still catches "Block-scoped variable used before
+  // its declaration" and similar scope mistakes.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
+    "jsx": "preserve",
+    "allowJs": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "useDefineForClassFields": true,
+    // Loose typing — we are NOT enforcing strict typing across the
+    // codebase. The IDE keeps flagging scope errors regardless of
+    // strict mode.
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": [
+    "node_modules",
+    "src/**/*.md",
+    "src/specs",
+    "src/option1-inline-add",
+    "src/components/FulfillmentTaskView.tsx",
+    "src/tmp"
+  ]
+}
