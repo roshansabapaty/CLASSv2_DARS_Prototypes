@@ -6,11 +6,16 @@
  */
 
 /**
- * Phase 4 of the UX-Polish "airy density" plan. When `true`, replace the
- * left-edge `WorkflowSidebar` with a horizontal `StageTabBar` rendered
- * directly under `StickyCaseHeader` on case routes.
+ * Teams-style list-pane nav for the case workflow. When `true`, replace
+ * the legacy `WorkflowSidebar` with `WorkflowListPane` (Path A of
+ * `dars-workflow-nav-listpane-rfc.md`). The new pane:
+ *   - 280 px wide (vs the legacy 256 px).
+ *   - Scope header with case-id + priority + assignee + action icons.
+ *   - 3 stage groups; active stage shows its sub-steps.
+ *   - Sticky footer hosting Save Draft + Submit Case.
  *
- * Off by default so the existing sidebar layout remains the prototype's
- * canonical chrome until the new shell is validated end-to-end.
+ * Per §11 RFC decision, the default is **ON** for the Cases app only
+ * (Attorney Dashboard / Notifications are unaffected because the workflow
+ * pane only mounts on Cases anyway).
  */
-export const FF_STAGE_TAB_BAR = false;
+export const FF_NAV_V2_LIST_PANE = true;

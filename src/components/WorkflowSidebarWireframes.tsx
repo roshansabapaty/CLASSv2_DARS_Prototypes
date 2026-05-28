@@ -336,18 +336,34 @@ function SidebarWireframe({ scenario }: { scenario: WireframeScenario }) {
   );
 }
 
-export function WorkflowSidebarWireframes() {
+interface WorkflowSidebarWireframesProps {
+  onClose?: () => void;
+}
+
+export function WorkflowSidebarWireframes({ onClose }: WorkflowSidebarWireframesProps = {}) {
   return (
     <div className="min-h-screen bg-[#faf9f8] p-8">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-8">
-        <h1 className="text-3xl font-bold text-[#323130] mb-2">
-          Workflow Sidebar - All Scenarios
-        </h1>
-        <p className="text-[#605e5c] text-lg">
-          Comprehensive wireframe reference showing all possible states of the collapsible workflow
-          navigation sidebar
-        </p>
+      <div className="max-w-7xl mx-auto mb-8 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-[#323130] mb-2">
+            Workflow Sidebar - All Scenarios
+          </h1>
+          <p className="text-[#605e5c] text-lg">
+            Comprehensive wireframe reference showing all possible states of the collapsible workflow
+            navigation sidebar
+          </p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close wireframes"
+            className="h-9 w-9 flex items-center justify-center rounded text-[#605e5c] hover:bg-[#f3f2f1] hover:text-[#323130] flex-shrink-0"
+          >
+            <span aria-hidden="true" className="text-2xl leading-none">×</span>
+          </button>
+        )}
       </div>
 
       {/* Wireframe Grid */}

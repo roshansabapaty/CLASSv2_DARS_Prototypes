@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../ui/utils";
+import { FF_NAV_V2_LIST_PANE } from "../../constants/featureFlags";
 
 interface CaseHeaderActionsProps {
   // Save (kept for prop compat but no longer rendered here)
@@ -35,6 +36,10 @@ export function CaseHeaderActions({
   onToggleIdentifierPanel,
   workflowStage,
 }: CaseHeaderActionsProps) {
+  // When the new Teams-style list pane is on, the document + identifier
+  // panel toggles live in the pane's scope-header action icon row instead.
+  // Returning null here avoids rendering duplicates in the StickyCaseHeader.
+  if (FF_NAV_V2_LIST_PANE) return null;
   return (
     <div className="flex items-center gap-2 flex-shrink-0">
       {/* Panel Tabs */}

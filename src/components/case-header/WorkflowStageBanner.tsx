@@ -31,6 +31,7 @@ import {
   MenuTrigger,
 } from "@fluentui/react-components";
 import { isClosureStage } from "../../constants/caseConstants";
+import { FF_NAV_V2_LIST_PANE } from "../../constants/featureFlags";
 import type { EscalationChipMeta } from "../../utils/escalationHelpers";
 import { AssigneeChip } from "../assignee/AssigneeChip";
 
@@ -279,9 +280,13 @@ export function WorkflowStageBanner({
           aria-orientation="vertical"
         />
       )}
-      {escalationAction}
-      {resolveActions}
-      {onSave && (
+      {/* Case-level actions (Escalate, Resolve, Save) hide here when
+          FF_NAV_V2_LIST_PANE is on — they live in the WorkflowListPane's
+          scope-header overflow menu (Escalate / Resolve) and pane footer
+          (Save) instead. Keeps single-home for each action. */}
+      {!FF_NAV_V2_LIST_PANE && escalationAction}
+      {!FF_NAV_V2_LIST_PANE && resolveActions}
+      {!FF_NAV_V2_LIST_PANE && onSave && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button

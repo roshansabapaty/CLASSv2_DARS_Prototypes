@@ -16,8 +16,8 @@ import { CaseHeaderSummary } from "./case-header/CaseHeaderSummary";
 import { getPriorityConfig } from "./case-header/caseHeaderUtils";
 import { currentEscalationChip } from "../utils/escalationHelpers";
 import { getActiveAttorneyEscalation } from "../utils/caseEscalation";
-import { StageTabBar } from "./layout/StageTabBar";
-import { FF_STAGE_TAB_BAR } from "../constants/featureFlags";
+// StageTabBar / FF_STAGE_TAB_BAR retired in Phase 1.4 of the workflow
+// list-pane RFC — superseded by WorkflowListPane mounted at the App level.
 import type { SidebarNavState } from "../types/sidebarNav";
 
 interface StickyCaseHeaderProps {
@@ -211,20 +211,9 @@ export function StickyCaseHeader({
           />
         </div>
 
-        {/* Phase 4 (FF_STAGE_TAB_BAR): horizontal workflow nav replaces
-            the left-edge WorkflowSidebar. Renders directly under the
-            case-header chrome so stages + sub-steps stay full-bleed. */}
-        {FF_STAGE_TAB_BAR && (
-          <StageTabBar
-            workflowStage={workflowStage}
-            stageCompletion={stageCompletion}
-            onNavigateToTriage={onNavigateToTriage}
-            onNavigateToFulfillment={onNavigateToFulfillment}
-            onNavigateToCollection={onNavigateToCollection}
-            navState={navState}
-            onStepClick={onStepClick}
-          />
-        )}
+        {/* StageTabBar render removed — Phase 1.4 of the workflow
+            list-pane RFC retired FF_STAGE_TAB_BAR. The Teams-style
+            WorkflowListPane mounted at the App level replaces it. */}
       </div>
     </TooltipProvider>
   );

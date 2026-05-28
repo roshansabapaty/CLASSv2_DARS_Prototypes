@@ -313,6 +313,13 @@ interface CollectionTrackerProps {
   };
   stageBarNavState?: import("../types/sidebarNav").SidebarNavState | null;
   onStageBarStepClick?: (key: string) => void;
+  /** Callback emitting case-level action state for the WorkflowListPane.
+   *  Same emit pattern as DataEntryForm — fires whenever the relevant
+   *  state changes; App.tsx stores the emission and forwards the slots
+   *  to the pane. See src/types/workflowPaneActions.ts. */
+  onWorkflowPaneActions?: (
+    actions: import("../types/workflowPaneActions").WorkflowPaneActions,
+  ) => void;
 }
 
 export function CollectionTracker({
@@ -329,6 +336,7 @@ export function CollectionTracker({
   stageCompletion,
   stageBarNavState,
   onStageBarStepClick,
+  onWorkflowPaneActions,
 }: CollectionTrackerProps) {
   const [expandedIdentifiers, setExpandedIdentifiers] = useState<Set<string>>(new Set());
   const [internalReadinessFilter, setInternalReadinessFilter] = useState<'all' | 'needs-action' | 'by-identifier' | 'complete'>('by-identifier');
@@ -2137,6 +2145,63 @@ export function CollectionTracker({
       : "create";
 
   const handleOpenEscalateDialog = () => setEscalateDialogOpen(true);
+
+  // Emit case-level action state up to App.tsx so the WorkflowListPane's
+  // footer + scope-header action icons can render the same Save / Escalate /
+  // Resolve / Document-panel controls without a direct reference back here.
+  // Mirrors the DataEntryForm emit pattern.
+  //
+  // Collection has no "submit form" concept — the page is monitoring running
+  // jobs, not editing data — so `canSubmit` is fixed at false and
+  // `onSubmit` is a no-op. The Submit button in the pane footer is
+  // disabled accordingly.
+  const collectionEscalationLabel = formData?.attorneyEscalation
+    ? formData.attorneyEscalation.status === "Resolved" ||
+      formData.attorneyEscalation.status === "Cancelled"
+      ? "Resume Escalation"
+      : "Update Escalation"
+    : "Escalate";
+  const collectionIsResolved = formData?.caseStage === "Resolved";
+  React.useEffect(() => {
+    if (!onWorkflowPaneActions) return;
+    onWorkflowPaneActions({
+      isDirty: isFormDirty,
+      isSaving: isManualSaving,
+      lastSavedAt: lastSavedTime,
+      onSave: handleManualSave,
+      canSubmit: false,
+      isSubmitting: false,
+      onSubmit: () => {
+        // No single "submit form" action on Collection — the page surfaces
+        // its own Publish / Deliver / Retry CTAs adjacent to the job lists.
+      },
+      documentPanelOpen,
+      onToggleDocumentPanel: onToggleDocumentPanel ?? (() => setDocumentPanelOpen(!documentPanelOpen)),
+      // Identifier panel is fulfillment-only — omitted on Collection so the
+      // pane suppresses the icon entirely.
+      escalationActionLabel: collectionEscalationLabel,
+      onEscalate: handleOpenEscalateDialog,
+      onOpenResolveDialog: (mode) => {
+        setResolveDialogMode(mode);
+        setShowResolveCaseDialog(true);
+      },
+      isResolved: collectionIsResolved,
+    });
+  }, [
+    onWorkflowPaneActions,
+    isFormDirty,
+    isManualSaving,
+    lastSavedTime,
+    handleManualSave,
+    documentPanelOpen,
+    onToggleDocumentPanel,
+    setDocumentPanelOpen,
+    collectionEscalationLabel,
+    handleOpenEscalateDialog,
+    collectionIsResolved,
+    setResolveDialogMode,
+    setShowResolveCaseDialog,
+  ]);
 
   const handleEscalateSubmit = (next: {
     escalation: AttorneyEscalation;

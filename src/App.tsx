@@ -7,8 +7,11 @@ import {
 import { CollectionTracker } from "./components/CollectionTracker";
 import { CollectionSidebarNav } from "./components/CollectionSidebarNav";
 import { WorkflowSidebar } from "./components/WorkflowSidebar";
+import { WorkflowListPane } from "./components/WorkflowListPane";
 import { AppHeader } from "./components/AppHeader";
 import { ComponentDocumentation } from "./components/ComponentDocumentation";
+import { CaseCardRedesignPreview } from "./components/case-queue/CaseCardRedesignPreview";
+import { WorkflowSidebarWireframes } from "./components/WorkflowSidebarWireframes";
 import { Toaster } from "./components/ui/sonner";
 import { SkipLinks } from "./components/SkipLinks";
 import { KeyboardShortcutsModal } from "./components/KeyboardShortcutsModal";
@@ -27,7 +30,8 @@ import type { SidebarNavState } from "./types/sidebarNav";
 import { useOutboundAutoSim } from "./hooks/useOutboundAutoSim";
 import { useCorrespondenceNotifications } from "./hooks/useCorrespondenceNotifications";
 import { CURRENT_USER } from "./constants/caseConstants";
-import { FF_STAGE_TAB_BAR } from "./constants/featureFlags";
+import { FF_NAV_V2_LIST_PANE } from "./constants/featureFlags";
+import { toast } from "sonner";
 import { DemoControlsPanel } from "./components/correspondence/DemoControlsPanel";
 import {
   LeftNavRail,
@@ -144,6 +148,16 @@ export default function App() {
   // ── Dynamic sidebar nav state (from active page's stepper) ──
   const [sidebarNavState, setSidebarNavState] = useState<SidebarNavState | null>(null);
   const [requestedStepKey, setRequestedStepKey] = useState<string | null>(null);
+
+  // ── Workflow pane action state (from DataEntryForm / CollectionTracker) ──
+  // Mirrors `sidebarNavState` — the active form component publishes its
+  // case-level action handlers + state here so <WorkflowListPane> can
+  // render the same Save / Submit / Escalate / panel-toggle controls
+  // without holding a direct ref back into the form component. See
+  // src/types/workflowPaneActions.ts.
+  const [workflowPaneActions, setWorkflowPaneActions] = useState<
+    import("./types/workflowPaneActions").WorkflowPaneActions | null
+  >(null);
 
   // ── Collection page readiness filter (lifted for sidebar nav) ──
   const [collectionReadinessFilter, setCollectionReadinessFilter] = useState<'all' | 'needs-action' | 'by-identifier' | 'complete'>('by-identifier');
@@ -387,6 +401,14 @@ export default function App() {
                   <ComponentDocumentation
                     onClose={() => setShowComponentDocs(false)}
                   />
+                ) : showRedesignPreview ? (
+                  <CaseCardRedesignPreview
+                    onClose={() => setShowRedesignPreview(false)}
+                  />
+                ) : showWireframes ? (
+                  <WorkflowSidebarWireframes
+                    onClose={() => setShowWireframes(false)}
+                  />
                 ) : activeApp === "attorneyDashboard" ? (
                   <AttorneyDashboard
                     onOpenCase={(caseId) => {
@@ -492,7 +514,7 @@ export default function App() {
               <nav> is omitted so the case body owns the full content
               width. The StageTabBar mounts inside StickyCaseHeader
               instead. */}
-          {!FF_STAGE_TAB_BAR && (
+          {!FF_NAV_V2_LIST_PANE && (
             <nav
               id="navigation"
               aria-label="Workflow stages"
@@ -502,25 +524,70 @@ export default function App() {
                 workflowStage={workflowStage}
                 stageCompletion={stageCompletion}
                 onNavigateToQueue={handleNavigateToQueue}
-                onNavigateToTriage={
-                  stageCompletion.triage
-                    ? handleNavigateToTriage
-                    : undefined
-                }
-                onNavigateToFulfillment={
-                  stageCompletion.fulfillment
-                    ? handleNavigateToFulfillment
-                    : undefined
-                }
-                onNavigateToCollection={
-                  stageCompletion.collection
-                    ? handleNavigateToCollection
-                    : undefined
-                }
+                /* Free stage navigation — once a case is open, the user can
+                   move between any stage at will (per UX feedback). Previously
+                   each handler was gated on `stageCompletion[stage]`, which
+                   blocked the very common "go back to Collection to check
+                   job status" flow after the user dipped into Triage or
+                   Review Case. */
+                onNavigateToTriage={handleNavigateToTriage}
+                onNavigateToFulfillment={handleNavigateToFulfillment}
+                onNavigateToCollection={handleNavigateToCollection}
                 navState={sidebarNavState}
                 onStepClick={handleSidebarStepClick}
               />
             </nav>
+          )}
+
+          {/* New Teams-style list pane behind FF_NAV_V2_LIST_PANE.
+              Path A of dars-workflow-nav-listpane-rfc.md. Action handlers
+              are stubbed for this initial wiring pass — Save/Submit
+              migration out of StickyCaseHeader is the next phase. */}
+          {FF_NAV_V2_LIST_PANE && selectedCaseId && (
+            <WorkflowListPane
+              workflowStage={workflowStage}
+              stageCompletion={stageCompletion}
+              onNavigateToQueue={handleNavigateToQueue}
+              /* Free stage navigation — see comment on WorkflowSidebar above. */
+              onNavigateToTriage={handleNavigateToTriage}
+              onNavigateToFulfillment={handleNavigateToFulfillment}
+              onNavigateToCollection={handleNavigateToCollection}
+              navState={sidebarNavState}
+              onStepClick={handleSidebarStepClick}
+              caseId={selectedCaseId}
+              priorityLabel={
+                (sharedFormData?.casePriority as "Emergency" | "Urgent" | "Routine") ?? "Routine"
+              }
+              assigneeName={sharedFormData?.assigneeName ?? ""}
+              // ── Action handlers + state forwarded from the active form
+              //    component (DataEntryForm / CollectionTracker) via the
+              //    `onWorkflowPaneActions` callback emit pattern. See
+              //    src/types/workflowPaneActions.ts.
+              isDirty={workflowPaneActions?.isDirty ?? false}
+              isSaving={workflowPaneActions?.isSaving}
+              lastSavedAt={workflowPaneActions?.lastSavedAt}
+              onSave={
+                workflowPaneActions?.onSave ??
+                (() => toast.info("Save unavailable — case not loaded yet"))
+              }
+              canSubmit={workflowPaneActions?.canSubmit ?? false}
+              isSubmitting={workflowPaneActions?.isSubmitting}
+              onSubmit={
+                workflowPaneActions?.onSubmit ??
+                (() => toast.info("Submit unavailable — case not loaded yet"))
+              }
+              blockingFieldLabels={workflowPaneActions?.blockingFieldLabels}
+              onGoToBlockingField={workflowPaneActions?.onGoToBlockingField}
+              documentPanelOpen={workflowPaneActions?.documentPanelOpen}
+              onToggleDocumentPanel={workflowPaneActions?.onToggleDocumentPanel}
+              identifierPanelOpen={workflowPaneActions?.identifierPanelOpen}
+              onToggleIdentifierPanel={workflowPaneActions?.onToggleIdentifierPanel}
+              escalationActionLabel={workflowPaneActions?.escalationActionLabel}
+              onEscalate={workflowPaneActions?.onEscalate}
+              onOpenResolveDialog={workflowPaneActions?.onOpenResolveDialog}
+              isResolved={workflowPaneActions?.isResolved}
+              onReopenCase={workflowPaneActions?.onReopenCase}
+            />
           )}
 
           {/* Main Content Area */}
@@ -557,6 +624,7 @@ export default function App() {
                   sidebarCollapsed={sidebarCollapsed}
                   announce={announce}
                   onStepperStateChange={setSidebarNavState}
+                  onWorkflowPaneActions={setWorkflowPaneActions}
                   requestedStepKey={requestedStepKey}
                   stageCompletion={stageCompletion}
                   stageBarNavState={sidebarNavState}
@@ -589,6 +657,7 @@ export default function App() {
                       stageCompletion={stageCompletion}
                       stageBarNavState={sidebarNavState}
                       onStageBarStepClick={handleSidebarStepClick}
+                      onWorkflowPaneActions={setWorkflowPaneActions}
                     />
                   </CollectionSidebarNav>
                 </div>

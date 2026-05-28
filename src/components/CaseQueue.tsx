@@ -27,9 +27,6 @@ import {
   Globe,
   UserCheck,
   UserX,
-  Figma,
-  X,
-  Zap,
   Clock,
   Scale,
   Search,
@@ -41,8 +38,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
-import { WorkflowSidebarWireframes } from "./WorkflowSidebarWireframes";
-import { CaseCardRedesignPreview } from "./case-queue/CaseCardRedesignPreview";
 
 // Sub-components
 import { CaseCardHeader } from "./case-queue/CaseCardHeader";
