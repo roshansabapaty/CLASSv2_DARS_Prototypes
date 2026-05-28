@@ -311,6 +311,14 @@ interface DataEntryFormProps {
   announce?: (message: string) => void;
   /** Callback emitting stepper nav state for the sidebar */
   onStepperStateChange?: (state: SidebarNavState) => void;
+  /** Callback emitting case-level action state for the WorkflowListPane
+   *  (Save/Submit footer + scope-header action icons). Same emit pattern
+   *  as `onStepperStateChange` — DataEntryForm fires this whenever any of
+   *  the relevant state changes. App.tsx stores the emission and forwards
+   *  the slots to the pane. See src/types/workflowPaneActions.ts. */
+  onWorkflowPaneActions?: (
+    actions: import("../types/workflowPaneActions").WorkflowPaneActions,
+  ) => void;
   /** External request to navigate to a specific step key (from sidebar click) */
   requestedStepKey?: string | null;
   /** Phase 4 (FF_STAGE_TAB_BAR): stage completion + dynamic sub-step nav
@@ -341,6 +349,7 @@ export function DataEntryForm({
   sidebarCollapsed,
   announce,
   onStepperStateChange,
+  onWorkflowPaneActions,
   requestedStepKey,
   stageCompletion,
   stageBarNavState,
@@ -1828,6 +1837,95 @@ export function DataEntryForm({
     expandAllIdentifiers,
     wizardServiceConfig: wizardServiceConfigRef.current,
   });
+
+  // Emit case-level action state up to App.tsx so the WorkflowListPane
+  // (footer + scope-header action icons) can render the same Save / Submit /
+  // panel-toggle / escalate controls without a direct reference back here.
+  // Mirrors the onStepperStateChange pattern earlier in this component.
+  //
+  // Placed here (post-`useCaseWorkflow`) so all dependencies are in scope.
+  // Moving this block earlier in the body trips a TDZ error caught by
+  // `npm run typecheck` (TS2448).
+  const escalationActionLabel = formData.attorneyEscalation
+    ? formData.attorneyEscalation.status === "Resolved" ||
+      formData.attorneyEscalation.status === "Cancelled"
+      ? "Resume Escalation"
+      : "Update Escalation"
+    : "Escalate";
+  const isResolved = formData.caseStage === "Resolved";
+  useEffect(() => {
+    if (!onWorkflowPaneActions) return;
+    onWorkflowPaneActions({
+      isDirty: isFormDirty,
+      isSaving: isManualSaving,
+      lastSavedAt: lastSavedTime,
+      onSave: handleManualSave,
+      canSubmit: isFormValid(),
+      isSubmitting: false,
+      onSubmit: () => {
+        // Synthesize a form-submit event so handleSubmit's existing
+        // signature (e: React.FormEvent) is satisfied without breaking
+        // the legacy in-form Submit button.
+        handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+      },
+      documentPanelOpen: warrantModalOpen,
+      onToggleDocumentPanel: toggleDocumentPanel,
+      identifierPanelOpen,
+      onToggleIdentifierPanel:
+        workflowStage === "fulfillment"
+          ? () => {
+              if (identifierPanelOpen) {
+                setIdentifierPanelOpen(false);
+              } else {
+                setIdentifierPanelOpen(true);
+                setIdentifierViewMode("fulfillment");
+                setFulfillmentInitialStep(1);
+              }
+            }
+          : undefined,
+      escalationActionLabel,
+      onEscalate: handleOpenEscalateDialog,
+      onOpenResolveDialog: (mode) => {
+        setResolveDialogMode(mode);
+        if (mode === "edit") {
+          setResolveDefaultReason(formData.resolutionReason);
+          setResolveDefaultNotes(formData.resolutionNotes ?? "");
+        } else {
+          setResolveDefaultReason(undefined);
+          setResolveDefaultNotes("");
+        }
+        setShowResolveCaseDialog(true);
+      },
+      isResolved,
+      // onReopenCase intentionally omitted in this pass — it has an inline
+      // ~30-line side-effect closure that's safer to keep colocated with
+      // its existing call site for now.
+    });
+  }, [
+    onWorkflowPaneActions,
+    isFormDirty,
+    isManualSaving,
+    lastSavedTime,
+    handleManualSave,
+    handleSubmit,
+    warrantModalOpen,
+    toggleDocumentPanel,
+    identifierPanelOpen,
+    workflowStage,
+    setIdentifierPanelOpen,
+    setIdentifierViewMode,
+    setFulfillmentInitialStep,
+    escalationActionLabel,
+    handleOpenEscalateDialog,
+    isResolved,
+    formData.resolutionReason,
+    formData.resolutionNotes,
+    setResolveDialogMode,
+    setResolveDefaultReason,
+    setResolveDefaultNotes,
+    setShowResolveCaseDialog,
+    isFormValid,
+  ]);
 
   // Open fulfillment summary modal
   const handleOpenFulfillmentSummary = () => {
@@ -4110,14 +4208,6 @@ export function DataEntryForm({
         <ManifestErrorWarningBanner formData={formData} />
       )}
 
-      {/* Enterprise Context (Phase 2 of the attorney-escalation merge) —
-          Tier 3 Organization panel + nested Tier 2 Target Identifier
-          panel(s). Renders only when the case has been seeded with an
-          enterpriseContext block (see mockCaseDataLENS202600180.ts). */}
-      {formData.enterpriseContext && (
-        <EnterpriseContextSection case={formData} />
-      )}
-
       {/* Inform-Controller notice — fires when the IA explicitly set
           `processorShallInformController = Yes` and the tenant admin
           contact has been captured via the Enterprise Tenant Profile.
@@ -4444,6 +4534,16 @@ export function DataEntryForm({
 
         </CollapsibleSection>
       </SecondaryCard>
+
+      {/* Enterprise Context (Phase 2 of the attorney-escalation merge) —
+          Tier 3 Organization panel + nested Tier 2 Target Identifier
+          panel(s). Positioned AFTER the Account Identifiers card because
+          its data is populated downstream of Check Accounts, which is
+          a nested action button inside that card. Renders only when the
+          case has been seeded / written with an enterpriseContext block. */}
+      {formData.enterpriseContext && (
+        <EnterpriseContextSection case={formData} />
+      )}
             </>
           }
           /* 2F (UX-Polish): in-form CorrespondenceSection accordion

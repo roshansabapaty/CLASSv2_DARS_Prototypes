@@ -593,16 +593,6 @@ export function AttorneyReviewWorkspace({
             onAttorneyAction={handleAttorneyAction}
           />
 
-          {/* Enterprise context — Tier 3 org + nested Target Identifier
-              panel(s). Renders only on cases with enterprise context. */}
-          {isEnterpriseCase(formData) && formData.enterpriseContext && (
-            <EnterpriseContextSection
-              case={formData}
-              onSeeLogins={(id) => setLoginPanelIdentifierId(id)}
-              onCtaAction={handleEnterpriseCtaAction}
-            />
-          )}
-
           {/* Per-identifier table. Threading `formData` + `onAttorneyAction`
               activates the row's attorney context: escalated rows get
               the red left accent + an inline AttorneyReviewPanel on
@@ -622,6 +612,19 @@ export function AttorneyReviewWorkspace({
               formData={formData}
               onAttorneyAction={handleAttorneyAction}
               onOpenLoginLocation={(id) => setLoginPanelIdentifierId(id)}
+            />
+          )}
+
+          {/* Enterprise context — Tier 3 org + nested Target Identifier
+              panel(s). Positioned AFTER the IdentifierTable because its
+              data is downstream of Check Accounts (the IA-resolved
+              Enterprise tenant + per-user telemetry). Renders only on
+              cases with enterprise context. */}
+          {isEnterpriseCase(formData) && formData.enterpriseContext && (
+            <EnterpriseContextSection
+              case={formData}
+              onSeeLogins={(id) => setLoginPanelIdentifierId(id)}
+              onCtaAction={handleEnterpriseCtaAction}
             />
           )}
 

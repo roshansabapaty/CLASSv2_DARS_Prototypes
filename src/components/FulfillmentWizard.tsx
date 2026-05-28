@@ -50,6 +50,7 @@ import { CopyableIdentifier } from "./CopyableIdentifier";
 import { IdentifierTable } from "./identifier-table";
 import type { AddIdentifierData } from "./identifier-table";
 import { LoginLocationPanel } from "./cross-border/LoginLocationPanel";
+import { EnterpriseContextSection } from "./attorney-escalation/EnterpriseContextSection";
 import {
   Tooltip,
   TooltipContent,
@@ -104,6 +105,21 @@ const generateIdentifierTaskId = (): string => {
   const taskIdNumber = Math.floor(Math.random() * 900000) + 100000;
   return `${selectedTaskIdType}-${taskIdNumber}`;
 };
+
+// Helper: detect Enterprise identifiers post-CheckAllAccounts. Drives the
+// Enterprise Context card visibility under the Step 1 IdentifierTable.
+// Covers both the seeded shape (`id.checkAccounts.accountType === "Enterprise"`)
+// and the wizard's stamp shape (`services.{key}.accountExistence.enterpriseExists`).
+function hasEnterpriseIdentifiers(identifiers: any[]): boolean {
+  return identifiers.some((id) => {
+    if (id?.checkAccounts?.accountType === "Enterprise") return true;
+    const services = id?.services;
+    if (!services) return false;
+    return Object.values(services).some(
+      (svc: any) => svc?.accountExistence?.enterpriseExists === true,
+    );
+  });
+}
 
 // Helper: generate task ID for service/category (mirrors DataEntryForm)
 const generateTaskId = (service: string, category: string): string => {
@@ -1186,6 +1202,22 @@ function Step1IdentifierReview({ identifiers, onUpdateIdentifiers, formData, ann
         announce={announce}
         onOpenLoginLocation={(id) => setIpHistoryIdentifierId(id)}
       />
+
+      {/* Enterprise Context — same card reused from the Attorney case
+          view. Renders below the IdentifierTable once Check All Accounts
+          has flagged at least one identifier as Enterprise AND the case
+          has a populated `enterpriseContext` block. Read-only on this
+          surface: no `onCtaAction` prop, so the CTA row (Redirect / Flag
+          Policy / Exec Review / etc.) is suppressed — those decisions
+          belong to the attorney workspace. The "See logins" link still
+          routes through the same LoginLocationPanel the IdentifierTable
+          uses. */}
+      {hasEnterpriseIdentifiers(identifiers) && formData?.enterpriseContext && (
+        <EnterpriseContextSection
+          case={formData}
+          onSeeLogins={(id) => setIpHistoryIdentifierId(id)}
+        />
+      )}
 
       <LoginLocationPanel
         open={ipHistoryIdentifierId !== null}

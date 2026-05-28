@@ -154,10 +154,12 @@ export function buildLENS202500095FormData(): FormData {
 
   // Enable Exchange (Entra ID) with active collection jobs
   id1.services.exchangeEnterprise.enabled = true;
+  // Mutually-exclusive invariant — an identifier resolves to Consumer
+  // OR Enterprise, never both. Aligning to Enterprise here (the corp
+  // contoso.com identity) so sarah.victim's resolved type stays
+  // consistent with the Teams service below (also Enterprise).
   id1.services.exchangeEnterprise.accountExistence = {
-    consumerExists: true,
-    consumerAccounts: ["sarah.victim@outlook.com"],
-    consumerStorageLocation: "North America - West US",
+    consumerExists: false,
     enterpriseExists: true,
     enterpriseAccounts: ["sarah.victim@contoso.com"],
     enterpriseStorageLocation: "North America - West US 2",

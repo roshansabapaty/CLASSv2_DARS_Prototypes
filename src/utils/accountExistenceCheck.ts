@@ -395,6 +395,127 @@ export async function runAccountExistenceCheck(
   return { resultsMap, totalResults, successCount, errorCount };
 }
 
+// ── Mutually-exclusive account-type invariant ───────────────────────
+// "An account can only be Consumer OR Enterprise, never both."
+//
+// The two helpers below defend the invariant defensively at the seams
+// where data flows back into FormData. The check function above (per
+// the per-identifier `identifierAccountType` derivation at lines 76-90)
+// already produces XOR results, but seeded mock data or future writers
+// could drift — these guards normalize + warn so the UI never has to
+// branch on the contradictory case.
+
+/** Per-block normalizer: when a single `accountExistence` block has
+ *  both `consumerExists` and `enterpriseExists` set true, Enterprise
+ *  wins (matches the convention the check function uses internally:
+ *  `consumerExists = identifierIsConsumer; enterpriseExists =
+ *  identifierIsEnterprise`, which can't both be true). Consumer fields
+ *  are stripped in the returned block. Emits a dev-mode console.warn
+ *  so the seed / writer is fixed at the source. */
+export function normalizeAccountExistence<
+  T extends {
+    consumerExists?: boolean;
+    enterpriseExists?: boolean;
+    consumerAccounts?: any;
+    consumerStorageLocation?: any;
+    consumerPrimaryId?: any;
+    consumerRelatedIdentifiers?: any;
+  } | undefined,
+>(existence: T): T {
+  if (!existence) return existence;
+  if (existence.consumerExists && existence.enterpriseExists) {
+    if (typeof console !== "undefined") {
+      console.warn(
+        "[accountExistence] consumerExists + enterpriseExists both true; " +
+          "coercing to Enterprise (mutually-exclusive invariant).",
+      );
+    }
+    return {
+      ...existence,
+      consumerExists: false,
+      consumerAccounts: undefined,
+      consumerStorageLocation: undefined,
+      consumerPrimaryId: undefined,
+      consumerRelatedIdentifiers: undefined,
+    };
+  }
+  return existence;
+}
+
+/** Per-identifier normalizer: walks every service block and applies
+ *  `normalizeAccountExistence`. Also catches cross-service drift — if
+ *  one service says Consumer and another says Enterprise on the same
+ *  identifier, the first non-N/A type seen wins and subsequent blocks
+ *  are coerced. Returns a new identifier; safe to call on already-
+ *  consistent data (no-op). */
+export function normalizeIdentifierAccountType(
+  identifier: AccountIdentifier,
+): AccountIdentifier {
+  const services = identifier.services as any;
+  if (!services) return identifier;
+  let resolved: "Consumer" | "Enterprise" | null = null;
+  let mutated = false;
+  const nextServices: any = { ...services };
+  for (const key of Object.keys(services)) {
+    const svc = services[key];
+    if (!svc) continue;
+    const exNormalized = normalizeAccountExistence(svc.accountExistence);
+    if (exNormalized !== svc.accountExistence) {
+      nextServices[key] = { ...svc, accountExistence: exNormalized };
+      mutated = true;
+    }
+    if (exNormalized?.enterpriseExists) {
+      if (resolved === "Consumer") {
+        if (typeof console !== "undefined") {
+          console.warn(
+            `[accountExistence] identifier ${identifier.id} mixes Consumer + ` +
+              `Enterprise across services; first type wins (Consumer).`,
+          );
+        }
+        nextServices[key] = {
+          ...nextServices[key],
+          accountExistence: {
+            ...exNormalized,
+            enterpriseExists: false,
+            enterpriseAccounts: undefined,
+            enterpriseStorageLocation: undefined,
+            enterprisePrimaryId: undefined,
+            enterpriseRelatedIdentifiers: undefined,
+            enterpriseOrganizationId: undefined,
+          },
+        };
+        mutated = true;
+      } else if (resolved === null) {
+        resolved = "Enterprise";
+      }
+    } else if (exNormalized?.consumerExists) {
+      if (resolved === "Enterprise") {
+        if (typeof console !== "undefined") {
+          console.warn(
+            `[accountExistence] identifier ${identifier.id} mixes Consumer + ` +
+              `Enterprise across services; first type wins (Enterprise).`,
+          );
+        }
+        nextServices[key] = {
+          ...nextServices[key],
+          accountExistence: {
+            ...exNormalized,
+            consumerExists: false,
+            consumerAccounts: undefined,
+            consumerStorageLocation: undefined,
+            consumerPrimaryId: undefined,
+            consumerRelatedIdentifiers: undefined,
+          },
+        };
+        mutated = true;
+      } else if (resolved === null) {
+        resolved = "Consumer";
+      }
+    }
+  }
+  return mutated ? { ...identifier, services: nextServices } : identifier;
+}
+
 /**
  * Applies account existence check results to identifiers.
  * Returns updated identifiers array.
@@ -421,7 +542,7 @@ export function applyAccountExistenceResults(
       const mergedCheckAccounts = result.checkAccounts
         ? { ...identifier.checkAccounts, ...result.checkAccounts }
         : identifier.checkAccounts;
-      return {
+      const merged: AccountIdentifier = {
         ...identifier,
         taskStatus: identifier.taskStatus,
         accountExistenceStatus: "success" as const,
@@ -430,6 +551,10 @@ export function applyAccountExistenceResults(
         services: result.services,
         checkAccounts: mergedCheckAccounts,
       };
+      // Defensive normalization — the check function above already produces
+      // XOR results, but apply the invariant guard so any drift from a
+      // future writer or merged seed gets caught at this seam.
+      return normalizeIdentifierAccountType(merged);
     } else {
       return {
         ...identifier,

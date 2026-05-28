@@ -83,6 +83,31 @@ interface Props {
   onCtaAction?: (a: EnterpriseCtaAction) => void;
 }
 
+/** Per-identifier account-type lookup. Returns "Enterprise" / "Consumer"
+ *  / undefined from either the seeded `checkAccounts.accountType` field
+ *  or the wizard-stamped `services.{key}.accountExistence.{enterprise|consumer}Exists`
+ *  flags. Enterprise takes precedence per "an account can only be Consumer
+ *  OR Enterprise, never both" — the wizard randomizer in Step 1 enforces
+ *  the same constraint. Drives UserPanel's consumer-only Last-logon /
+ *  IP-resolves gating. */
+function getIdentifierAccountType(
+  c: FormData,
+  identifierId: string,
+): "Consumer" | "Enterprise" | undefined {
+  const id = c.identifiers?.find((i: any) => i.id === identifierId);
+  if (!id) return undefined;
+  if (id.checkAccounts?.accountType === "Enterprise") return "Enterprise";
+  if (id.checkAccounts?.accountType === "Consumer") return "Consumer";
+  const services = id.services;
+  if (services) {
+    for (const svc of Object.values(services) as any[]) {
+      if (svc?.accountExistence?.enterpriseExists) return "Enterprise";
+      if (svc?.accountExistence?.consumerExists) return "Consumer";
+    }
+  }
+  return undefined;
+}
+
 export function EnterpriseContextSection({
   case: c,
   onSeeLogins,
@@ -183,6 +208,7 @@ export function EnterpriseContextSection({
                   key={u.identifierId}
                   user={u}
                   onSeeLogins={onSeeLogins}
+                  accountType={getIdentifierAccountType(c, u.identifierId)}
                 />
               ))}
 
