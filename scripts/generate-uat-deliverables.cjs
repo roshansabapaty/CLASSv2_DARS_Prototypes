@@ -1,4 +1,4 @@
-// Generate Excel + Word deliverables from docs/uat/UAT-UKCOPO.md.
+// Generate Excel + Word deliverables from a UAT markdown source.
 //
 //   Excel  (.xlsx): per-test-case block with metadata header + 9 columns
 //                   matching the team's SharePoint template:
@@ -10,13 +10,20 @@
 //                   on a single "Test Cases" sheet, with a "Cover" sheet
 //                   describing scope + cross-refs.
 //
-//   Word   (.docx): companion document for the decision-tree narrative
-//                   that doesn't translate well to Excel cells:
-//                     §4.5 shared UK COPO authorization-status tree
-//                     per-test tree slices for all Family 3 tests
+//   Word   (.docx): companion document for the decision-tree narrative.
+//                   Picks up the §4.5 shared tree (any "## 4.5 … decision
+//                   tree" heading) plus every per-test tree slice it finds
+//                   under "**Per-test decision tree slice**:".
 //
-// Usage: node scripts/generate-uat-deliverables.js
-//        outputs docs/uat/UAT-UKCOPO.xlsx and docs/uat/UAT-UKCOPO-DecisionTrees.docx
+// Usage:
+//   node scripts/generate-uat-deliverables.cjs                                  # default UAT-UKCOPO.md
+//   node scripts/generate-uat-deliverables.cjs <source-md> [<title>]
+//
+//   Example:
+//     node scripts/generate-uat-deliverables.cjs docs/uat/UAT-UKCOPO-LRMS.md "DARS UK COPO LENS-LRMS draft"
+//
+//   Outputs land next to the source, with `.xlsx` and `-DecisionTrees.docx`
+//   suffixes (e.g., docs/uat/UAT-UKCOPO-LRMS.xlsx + UAT-UKCOPO-LRMS-DecisionTrees.docx).
 
 const fs = require('fs')
 const path = require('path')
@@ -33,9 +40,20 @@ const {
 } = require('docx')
 
 const ROOT = path.resolve(__dirname, '..')
-const SRC_MD = path.join(ROOT, 'docs', 'uat', 'UAT-UKCOPO.md')
-const OUT_XLSX = path.join(ROOT, 'docs', 'uat', 'UAT-UKCOPO.xlsx')
-const OUT_DOCX = path.join(ROOT, 'docs', 'uat', 'UAT-UKCOPO-DecisionTrees.docx')
+
+// ── CLI ──────────────────────────────────────────────────────────────
+// argv[2] = source markdown path (relative to repo root or absolute)
+// argv[3] = title to embed on the Cover sheet + Word title page
+const argSource = process.argv[2]
+const argTitle = process.argv[3]
+const SRC_MD = argSource
+  ? (path.isAbsolute(argSource) ? argSource : path.join(ROOT, argSource))
+  : path.join(ROOT, 'docs', 'uat', 'UAT-UKCOPO.md')
+const srcBase = path.basename(SRC_MD, path.extname(SRC_MD))
+const srcDir = path.dirname(SRC_MD)
+const OUT_XLSX = path.join(srcDir, srcBase + '.xlsx')
+const OUT_DOCX = path.join(srcDir, srcBase + '-DecisionTrees.docx')
+const TITLE = argTitle || srcBase
 
 const COLUMNS = [
   { header: 'Test Step #', key: 'stepNum', width: 12 },
@@ -180,7 +198,12 @@ function parseTestCases(md) {
     }
 
     if (mode === 'expected' || mode === 'pass') {
-      const m = line.match(/^-\s+(.*)$/)
+      // Match bullets at any indent depth — LRMS plan uses Part-grouped
+      // sub-bullets like "    - Step 7: ..." nested under
+      // "- **Expected — Part B**:". The Step-N: parser downstream picks
+      // out the step number; Part-header bullets are dropped because
+      // they don't match the Step-N: regex.
+      const m = line.match(/^\s*-\s+(.*)$/)
       if (m) {
         ;(mode === 'expected' ? current.expected : current.passCriteria).push(
           m[1].trim(),
@@ -235,16 +258,39 @@ async function writeExcel(cases) {
     { width: 28 },
     { width: 90 },
   ]
+  // Dynamic family counts — group test IDs by the second numeric block
+  // (e.g., 001, 100, 200, SMOKE-A). Works for both UAT-UKCOPO-NNN and
+  // UAT-UKCOPO-LRMS-NNN prefixes.
+  const families = {}
+  for (const c of cases) {
+    const m = c.id.match(/(SMOKE-[A-Z]+|[A-Z]?\d+)$/)
+    const tag = m ? m[1] : 'other'
+    let bucket
+    if (tag.startsWith('SMOKE')) bucket = 'Smoke tests'
+    else {
+      const n = parseInt(tag, 10)
+      if (!Number.isNaN(n)) {
+        if (n < 100) bucket = 'Family 1'
+        else if (n < 200) bucket = 'Family 2'
+        else if (n < 300) bucket = 'Family 3'
+        else bucket = 'Family 4'
+      } else {
+        bucket = 'Other'
+      }
+    }
+    families[bucket] = (families[bucket] || 0) + 1
+  }
+  const familyRows = Object.entries(families).map(([k, v]) => [k, `${v} test${v !== 1 ? 's' : ''}`])
+
+  const srcRel = path.relative(ROOT, SRC_MD).replace(/\\/g, '/')
+  const docxRel = path.relative(ROOT, OUT_DOCX).replace(/\\/g, '/')
   const coverRows = [
-    ['Document', 'UAT-UKCOPO — UK COPO request type test plan'],
-    ['Source', 'docs/uat/UAT-UKCOPO.md (full markdown narrative, decision trees & cross-refs)'],
-    ['Companion', 'docs/uat/UAT-UKCOPO-DecisionTrees.docx (decision tree narrative — Family 3 reference)'],
+    ['Document', TITLE],
+    ['Source', srcRel + ' (full markdown narrative, decision trees & cross-refs)'],
+    ['Companion', docxRel + ' (decision-tree narrative)'],
     ['Generated', new Date().toISOString().slice(0, 19).replace('T', ' ')],
     ['Total tests', String(cases.length)],
-    ['Family 1', cases.filter((c) => /^UAT-UKCOPO-(0[0-7]\d)$/.test(c.id)).length + ' per-service end-to-end tests (001-070)'],
-    ['Family 2', 'Automated vs manual verification matrix (single matrix table in source markdown §5.3)'],
-    ['Family 3', cases.filter((c) => /^UAT-UKCOPO-1[01]\d$/.test(c.id)).length + ' authorization-status update tests (100-114) — see Word companion for decision trees'],
-    ['Smoke tests', cases.filter((c) => /^UAT-UKCOPO-SMOKE/.test(c.id)).length + ' (SMOKE-A through SMOKE-G)'],
+    ...familyRows,
     [''],
     ['Sheet layout', 'Each test case is a stacked block: 3 metadata rows + 1 column-header row + N step rows + 1 blank separator.'],
     ['Pass/Fail enum', 'Pass · Fail · Blocked · Not Run (data validation on the Pass/Fail? column).'],
@@ -395,13 +441,21 @@ async function writeExcel(cases) {
 
 function extractSharedTree(md) {
   const lines = md.split(/\r?\n/)
-  const tree = { intro: [], block: [], outro: [] }
+  const tree = { intro: [], block: [], outro: [], heading: '' }
+  // Match any "## 4.5 … decision tree" heading or any "## … decision tree"
+  // heading. Per-test slices are picked up separately by the bold-label
+  // parser, not this function.
   let i = 0
-  while (i < lines.length) {
-    if (/^##\s+4\.5\s+UK COPO authorization-status decision tree/.test(lines[i])) break
-    i++
+  let headingIndex = -1
+  for (i = 0; i < lines.length; i++) {
+    if (/^##\s+.+decision tree/i.test(lines[i]) && !/^####\s/.test(lines[i])) {
+      headingIndex = i
+      tree.heading = lines[i].replace(/^##\s+/, '').trim()
+      break
+    }
   }
-  i++ // skip the heading
+  if (headingIndex < 0) return tree
+  i = headingIndex + 1 // skip the heading
   // Intro paragraphs until first code fence
   while (i < lines.length && !lines[i].startsWith('```')) {
     if (lines[i].trim()) tree.intro.push(lines[i])
@@ -441,7 +495,10 @@ function monoLines(textBlock) {
 
 async function writeWord(cases, md) {
   const shared = extractSharedTree(md)
-  const family3 = cases.filter((c) => /^UAT-UKCOPO-1[01]\d$/.test(c.id) && c.decisionTree)
+  // Every test case with a per-test decision tree slice is included
+  // regardless of family-id range (LRMS plans use a different prefix
+  // and slice scheme than the prototype plan).
+  const perTest = cases.filter((c) => c.decisionTree)
 
   const sections = []
   const children = []
@@ -449,7 +506,7 @@ async function writeWord(cases, md) {
   // Title page
   children.push(
     new Paragraph({
-      text: 'UAT-UKCOPO',
+      text: TITLE,
       heading: HeadingLevel.TITLE,
       alignment: AlignmentType.CENTER,
     }),
@@ -459,7 +516,7 @@ async function writeWord(cases, md) {
       alignment: AlignmentType.CENTER,
     }),
     new Paragraph({
-      text: 'UK COPO request type — authorization-status update routing reference',
+      text: path.basename(SRC_MD),
       alignment: AlignmentType.CENTER,
     }),
     new Paragraph({ children: [new TextRun({ text: ' ' })] }),
@@ -469,8 +526,8 @@ async function writeWord(cases, md) {
         new TextRun({
           text:
             'This document is the narrative companion to the UAT test cases (Excel) and the full source markdown. ' +
-            'It collects the shared and per-test decision trees from UAT-UKCOPO.md §4.5 and Family 3 so the routing ' +
-            'logic stays legible — ASCII trees don’t render cleanly inside Excel cells.',
+            'It collects the shared and per-test decision trees from the source markdown so the routing logic ' +
+            'stays legible — ASCII trees don’t render cleanly inside Excel cells.',
           italics: true,
           size: 20,
         }),
@@ -479,13 +536,30 @@ async function writeWord(cases, md) {
     new Paragraph({ children: [new PageBreak()] }),
   )
 
-  // Shared §4.5 tree
-  children.push(
-    new Paragraph({
-      text: '§4.5 UK COPO authorization-status decision tree',
-      heading: HeadingLevel.HEADING_1,
-    }),
-  )
+  // Shared decision tree (heading pulled live from the source markdown)
+  if (shared.heading) {
+    children.push(
+      new Paragraph({
+        text: shared.heading,
+        heading: HeadingLevel.HEADING_1,
+      }),
+    )
+  } else {
+    children.push(
+      new Paragraph({
+        text: 'Shared decision tree',
+        heading: HeadingLevel.HEADING_1,
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: 'No shared decision tree heading was found in the source markdown.',
+            italics: true,
+          }),
+        ],
+      }),
+    )
+  }
   for (const para of shared.intro) {
     children.push(
       new Paragraph({ children: [new TextRun({ text: para })] }),
@@ -506,28 +580,31 @@ async function writeWord(cases, md) {
     }
   }
 
-  // Per-test trees (Family 3)
-  children.push(
-    new Paragraph({ children: [new PageBreak()] }),
-    new Paragraph({
-      text: 'Family 3 — Per-test decision tree slices',
-      heading: HeadingLevel.HEADING_1,
-    }),
-    new Paragraph({
-      children: [
-        new TextRun({
-          text:
-            'One slice per Family 3 test (UAT-UKCOPO-100..114). Each slice highlights the single branch of ' +
-            '§4.5 that the test exercises, plus a one-line "Compare" pointer to the sibling test that walks ' +
-            'the contrasting branch (typically case-level vs per-task cancellation).',
-          italics: true,
-        }),
-      ],
-    }),
-    new Paragraph({ children: [new TextRun({ text: ' ' })] }),
-  )
+  // Per-test trees — every test that has a "**Per-test decision tree
+  // slice**:" block in the source markdown, regardless of family / ID prefix.
+  if (perTest.length > 0) {
+    children.push(
+      new Paragraph({ children: [new PageBreak()] }),
+      new Paragraph({
+        text: 'Per-test decision tree slices',
+        heading: HeadingLevel.HEADING_1,
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({
+            text:
+              `One slice per test that includes a "Per-test decision tree slice" section in the ` +
+              `source markdown. Each slice highlights the single branch the test exercises and ` +
+              `(where present) a "Compare" pointer to a sibling test that walks the contrasting branch.`,
+            italics: true,
+          }),
+        ],
+      }),
+      new Paragraph({ children: [new TextRun({ text: ' ' })] }),
+    )
+  }
 
-  for (const tc of family3) {
+  for (const tc of perTest) {
     children.push(
       new Paragraph({
         text: `${tc.id} — ${tc.title}`,
@@ -563,16 +640,16 @@ async function writeWord(cases, md) {
 
   sections.push({ children })
   const doc = new Document({
-    title: 'UAT-UKCOPO Decision Trees',
+    title: `${TITLE} — Decision Trees`,
     creator: 'DARS_eEvidence UAT generator',
     description:
-      'Companion document to UAT-UKCOPO.xlsx containing the §4.5 shared decision tree and Family 3 per-test slices.',
+      `Companion document for ${path.basename(SRC_MD)} containing the shared decision tree and per-test slices.`,
     sections,
   })
 
   const buf = await Packer.toBuffer(doc)
   fs.writeFileSync(OUT_DOCX, buf)
-  console.log(`✓ Wrote ${path.relative(ROOT, OUT_DOCX)} — ${family3.length} Family 3 trees`)
+  console.log(`✓ Wrote ${path.relative(ROOT, OUT_DOCX)} — ${perTest.length} per-test tree${perTest.length !== 1 ? 's' : ''}`)
 }
 
 // ── Main ─────────────────────────────────────────────────────────────
