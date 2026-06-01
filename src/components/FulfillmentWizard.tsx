@@ -141,7 +141,7 @@ const createDefaultSubCategory = () => ({
 });
 
 // Helper: create a new identifier with full services structure (uses new LENS services taxonomy)
-const createWizardIdentifier = () => {
+const createWizardIdentifier = (requestType?: string) => {
   return {
     id: generateIdentifierId(),
     value: "",
@@ -150,7 +150,9 @@ const createWizardIdentifier = () => {
     taskStatus: "New",
     createdBy: CURRENT_USER,
     accountExistenceStatus: "not-checked" as const,
-    services: createDefaultIdentifierServices(),
+    // Pass the case's requestType so scoped services (e.g. Production
+    // Letters on UK COPO) get auto-enabled on the new identifier.
+    services: createDefaultIdentifierServices(requestType),
   };
 };
 
@@ -981,7 +983,7 @@ function Step1IdentifierReview({ identifiers, onUpdateIdentifiers, formData, ann
 
   // handleAdd via AddIdentifierDialog data
   const handleAddFromDialog = (data: import("./identifier-table").AddIdentifierData) => {
-    const newIdentifier = createWizardIdentifier();
+    const newIdentifier = createWizardIdentifier(formData?.requestType);
     newIdentifier.value = data.value;
     newIdentifier.type = data.type;
     newIdentifier.createdBy = data.isSupplemental ? `Supplemental ${CURRENT_USER}` : CURRENT_USER;

@@ -96,7 +96,7 @@ export function buildLENS202600170FormData(): FormData {
     accountExistenceStatus: "success",
     geoLocation: "Europe - West Europe",
     createdBy: "LE Agency",
-    services: createDefaultIdentifierServices(),
+    services: createDefaultIdentifierServices("COPO Order"),
     checkAccounts: { accountType: "Consumer" },
     leExternalServices: ["Email", "Microsoft Account Profile"],
     leExternalServiceDates: {

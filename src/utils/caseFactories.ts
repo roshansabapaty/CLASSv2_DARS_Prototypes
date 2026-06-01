@@ -92,14 +92,19 @@ export const createNewNDO = (): NonDisclosureOrder => ({
   relatedCases: [],
 });
 
-export const createNewIdentifier = (): AccountIdentifier => ({
+export const createNewIdentifier = (
+  /** When supplied, scoped services (e.g. Production Letters on UK COPO
+   *  cases where requestType === "COPO Order") get auto-enabled on the
+   *  new identifier — see `createDefaultIdentifierServices`. */
+  requestType?: string,
+): AccountIdentifier => ({
   id: generateIdentifierId(),
   value: "",
   type: "",
   taskId: generateIdentifierTaskId(),
   taskStatus: "New",
   createdBy: "LE Agency", // Default for identifiers from original request
-  services: createDefaultIdentifierServices(),
+  services: createDefaultIdentifierServices(requestType),
 });
 
 // ── SLA / Date Calculations ────────────────────────────────────────────────────

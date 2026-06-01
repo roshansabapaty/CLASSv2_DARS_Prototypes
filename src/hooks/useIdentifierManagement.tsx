@@ -80,7 +80,7 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
       return;
     }
 
-    const newIdentifier = createNewIdentifier();
+    const newIdentifier = createNewIdentifier(formData.requestType);
     newIdentifier.value = newIdentifierValue;
     newIdentifier.type = newIdentifierType;
     newIdentifier.createdBy = newIdentifierIsSupplemental ? `Supplemental ${CURRENT_USER}` : CURRENT_USER;
@@ -152,7 +152,7 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
       return;
     }
 
-    const newIdentifier = createNewIdentifier();
+    const newIdentifier = createNewIdentifier(formData.requestType);
     newIdentifier.value = aliasValue;
     newIdentifier.type = "Email Address";
     newIdentifier.createdBy = `Supplemental from ${sourceIdentifier.value}`;
@@ -213,7 +213,7 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
     if (existingIdentifier) {
       supplementalIdentifierId = existingIdentifier.id;
     } else {
-      const newIdentifier = createNewIdentifier();
+      const newIdentifier = createNewIdentifier(formData.requestType);
       newIdentifier.value = aliasValue;
       newIdentifier.type = "Email Address";
       newIdentifier.createdBy = `Supplemental from ${sourceIdentifier.value}`;

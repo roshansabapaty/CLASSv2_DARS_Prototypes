@@ -25,6 +25,13 @@ export interface LensService {
   /** Account-type scoping: "Consumer" or "Enterprise" services are only valid for identifiers
    *  whose account check returned that account type. Undefined = the service is valid for either. */
   accountType?: "Consumer" | "Enterprise";
+  /** Request-type scoping. When present, the service is auto-enabled on every
+   *  identifier whose case has a matching `requestType`. Used by surfaces
+   *  like Production Letters (UK COPO only) where the manual disclosure
+   *  document is part of every order package. Undefined = the service is
+   *  not auto-enabled for any request type (the default — most services
+   *  start disabled and the user enables them per identifier). */
+  requestTypeScope?: string[];
 }
 
 // ── Per-Service Category Groups ───────────────────────────────────────────────
@@ -373,6 +380,25 @@ export const SERVICE_CATEGORY_GROUPS: Partial<Record<string, CategoryGroupConfig
       ],
     },
   ],
+  // ── Production Letters (UK COPO short-term scaffolding) ────────────
+  // Authority-side document deliverables that travel WITH a production
+  // order. Auto-enabled on every identifier when the case's requestType
+  // matches `LENS_SERVICES.productionLetters.requestTypeScope`
+  // ("COPO Order" today). The "Affidavit" item is the only category for
+  // now; future expansion may add other Disclosure Letters types.
+  //
+  // Long-term these belong on the case-level Documents viewer alongside
+  // Search Warrant / Subpoena / NDO (see UX_EVALUATION follow-up). This
+  // service-level placement is a short-term prototype affordance.
+  productionLetters: [
+    {
+      key: "disclosureLetters",
+      name: "Disclosure Letters",
+      items: [
+        { key: "affidavit", name: "Affidavit", info: "Sworn statement / supporting affidavit attached to the production order. Manual upload — file is attached to the identifier's collection notes via the manual collection form.", automated: false, defaultSelected: true },
+      ],
+    },
+  ],
 };
 
 /** Returns per-service category groups, falling back to STANDARD_CATEGORY_GROUPS */
@@ -438,6 +464,11 @@ export const LENS_SERVICES: LensService[] = [
   { key: "groupMe",             name: "GroupMe",                             icon: "💬", accountType: "Consumer" },
   { key: "minecraft",           name: "Minecraft",                           icon: "🧱", accountType: "Consumer" },
   { key: "microsoftForms",      name: "Microsoft Forms",                     icon: "📝" },
+  // Production Letters — UK COPO scaffolding. Auto-enabled on every
+  // identifier whose case `requestType === "COPO Order"`. The service's
+  // single category group (Disclosure Letters > Affidavit) is a manual
+  // upload surface inside the existing Manual Collection form.
+  { key: "productionLetters",   name: "Production Letters",                  icon: "📜", requestTypeScope: ["COPO Order"] },
 ];
 
 // Lookup map: serviceKey → LensService
@@ -479,13 +510,80 @@ export function createDefaultServiceConfig(serviceKey?: string): IdentifierServi
   };
 }
 
-/** Returns all 22 services, each disabled with their per-service category groups */
-export function createDefaultIdentifierServices(): IdentifierServices {
+/** Returns every catalogued service as a disabled entry on the identifier.
+ *
+ *  When `requestType` is supplied, services declaring a matching
+ *  `requestTypeScope` are returned **enabled** (with their `defaultSelected`
+ *  category items pre-selected). Used today for Production Letters on
+ *  UK COPO cases so the Affidavit upload surface appears on every
+ *  identifier automatically — no manual "Add service" step required.
+ *
+ *  Backwards compatible: callers that don't pass `requestType` get the
+ *  pre-existing all-disabled behaviour. */
+export function createDefaultIdentifierServices(
+  requestType?: string,
+): IdentifierServices {
   const services: IdentifierServices = {};
   for (const service of LENS_SERVICES) {
-    services[service.key] = createDefaultServiceConfig(service.key);
+    const config = createDefaultServiceConfig(service.key);
+    if (
+      requestType &&
+      service.requestTypeScope &&
+      service.requestTypeScope.includes(requestType)
+    ) {
+      // Auto-enable the service and its defaultSelected category items
+      // so the identifier lands with the scoped manual surface ready
+      // for input.
+      config.enabled = true;
+      const groupConfig = getServiceCategoryGroups(service.key);
+      for (const group of groupConfig) {
+        for (const item of group.items) {
+          if (item.defaultSelected) {
+            config.categoryGroups[group.key][item.key] = {
+              ...config.categoryGroups[group.key][item.key],
+              enabled: true,
+            };
+          }
+        }
+      }
+    }
+    services[service.key] = config;
   }
   return services;
+}
+
+/** Reconcile an existing identifier's services map with the request-type
+ *  scoping rules. Useful for case-load paths that need to ensure a
+ *  scoped service (e.g. Production Letters on UK COPO) is present on
+ *  identifiers that pre-date the rule, without rewriting every seed.
+ *
+ *  Idempotent: services already in the expected state are left alone. */
+export function applyRequestTypeServiceDefaults(
+  services: IdentifierServices,
+  requestType: string | undefined,
+): IdentifierServices {
+  if (!requestType) return services;
+  const next: IdentifierServices = { ...services };
+  for (const service of LENS_SERVICES) {
+    if (!service.requestTypeScope?.includes(requestType)) continue;
+    const existing = next[service.key];
+    if (existing?.enabled) continue; // already on — nothing to do
+    const fresh = createDefaultServiceConfig(service.key);
+    fresh.enabled = true;
+    const groupConfig = getServiceCategoryGroups(service.key);
+    for (const group of groupConfig) {
+      for (const item of group.items) {
+        if (item.defaultSelected) {
+          fresh.categoryGroups[group.key][item.key] = {
+            ...fresh.categoryGroups[group.key][item.key],
+            enabled: true,
+          };
+        }
+      }
+    }
+    next[service.key] = fresh;
+  }
+  return next;
 }
 
 // ── Display Helpers ───────────────────────────────────────────────────────────
