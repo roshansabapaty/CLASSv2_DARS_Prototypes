@@ -97,6 +97,12 @@ export interface SlaDeadlineChipProps {
    *  `"plain"` drops the background / border and renders just a coloured
    *  icon + text so dense list rows don't pile pill-on-pill. */
   variant?: "chip" | "plain";
+  /** Case-shape context that switches spec-mandated tier variants —
+   *  e.g. Reg 2023/1543 Art. 9(2) flips Emergency from 3h to 8h for
+   *  eEvidence Workflow 3 cases. Optional; chip falls back to the
+   *  static tier behaviour when omitted. */
+  requestType?: string;
+  eevidenceWorkflow?: number;
 }
 
 export function SlaDeadlineChip({
@@ -106,10 +112,16 @@ export function SlaDeadlineChip({
   size = "default",
   paused = false,
   variant = "chip",
+  requestType,
+  eevidenceWorkflow,
 }: SlaDeadlineChipProps) {
   const styles = useStyles();
   const now = useCountdownTick();
-  const cfg = getSlaConfig(tier);
+  const ctx = React.useMemo(
+    () => ({ requestType, eevidenceWorkflow }),
+    [requestType, eevidenceWorkflow],
+  );
+  const cfg = getSlaConfig(tier, ctx);
 
   // Defensive: also treat the legacy sentinel-`dueDate` shape as paused
   // for any caller still emitting it. New callers should set `paused`
@@ -118,8 +130,8 @@ export function SlaDeadlineChip({
   const isPaused = paused || sentinelPaused;
 
   const countdown = React.useMemo(
-    () => computeCountdown(tier, dueDate, dateReceived, now),
-    [tier, dueDate, dateReceived, now],
+    () => computeCountdown(tier, dueDate, dateReceived, now, ctx),
+    [tier, dueDate, dateReceived, now, ctx],
   );
 
   const className = chipClassName(countdown.state, styles);

@@ -399,5 +399,8 @@ export function buildLENS202600190FormData(): FormData {
         },
       },
     ],
+    // Workflow 2 — Germany IA, cross-border to the Irish SP.
+    eevidenceWorkflow: 2,
+    isInternational: true,
   };
 }

@@ -55,9 +55,12 @@ import { startRetentionClock } from "../utils/retentionClock";
 import { applyPreservationExtension } from "../utils/preservationExtension";
 import { applyEndPreservation } from "../utils/endPreservation";
 import { applyPreservationOrderReceipt } from "../utils/preservationOrderReceipt";
+import { applyWithdrawal } from "../utils/withdrawal";
 import { PreservationExtensionBanner } from "./preservation/PreservationExtensionBanner";
 import { EndPreservationBanner } from "./preservation/EndPreservationBanner";
 import { PreservationOrderActiveBanner } from "./preservation/PreservationOrderActiveBanner";
+import { WithdrawalBanner } from "./preservation/WithdrawalBanner";
+import { EmergencyEEvidenceBanner } from "./preservation/EmergencyEEvidenceBanner";
 import { createFormInstance } from "./forms-library/formEngine";
 import { FormFillerDialog } from "./forms-library/FormFillerDialog";
 import { getTemplateById } from "../config/formTemplates";
@@ -98,6 +101,7 @@ import { Checkbox } from "./ui/checkbox";
 import { getServiceDisplayName } from "../config/microsoftServices";
 import { getGroupName, getItemName, getServiceName, isManualCategory } from "../config/lensServicesConfig";
 import { CopyableText } from "./CopyButton";
+import { TruncatedText } from "./ui/truncated-text";
 import { CopyableIdentifier } from "./CopyableIdentifier";
 import { IdentifierAliasesPanel } from "./IdentifierAliasesPanel";
 import { 
@@ -739,6 +743,11 @@ export function CollectionTracker({
       PreservationOrder: applyPreservationOrderReceipt,
       PreservationExtension: applyPreservationExtension,
       EndPreservation: applyEndPreservation,
+      // Workflow 8 — IA withdraws the EPOC. Cancels pending delivery,
+      // starts the 45-day retention clock, flips caseStage +
+      // authorizationDesiredStatus to "Withdrawn", appends EpocWithdrawn
+      // audit. Idempotent via documentId.
+      Withdrawal: applyWithdrawal,
     }),
     [],
   );
@@ -2657,6 +2666,16 @@ export function CollectionTracker({
           container. */}
       <PageContainer>
       <div className="py-5 space-y-5 pb-8">
+        {/* Workflow 8 — IA withdrawal terminal banner. Top of the stack
+            because it supersedes every other state. Applies to both
+            EPOC-PR and EPOC-ER. Self-hides when the case isn't withdrawn. */}
+        <WithdrawalBanner formData={formData} />
+
+        {/* Workflow 3 — Emergency Production (8h SLA). Surfaces the IA's
+            stated emergency justification. Self-hides on non-emergency
+            cases and when withdrawal has fired. */}
+        <EmergencyEEvidenceBanner formData={formData} />
+
         {/* Preservation-order-active banner (EPOC-PR only) — top of the
             preservation banner stack. Surfaces the earliest expiry +
             "Acknowledge Receipt" CTA. Self-hides once preservation has
@@ -4081,7 +4100,12 @@ export function CollectionTracker({
                                                     <span className="text-[10px] text-[#605e5c] w-3 shrink-0">{p.label}</span>
                                                     {p.id ? (
                                                       <CopyableText text={p.id} copyLabel={`Copy ${p.label} job ID`}>
-                                                        <p className="text-[11px] font-mono text-[#323130] truncate">{p.id}</p>
+                                                        <TruncatedText
+                                                          className="text-[11px] font-mono text-[#323130] truncate min-w-0"
+                                                          tooltipText={p.id}
+                                                        >
+                                                          {p.id}
+                                                        </TruncatedText>
                                                       </CopyableText>
                                                     ) : (
                                                       <p className="text-[11px] font-mono text-[#a19f9d] italic">—</p>

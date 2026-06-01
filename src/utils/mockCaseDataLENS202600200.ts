@@ -533,5 +533,8 @@ export function buildLENS202600200FormData(): FormData {
           "attorney)\" pending attorney review.",
       },
     ],
+    // Workflow 2 — France IA, cross-border to the Irish SP.
+    eevidenceWorkflow: 2,
+    isInternational: true,
   };
 }

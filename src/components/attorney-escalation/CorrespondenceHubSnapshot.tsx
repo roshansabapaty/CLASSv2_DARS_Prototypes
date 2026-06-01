@@ -243,6 +243,8 @@ function inboundKindLabel(item: InboundCorrespondenceItem): string {
       return "Form 6 — Preservation Extension";
     case "EndPreservation":
       return "End of Preservation";
+    case "Withdrawal":
+      return "EPOC Withdrawal Notice";
     case "GroundsForRefusal":
       return "Grounds for Refusal";
   }

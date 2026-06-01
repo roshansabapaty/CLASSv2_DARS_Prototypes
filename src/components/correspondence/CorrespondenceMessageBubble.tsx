@@ -393,6 +393,8 @@ function friendlyInboundFormLabel(item: InboundCorrespondenceItem): string {
       return "Form 6 (Preservation Extension)";
     case "EndPreservation":
       return "the end-of-preservation notice";
+    case "Withdrawal":
+      return "the EPOC withdrawal notice";
     case "StructuredForm":
       return "the authority's structured form";
     case "WithdrawalAmendment":
@@ -837,6 +839,8 @@ function kindFriendlyName(kind: InboundCorrespondenceItem["kind"]): string {
       return "Form 6";
     case "EndPreservation":
       return "End Preservation";
+    case "Withdrawal":
+      return "Withdrawal";
     default:
       return kind;
   }

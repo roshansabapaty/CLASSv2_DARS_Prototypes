@@ -28,6 +28,8 @@ import { buildFormDataFromQueueItem } from "./mockCaseDataFactory";
 import { buildLENS202500095FormData } from "./mockCaseData";
 import { buildLENS202500125FormData } from "./mockCaseDataLENS202500125";
 import { buildLENS202500142FormData } from "./mockCaseDataLENS202500142";
+import { buildLENS202600130FormData } from "./mockCaseDataLENS202600130";
+import { buildLENS202600140FormData } from "./mockCaseDataLENS202600140";
 import { buildLENS202600150FormData } from "./mockCaseDataLENS202600150";
 import { buildLENS202600160FormData } from "./mockCaseDataLENS202600160";
 import { buildLENS202600170FormData } from "./mockCaseDataLENS202600170";
@@ -45,6 +47,7 @@ import { buildLENS202600250FormData } from "./mockCaseDataLENS202600250";
 import { buildLENS202600255FormData } from "./mockCaseDataLENS202600255";
 import { buildLENS202600265FormData } from "./mockCaseDataLENS202600265";
 import { buildLENS202600270FormData } from "./mockCaseDataLENS202600270";
+import { buildLENS202600280FormData } from "./mockCaseDataLENS202600280";
 import { buildLENS202600300FormData } from "./mockCaseDataLENS202600300";
 
 export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
@@ -54,6 +57,12 @@ export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
   "LNS-2025-00125": buildLENS202500125FormData,
   // Emergency Disclosure Request — kidnapping / threat-to-life, multi-id.
   "LNS-2025-00142": buildLENS202500142FormData,
+  // Workflow 1 — Standard Production National (Irish IA + Irish SP, no EA leg).
+  // Demonstrates the default eEvidence happy path: full pipeline, Routine SLA.
+  "LNS-2026-00130": buildLENS202600130FormData,
+  // Workflow 3 — Emergency Production 8h (Reg 2023/1543 Art. 9(2)).
+  // German BKA kidnapping case; SLA tier swaps to 8h via getSlaConfig context.
+  "LNS-2026-00140": buildLENS202600140FormData,
   "LNS-2026-00150": buildLENS202600150FormData,
   "LNS-2026-00160": buildLENS202600160FormData,
   "LNS-2026-00170": buildLENS202600170FormData,
@@ -85,6 +94,10 @@ export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
   // identifier with 4 services and 10 pre-seeded jobs (5 automated, 5
   // manual) for the CollectionTracker Manual vs Automated breakdown.
   "LNS-2026-00270": buildLENS202600270FormData,
+  // Workflow 8 — IA Withdrawal (mid-collection). Portuguese EPOC-ER.
+  // Demonstrates the Withdrawal handler: cancels pending delivery,
+  // starts 45-day retention, flips caseStage to Withdrawn.
+  "LNS-2026-00280": buildLENS202600280FormData,
   // Multi-tenant TPID demo — Contoso US + Contoso France share TPID-CONTOSO.
   // Exercises the EscalateToAttorneyDialog tenant + tpid scope variants.
   "LNS-2026-00300": buildLENS202600300FormData,

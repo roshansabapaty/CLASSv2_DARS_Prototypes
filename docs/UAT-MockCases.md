@@ -3,7 +3,7 @@
 **Document owner**: DARS Product Team
 **Last updated**: 2026-05-27
 **Source environment**: DARS eEvidence prototype (`http://localhost:3001`)
-**Scope**: All mock cases shipped with the prototype as of this date — 21 cases covering Triage, Review Case, Collection, and Terminal workflow stages
+**Scope**: All mock cases shipped with the prototype as of this date — 27 cases covering Triage, Review Case, Collection, and Terminal workflow stages, plus dedicated demos for EU eEvidence Workflows 1 / 2 / 3 / 4 / 6 / 7 / 8
 
 ---
 
@@ -85,8 +85,164 @@ This document gives Business stakeholders a structured, repeatable way to verify
 | UAT-DARS-017 | LNS-2026-00255 | Belgian eEvidence — EA clears + failed-delivery retry | Collection | RS |
 | UAT-DARS-018 | LNS-2026-00265 | Greek eEvidence — EA overrules Form 3 | Collection | RS, ATT |
 | UAT-DARS-019 | LNS-2026-00270 | Swedish eEvidence — manual vs automated jobs | Collection | RS |
+| UAT-DARS-026 | LNS-2026-00130 | Irish eEvidence — Workflow 1 Standard Production National (default happy path) | Collection | RS |
+| UAT-DARS-027 | LNS-2026-00140 | German eEvidence — Workflow 3 Emergency Production 8h (Art. 9(2)) | Collection | RS |
+| UAT-DARS-023 | LNS-2026-00215 | Spanish EPOC-PR — Workflow 4 Active Preservation Order (Form 2 receipt + ack) | Collection | RS |
+| UAT-DARS-024 | LNS-2026-00245 | Italian eEvidence — Workflow 2 Active EA Review Window | Collection | RS |
+| UAT-DARS-025 | LNS-2026-00247 | French eEvidence — Workflow 2 EA Window Lapsed + Resume Delivery | Collection | RS |
+| UAT-DARS-022 | LNS-2026-00280 | Portuguese eEvidence — Workflow 8 IA Withdrawal (mid-collection) | Collection · Withdrawn | RS |
 | UAT-DARS-020 | LNS-2026-00300 | US Subpoena — multi-tenant TPID attorney scope | Triage | TS, ATT |
 | UAT-DARS-021 | LNS-2026-984174 | Rejected subpoena — civil matter, insufficient legal authority | Terminal · Rejected | RS |
+
+---
+
+## 4.5 EU eEvidence decision tree
+
+This tree explains *why* the eEvidence cases produce the expected results testers see. DARS routes every eEvidence case through one of the eight Appendix F workflows. Each routing decision is driven by data already on the case envelope plus the inbound events that follow. When a test case's expected results reference a banner, chip, or audit event, this tree tells you the routing rule that produced it.
+
+```
+On case open
+│
+├── requestType ≠ "eEvidence"
+│   └── Not in scope (subpoena / COPO / warrant flows — see UATs 001–005, 020, 021)
+│
+└── requestType === "eEvidence"
+    │
+    ├── caseStage === "Withdrawn"  OR
+    │   authorizationDesiredStatus === "Withdrawn"  OR
+    │   audit has `EpocWithdrawn` event
+    │   ├── ► Workflow 8 — IA Withdrawal (terminal)
+    │   ├── Banner:  red WithdrawalBanner at top of stack
+    │   ├── Chip:    Retention chip (45-day clock from effective date)
+    │   ├── Gates:   gfrApplies() returns false → GFR panel hidden, delivery
+    │   │            gates lifted (case is terminal)
+    │   ├── Pipeline: pending + ready-to-deliver jobs flipped to Cancelled;
+    │   │             already-delivered jobs untouched
+    │   └── UATs:    UAT-DARS-022 (LNS-2026-00280)
+    │
+    ├── requestSubType === "EPOC PR"
+    │   ├── ► Workflow 4 — Preservation Order (collection-only pipeline)
+    │   ├── Banner:  PreservationOrderActiveBanner (top) — until preservation ends
+    │   ├── Pipeline: Package + Delivery stages hidden; per-identifier
+    │   │             `desiredPreservationExpiration` shown on each row
+    │   ├── Then routes by next inbound event:
+    │   │   ├── PreservationOrder (Form 2)        → PreservationOrderReceived audit
+    │   │   ├── PreservationExtension (Form 6)    → bumps expiry + green extension banner
+    │   │   ├── Form5_ConfirmationOfIssuance      → links to follow-on EPOC-ER
+    │   │   ├── EndPreservation                   → EndPreservationBanner +
+    │   │   │                                       Retention chip ("PreservationEnded")
+    │   │   └── Withdrawal                        → Workflow 8 supersedes (above)
+    │   ├── If SP cannot preserve  → Submit Form 3 (Workflow 7 — see below)
+    │   └── UATs:    UAT-DARS-013 (LNS-2026-00220), and Workflow 4 demo
+    │                LNS-2026-00215 (Spanish active preservation — bridge case)
+    │
+    └── requestSubType === "EPOC ER"  (production order)
+        │
+        ├── isInternational === true (cross-border EPOC, EA review applies)
+        │   │
+        │   ├── eevidenceGroundsForRefusal.decision === undefined
+        │   │   │
+        │   │   ├── isWindowLapsed(formData) === false  (Day 1–10)
+        │   │   │   ├── ► Workflow 2 — Active EA Review Window
+        │   │   │   ├── Chip:   "EA REVIEW WINDOW · Nd"
+        │   │   │   ├── Panel:  Purple GFR Panel with countdown
+        │   │   │   ├── Gates:  Submit-to-Delivery DISABLED with tooltip
+        │   │   │   │           "Action blocked — EA review window active."
+        │   │   │   ├── Collection: still allowed (only delivery is gated)
+        │   │   │   └── Demo case: LNS-2026-00245 (Italian, 5 days remaining)
+        │   │   │
+        │   │   └── isWindowLapsed(formData) === true   (Day 11+, no decision)
+        │   │       │
+        │   │       ├── manualDeliveryResumed === false
+        │   │       │   ├── ► Workflow 2 — Window Lapsed, awaiting RS resume
+        │   │       │   ├── useEaWindowExpiry hook auto-fires EaWindowExpired audit
+        │   │       │   ├── Panel:  Green "delivery is now permitted (Art. 8 + 10(2))"
+        │   │       │   │           + Resume Delivery CTA
+        │   │       │   ├── Chip:   "EA window lapsed · resume delivery" (warn)
+        │   │       │   ├── Gates:  Submit-to-Delivery still disabled until RS clicks Resume
+        │   │       │   └── Demo case: LNS-2026-00247 (French, expired 2 days ago)
+        │   │       │
+        │   │       └── manualDeliveryResumed === true (RS clicked Resume)
+        │   │           ├── ► Workflow 2 — Lapsed, delivery resumed
+        │   │           ├── Audit: GfrDeliveryResumedManually appended
+        │   │           ├── Chip:  "EA window lapsed · delivery resumed" (success)
+        │   │           └── Gates: Submit-to-Delivery RE-enabled
+        │   │
+        │   ├── eevidenceGroundsForRefusal.decision.kind === "None"
+        │   │   ├── trigger === "Form1Review"
+        │   │   │   ├── ► EA cleared (Workflow 2 happy path)
+        │   │   │   ├── Auto-appends `GfrCleared` audit (via useEaWindowExpiry hook)
+        │   │   │   ├── Panel:  Green "EA cleared this case"
+        │   │   │   └── Demo case: LNS-2026-00255 (Belgian, Form1Review)
+        │   │   │
+        │   │   └── trigger === "Form3Response"
+        │   │       ├── ► Workflow 7 — EA rejected SP's Form 3
+        │   │       ├── Panel:  Orange "EA rejected your Form 3" + Retract CTA
+        │   │       ├── Gate:   Retract gated until attorney clears review
+        │   │       └── Demo case: UAT-DARS-018 (LNS-2026-00265, Greek)
+        │   │
+        │   ├── eevidenceGroundsForRefusal.decision.kind === "Full"
+        │   │   ├── ► Workflow 6 — Full GFR (delivery completely blocked)
+        │   │   ├── Panel:   Red "Full Grounds for Refusal — delivery blocked"
+        │   │   ├── Chip:    "SLA paused · EA Hold — Full"
+        │   │   ├── Gates:   ALL delivery actions blocked; SLA paused
+        │   │   └── Demo case: UAT-DARS-015 (LNS-2026-00240, Italian)
+        │   │
+        │   └── eevidenceGroundsForRefusal.decision.kind === "Partial"
+        │       ├── ► Workflow 6 — Partial GFR (per-LDTask block)
+        │       ├── Panel:   Amber "Partial Grounds for Refusal — N task(s) blocked"
+        │       ├── Chip:    "Partial GFR — N task(s) blocked"
+        │       ├── Gates:   Blocked identifiers greyed; non-listed proceed normally
+        │       └── Demo case: UAT-DARS-016 (LNS-2026-00250, Polish journalist)
+        │
+        └── isInternational === false (national EPOC, no EA review)
+            │
+            ├── casePriority === "Emergency"  AND  eevidenceWorkflow === 3
+            │   ├── ► Workflow 3 — Emergency Production (Art. 9(2), 8h SLA)
+            │   ├── Banner:   red EmergencyEEvidenceBanner with IA's
+            │   │             stated emergency category + justification
+            │   ├── SLA tier: getSlaConfig() swaps Emergency from 3h → 8h
+            │   │             via SlaContext shim (requestType + workflow)
+            │   ├── Chip:     Approaching (amber) once remaining ≤ 2h
+            │   ├── Pipeline: full Collection → Package → Delivery
+            │   ├── EEvidenceAuthorisationFlags.emergencyJustification
+            │   │             carries category {DangerToLife |
+            │   │             DangerOfInjury | CriticalInfrastructure} + note
+            │   └── Demo case: LNS-2026-00140 (German BKA kidnapping)
+            │
+            └── ► Workflow 1 — Standard Production (National)
+                ├── Pipeline:  full Collection → Package → Delivery
+                ├── No GFR panel renders
+                ├── SLA tier: Routine (10 days) per Art. 9(1)
+                ├── Default eEvidence happy path — baseline for all other workflows
+                └── Demo case: LNS-2026-00130 (Irish DPP)
+
+Triggered at any point (overlay on the above):
+│
+├── SP submits Form 3 (EPOC_FORM_3 outbound)
+│   ├── ► Workflow 7 — Non-Execution Response
+│   ├── On send:
+│   │   ├── pauseSlaTimerOnFormThreeSubmission → SLAStopped audit
+│   │   ├── applyForm3Submission → Form3Submitted audit
+│   │   └── startRetentionClock("Form3NonExecution", sentAt) → 45-day clock
+│   ├── Chip:   Retention chip lights up in sticky header
+│   ├── On EPOC-PR cases: "Cannot Preserve" CTA on Preservation column
+│   │                     pre-attaches EPOC_FORM_3 in the composer
+│   └── Reuses the Form 3 template — reason codes include the new
+│       "dataNotHeld" option for preservation-failure scenarios
+│
+└── All pipeline jobs reach terminal delivered state
+    ├── (Complete OR DeliveryAcknowledged on every job)
+    ├── ► startRetentionClock("Delivered", now) → 45-day clock
+    └── Chip:   Retention chip lights up automatically
+```
+
+### How to read this tree when interpreting a UAT result
+
+- **Banner present?** Trace down the tree: each branch lists the banner that renders. A missing banner usually means the case didn't reach that workflow state OR a prerequisite is missing (e.g., `eevidenceWorkflow` undefined, wrong `requestSubType`).
+- **Delivery button disabled?** Three places gate it: (1) `canDeliver()` checking GFR + lapsed window, (2) `cancellationLocked`, (3) `caseStage === "Withdrawn"`. The button label tells you which.
+- **Retention chip showing?** The reason in the tooltip identifies which terminal event started it. If the chip's missing on a terminal case, check whether the clock started — the `startRetentionClock` helper is idempotent but only fires when called.
+- **Audit event missing?** Each workflow appends specific audit kinds via specific paths. The most common gap is an unfired auto-detection hook (e.g., `useEaWindowExpiry` requires a mounted CollectionTracker/DataEntryForm).
 
 ---
 
@@ -751,12 +907,245 @@ This document gives Business stakeholders a structured, repeatable way to verify
 
 ---
 
+### UAT-DARS-022 · LNS-2026-00280 — Portuguese eEvidence: Workflow 8 IA Withdrawal (mid-collection)
+
+**Capability validated**: Workflow 8 (IA Withdrawal) end-to-end — withdrawal handler cancels pending delivery, starts 45-day retention clock, flips caseStage + authorizationDesiredStatus to "Withdrawn", appends `EpocWithdrawn` audit event. Withdrawal supersedes all other workflow gates.
+
+**Persona**: RS
+
+**Workflow stage**: Collection → terminal Withdrawn (auto-flipped by handler)
+
+**Case shape**: Portugal / National / eEvidence (EPOC ER) · 1 Consumer email identifier · 3 pre-seeded jobs in mixed delivery states (in-flight Started, ready-not-submitted, already-Complete)
+
+**Preconditions**:
+1. Default queue.
+2. Case opens with the Withdrawal inbound already seeded; handler fires on first mount and the audit event is appended once (idempotent).
+
+**Test Steps**:
+1. Open the case from the queue. Confirm landing on Collection page.
+2. Inspect the **top banner stack** — observe the red WithdrawalBanner.
+3. Inspect the **sticky case header** for the SLA chip and the retention-clock chip.
+4. Open the per-identifier pipeline view. Inspect the three pre-seeded data-category jobs (msaProfile.subscriberData, msaProfile.authenticationLogs, exchangeConsumer.contentData) and their delivery statuses.
+5. Open the Correspondence panel; click the **EPOC Withdrawal Notice** inbound bubble. Click "View the EPOC withdrawal notice" to open the FormPreviewPanel.
+6. Open the Audit thread. Locate the `EpocWithdrawn` event.
+7. Inspect the case stage chip in the sticky header.
+8. Hard-reload the page (Ctrl+F5). Re-open the case. Re-inspect the audit thread.
+
+**Expected Results**:
+- Step 2: Red banner reads **"EPOC withdrawn by the Issuing Authority"** with effective date **May 20, 2026**, deletion deadline **Jul 4, 2026** (~38 days remaining today), IA actor **"Ministério Público — DIAP Lisboa (Portugal)"**, and the withdrawal note quoting the cancelled-job count + reason.
+- Step 3: SLA chip rendered (case-level SLA continues by spec — withdrawal doesn't pause SLA). Retention chip reads **"Retention: ~38d left"** in neutral tone (≥30d). Tooltip explains "IA withdrew the EPOC" with the May 20 anchor.
+- Step 4:
+  - `msaProfile.subscriberData` shows **Cancelled** (was Started → handler flipped).
+  - `msaProfile.authenticationLogs` shows **Cancelled** (was Publish:Complete + Delivery:Not Started → handler pre-empts).
+  - `exchangeConsumer.contentData` stays **Complete** (already delivered; handler must not touch — over-disclosure already a fait accompli).
+- Step 5: FormPreviewPanel opens with EPOC_WITHDRAWAL template, fields populated (issuing authority, file number, effective date 2026-05-20, original EPOC ref, reason text).
+- Step 6: Exactly one `EpocWithdrawn` event present; actor reads the IA name; note includes the cancelled-count line ("Cancelled 2 pending delivery jobs.").
+- Step 7: Case stage chip reads **Withdrawn**.
+- Step 8: Still exactly one `EpocWithdrawn` event after reload (idempotent — handler dedupes by `documentId`).
+
+**Pass criteria**:
+- WithdrawalBanner renders with correct IA + dates.
+- Two pre-pending jobs flipped to Cancelled; the already-delivered job untouched.
+- Retention clock anchored to the IA's effective date (not "today").
+- `caseStage === "Withdrawn"`; `authorizationDesiredStatus === "Withdrawn"`.
+- Audit log carries exactly one `EpocWithdrawn` event after multiple mounts.
+
+---
+
+### UAT-DARS-023 · LNS-2026-00215 — Spanish EPOC-PR: Workflow 4 Active Preservation Order (Form 2 receipt + acknowledgement)
+
+**Capability validated**: Workflow 4 receipt path — `PreservationOrder` inbound handler auto-appends `PreservationOrderReceived` audit on mount; `PreservationOrderActiveBanner` renders earliest preservation expiry + "Acknowledge Receipt" CTA; outbound EPOC_PRESERVATION_ACK send fires `PreservationOrderAcknowledged` audit and swaps banner to green confirmation. Round-out of the Workflow 4 lifecycle on the receipt side.
+
+**Persona**: RS
+
+**Workflow stage**: Collection (preservation-only pipeline)
+
+**Case shape**: Spain / National / eEvidence (EPOC PR) · 1 Consumer email identifier · `desiredPreservationExpiration: 2026-11-25` (6-month window) · Form 2 inbound pre-seeded
+
+**Preconditions**:
+1. Default queue.
+2. Case has a Form 2 inbound; the inbound-event handler fires once on case mount.
+
+**Test Steps**:
+1. Open the case from the queue. Confirm landing on the Collection page.
+2. Inspect the **top banner stack**.
+3. Inspect the Collection pipeline view (which stages render).
+4. Open the Correspondence panel. Click the **Form 2 — Preservation Order** inbound bubble. Click "View Form 2 (Preservation Order)".
+5. Close the FormPreviewPanel. Back on the banner, click **Acknowledge Receipt**.
+6. In the Correspondence composer that opens, confirm the form chip is pre-attached. Click the chip to open FormFillerDialog.
+7. Fill the signer name + acknowledgement date fields. Sign and send.
+8. Re-inspect the top banner. Open the Audit thread.
+9. Hard-reload the page. Re-open the case.
+
+**Expected Results**:
+- Step 2: Blue **"Preservation Order in Effect"** banner shows earliest preservation expiration **Nov 25, 2026**, received date, IA actor (Audiencia Nacional), and **Acknowledge Receipt** CTA visible.
+- Step 3: Only the **Preservation** column renders; Package + Delivery columns hidden. The "Cannot preserve — submit Form 3" CTA shows at the bottom of the Preservation column.
+- Step 4: FormPreviewPanel opens hydrated with EPOC_FORM_2 fields (issuing authority, file number, date of issue, preservation order reference, initial expiration 2026-11-25, offence + data description).
+- Step 5: Composer side-panel opens; the EPOC_PRESERVATION_ACK chip is pre-attached without manually picking it; FormFillerDialog opens automatically with the template ready.
+- Step 7: Toast reads **"Preservation receipt acknowledged to the IA"**. Banner swaps to green ✓ **"Receipt acknowledged to the Issuing Authority"** (Acknowledge CTA hidden post-ack).
+- Step 8: Audit thread shows exactly TWO new events: `PreservationOrderReceived` (actor: Audiencia Nacional, performedAt 2026-05-25) and `PreservationOrderAcknowledged` (actor: Nicole Garcia / CURRENT_USER, performedAt = send time).
+- Step 9: After reload, banner stays in the green ✓ confirmation state; audit events unchanged (idempotent — `PreservationOrderReceived` doesn't double-fire, `PreservationOrderAcknowledged` keyed by the outbound's documentId).
+
+**Pass criteria**: Form 2 inbound auto-applies receipt audit on case open; ActiveBanner renders pre-ack; Acknowledge CTA opens composer with pre-attached template; send produces ack audit + banner swap; idempotent across reloads.
+
+---
+
+### UAT-DARS-024 · LNS-2026-00245 — Italian eEvidence: Workflow 2 Active EA Review Window
+
+**Capability validated**: Workflow 2 active state — international EPOC + GFR block without decision; `gfrChipMeta()` renders "EA REVIEW WINDOW · Nd"; GFR Panel countdown card; Submit-to-Delivery button visibly disabled (not hidden) with the spec-compliant tooltip. Collection actions remain unblocked during the hold.
+
+**Persona**: RS
+
+**Workflow stage**: Collection · In Progress
+
+**Case shape**: Italy / National / eEvidence (EPOC ER) · `isInternational: true` · `eevidenceWorkflow: 2` · 1 Consumer email identifier · 2 pre-seeded jobs at Publish:Complete, Delivery:Not Started · GFR block notifiedAt 2026-05-22, expires 2026-06-01 (5 days remaining today)
+
+**Preconditions**:
+1. Default queue. Today = 2026-05-27.
+2. Case has GFR block with no decision (EA actively reviewing).
+
+**Test Steps**:
+1. Open the case from the queue.
+2. Inspect the sticky case header for the EA review chip.
+3. Inspect the top of Case Overview for the GFR Panel.
+4. Scroll to / view the CollectionTracker pipeline. Locate the "Review & Deliver" button on the Package column.
+5. Hover the disabled Review & Deliver button.
+6. Verify Collection-phase actions remain operable (the Submit-to-Publish CTA, manual collection forms, Refresh Pipeline).
+
+**Expected Results**:
+- Step 2: Sticky chip reads **"EA REVIEW WINDOW · 5d"** in info / blue-violet tone. Tooltip explains publish + deliver are blocked until the EA decides or the window lapses; SLA continues.
+- Step 3: GFR Panel (purple card) headline reads **"EA REVIEW WINDOW — Enforcing Authority is reviewing"**. Operational countdown badge reads **"5 days remaining · operational countdown only — SLA continues"**. Paragraph notes "Publish + Deliver actions are blocked until the EA decides or the window lapses; collection continues."
+- Step 4: Button reads **"Blocked — EA review window"** (instead of "Review & Deliver (2)"). Button is visibly disabled (greyed). Inline red helper text appears below the button.
+- Step 5: Tooltip reads **"Action blocked — EA review window active. Awaiting EA determination."**.
+- Step 6: Collection submit affordances remain operative — Submit-to-Publish CTA still clickable (the window only gates delivery, per spec).
+
+**Pass criteria**:
+- Sticky chip + GFR Panel use the new "EA REVIEW WINDOW" label.
+- Submit-to-Delivery DISABLED with spec-compliant tooltip (not hidden, not silently clickable).
+- Collection unaffected by the EA window hold.
+- Countdown matches `eaReviewWindowExpiresAt - now`, rounded up by `daysLeftEaReview()`.
+
+---
+
+### UAT-DARS-025 · LNS-2026-00247 — French eEvidence: Workflow 2 EA Window Lapsed + Resume Delivery
+
+**Capability validated**: Workflow 2 lapsed path — `useEaWindowExpiry` hook auto-fires `EaWindowExpired` audit on case mount when the window has passed without a decision; GFR Panel green "delivery is now permitted (Art. 8 + 10(2))" with Resume Delivery CTA; on click → `manualDeliveryResumed: true` + `GfrDeliveryResumedManually` audit + Submit-to-Delivery re-enables. Validates the auto-detection-and-manual-resume contract.
+
+**Persona**: RS
+
+**Workflow stage**: Collection · In Progress
+
+**Case shape**: France / National / eEvidence (EPOC ER) · `isInternational: true` · `eevidenceWorkflow: 2` · 1 Consumer email identifier · 2 pre-seeded jobs at Publish:Complete, Delivery:Not Started · GFR block notifiedAt 2026-05-15, expires 2026-05-25 (passed 2 days ago); `windowLapsed` NOT pre-seeded — hook fires it on mount
+
+**Preconditions**:
+1. Default queue. Today = 2026-05-27.
+2. The seeded `eaReviewWindowExpiresAt` is in the past with no EA decision; the hook should fire `EaWindowExpired` on first mount.
+
+**Test Steps**:
+1. Open the case from the queue.
+2. Inspect the sticky case header chip + the GFR Panel state at the top of Case Overview.
+3. Open the Audit thread; locate the auto-fired `EaWindowExpired` event.
+4. Inspect the Collection pipeline's "Review & Deliver" button.
+5. Click the **Resume Delivery** button in the GFR Panel.
+6. Verify the panel + chip + button state after the click. Open the Audit thread again.
+7. Click "Review & Deliver" (now enabled). Cancel out of the dialog.
+8. Hard-reload the page. Re-open the case. Re-check the Audit thread.
+
+**Expected Results**:
+- Step 2: Sticky chip reads **"EA window lapsed · resume delivery"** in warn / amber tone. GFR Panel renders a green card headlined **"EA review window expired — delivery is now permitted"** with the Art. 8 + 10(2) attribution + a primary **Resume Delivery** button.
+- Step 3: Audit thread contains exactly one `EaWindowExpired` event (actor: "System", performedAt = first mount time). Note quotes Art. 8 + 10(2).
+- Step 4: Button reads **"Blocked — EA review window"** with tooltip **"Action blocked — EA review window lapsed. Click Resume Delivery in the GFR Panel to proceed."**.
+- Step 5: Toast reads **"Delivery resumed — EA review window had lapsed without a decision. Submit-to-Delivery is re-enabled."**.
+- Step 6: Sticky chip flips to **"EA window lapsed · delivery resumed"** in success / green tone. GFR Panel swaps to a green confirmation card showing the resume timestamp + actor. Audit thread has a new `GfrDeliveryResumedManually` event (actor: CURRENT_USER).
+- Step 7: Review & Deliver button now reads **"Review & Deliver (2)"** and opens the standard delivery review dialog. Dialog body lists the 2 pending jobs.
+- Step 8: After reload, the audit thread STILL shows exactly one `EaWindowExpired` event (auto-detection hook is idempotent — doesn't re-fire because `windowLapsed` flag and the audit event are both already on FormData) AND exactly one `GfrDeliveryResumedManually` event (helper is idempotent on the `manualDeliveryResumed` flag).
+
+**Pass criteria**:
+- `useEaWindowExpiry` hook fires `EaWindowExpired` audit on first mount when window has passed.
+- Lapsed-pre-resume panel + chip use warn tone with Resume Delivery CTA.
+- Resume Delivery sets `manualDeliveryResumed: true`, appends `GfrDeliveryResumedManually` audit, swaps panel/chip to success tone.
+- Submit-to-Delivery re-enables on resume.
+- Both audit events idempotent across reloads.
+
+---
+
+### UAT-DARS-026 · LNS-2026-00130 — Irish eEvidence: Workflow 1 Standard Production National
+
+**Capability validated**: Workflow 1 baseline — same-jurisdiction EPOC-ER (Irish IA + Irish SP) bypasses the EA review leg entirely. `gfrApplies()` returns false → no GFR panel; `isInternational: false` → no EA chip; Routine SLA tier (10 days per Art. 9(1)). Full Collection → Package → Delivery pipeline with no banners. This is the eEvidence default happy path — every other workflow's expected results should be interpreted relative to this baseline.
+
+**Persona**: RS
+
+**Workflow stage**: Collection · In Progress
+
+**Case shape**: Ireland / National / eEvidence (EPOC ER) · `isInternational: false` · `eevidenceWorkflow: 1` · 1 Consumer email identifier · 3 pre-seeded jobs spanning the pipeline (1 publish-pending, 1 delivery-pending, 1 already delivered)
+
+**Preconditions**:
+1. Default queue.
+
+**Test Steps**:
+1. Open the case from the queue.
+2. Inspect the sticky case header — note the SLA chip + verify the GFR / EA review chip is **NOT** present.
+3. Scroll the Case Overview banner stack — verify no preservation / GFR / emergency / withdrawal banners render.
+4. Open the CollectionTracker pipeline. Confirm the three-column layout (Collection / Package / Delivery) is present (not the preservation-only collapse).
+5. Locate the "Submit to Publish" CTA on the Collection column and "Review & Deliver" CTA on the Package column.
+6. Open the Audit thread.
+
+**Expected Results**:
+- Step 2: SLA chip shows **Routine** countdown (4 days remaining at today's date) in OnTrack (green) tone. No `EA REVIEW WINDOW` chip, no `EA window lapsed` chip, no GFR chip.
+- Step 3: Banner stack EMPTY — no PreservationOrderActiveBanner, no PreservationExtensionBanner, no EndPreservationBanner, no WithdrawalBanner, no EmergencyEEvidenceBanner.
+- Step 4: All three pipeline columns visible. `isEpocPr` collapse is NOT triggered.
+- Step 5: Both CTAs visible and **enabled** (no gating from GFR, no EA review window, no withdrawal). Tooltips do not mention any block reason.
+- Step 6: Audit thread carries no workflow-specific events from the eEvidence handlers (no `EaWindowExpired`, no `PreservationOrderReceived`, no `EpocWithdrawn`). Only routine bookkeeping events present (if any).
+
+**Pass criteria**: Workflow 1 case renders the baseline pipeline with NO eEvidence-workflow-specific affordances; Submit-to-Publish + Submit-to-Delivery enabled; SLA on Routine 10-day; the case acts as the "control" against which the other workflow demos diverge.
+
+---
+
+### UAT-DARS-027 · LNS-2026-00140 — German eEvidence: Workflow 3 Emergency Production 8h (Reg 2023/1543 Art. 9(2))
+
+**Capability validated**: Workflow 3 — `eevidenceWorkflow: 3` + `casePriority: "Emergency"` activates the spec's 8-hour SLA window via `getSlaConfig`'s `SlaContext` shim (instead of the static 3-hour Emergency tier). `EEvidenceAuthorisationFlags.emergencyJustification` carries the IA's structured threat declaration (category + note). `EmergencyEEvidenceBanner` renders prominently with the category label + justification. Pipeline + delivery actions remain available — the only spec-imposed change is the accelerated clock.
+
+**Persona**: RS
+
+**Workflow stage**: Collection · In Progress (urgent)
+
+**Case shape**: Germany / Federal / eEvidence (EPOC ER) · `isInternational: true` · `eevidenceWorkflow: 3` · `casePriority: "Emergency"` · `isThreatToLife: true` · 1 Consumer email identifier · 2 pre-seeded jobs at Publish:Complete, Delivery:Not Started · `emergencyJustification: { category: "DangerToLife", note: <kidnapping rationale> }`
+
+**Preconditions**:
+1. Default queue. Today = 2026-06-01.
+2. EPOC received 2026-06-01 04:00 UTC; 8h SLA → due 2026-06-01 12:00 UTC. By the time the tester opens the case (~10:00 UTC) the chip should be in Approaching (amber) state with ~2h remaining.
+
+**Test Steps**:
+1. Open the case from the queue.
+2. Inspect the top banner stack — verify the EmergencyEEvidenceBanner renders.
+3. Inspect the sticky case header SLA chip. Hover for tooltip.
+4. Compare with UAT-DARS-004 (LNS-2025-00142, the non-eEvidence Emergency case) — verify the chip durations differ.
+5. Open the CollectionTracker pipeline.
+6. Inspect the "Review & Deliver" CTA on the Package column.
+7. Locate and confirm the absence of the GFR Panel even though `isInternational: true` (Workflow 3 short-circuits the EA review in current scope).
+
+**Expected Results**:
+- Step 2: Red EmergencyEEvidenceBanner reads **"Emergency Production — 8-hour SLA (Reg 2023/1543 Art. 9(2))"** with secondary line **"Imminent danger to life"** and the IA's structured justification note quoted in a sub-box ("Active kidnapping investigation...").
+- Step 3: SLA chip is in **Approaching** (amber) tone showing **"Due in ~2h Nm"** (relative to opening time). Tooltip reads **"P0 Emergency — SLA 8 hours. Due in 2h Nm."** — note the spec's **8 hours** label, not 3.
+- Step 4: LNS-2025-00142 chip is **3-hour** Emergency (P0); LNS-2026-00140 chip is **8-hour** Emergency (P0). Both labels read "Emergency" / "P0" but the durations differ because the SlaContext shim is applied only on Workflow 3.
+- Step 5: Three-column pipeline visible (no preservation collapse).
+- Step 6: Review & Deliver button **enabled** — no EA gate, no GFR block, no withdrawal. RS can dispatch immediately to meet the 8h window.
+- Step 7: GFR Panel not rendered even though `isInternational: true`. (Note: Workflow 3 + Workflow 6 collapsed-EA-window interaction is explicitly NOT in current scope.)
+
+**Pass criteria**:
+- 8h SLA tier applied to the sticky chip (not 3h) — verifiable by comparing tooltip duration label against LNS-2025-00142.
+- EmergencyEEvidenceBanner renders with structured category + free-text note.
+- Pipeline + delivery actions available; no spurious gates.
+- Banner self-hides on non-Workflow-3 cases (verify by opening LNS-2026-00130 — banner absent).
+
+---
+
 ## 6. Cross-cutting smoke tests
 
 Run these once per UAT cycle, after the per-case tests. They verify infrastructure not tied to any single case.
 
 ### UAT-DARS-SMOKE-A — All Cases queue
-- Confirm all 21 case rows render in the queue.
+- Confirm all 27 case rows render in the queue.
 - Confirm the **Badges** filter (toolbar) opens and supports multi-select + Any/All toggle.
 - Confirm column-header sort works on Priority / Due Date / Stage / Internal Escalation.
 
@@ -843,6 +1232,12 @@ Print or copy this table into your UAT log per test run.
 | UAT-DARS-019 | | | | | |
 | UAT-DARS-020 | | | | | |
 | UAT-DARS-021 | | | | | |
+| UAT-DARS-022 | | | | | |
+| UAT-DARS-023 | | | | | |
+| UAT-DARS-024 | | | | | |
+| UAT-DARS-025 | | | | | |
+| UAT-DARS-026 | | | | | |
+| UAT-DARS-027 | | | | | |
 | UAT-DARS-SMOKE-A | | | | | |
 | UAT-DARS-SMOKE-B | | | | | |
 | UAT-DARS-SMOKE-C | | | | | |

@@ -1031,6 +1031,92 @@ const EPOC_END_PRESERVATION: FormTemplate = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
+// EPOC Withdrawal — IA withdraws the EPOC (Workflow 8)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Inbound from the Issuing Authority. The IA may withdraw an EPOC at
+// any point in its lifecycle (per Appendix F Workflow 8). The handler
+// `applyWithdrawal` in utils/withdrawal.ts cancels pending delivery,
+// starts the 45-day retention clock, sets authorizationDesiredStatus +
+// caseStage to "Withdrawn", and appends an `EpocWithdrawn` audit event.
+
+const EPOC_WITHDRAWAL: FormTemplate = {
+  id: "EPOC_WITHDRAWAL",
+  name: "EPOC Withdrawal Notice",
+  category: "Notice",
+  description:
+    "Issuing authority's withdrawal of an earlier EPOC under Regulation (EU) 2023/1543. Supersedes all other workflows; the service provider must cancel any pending delivery and delete preserved or held data within 45 days.",
+  regulatoryAnchor: "EU Regulation 2023/1543, Article 9(7)",
+  sections: [
+    { id: "A", title: "Section A: Issuing authority" },
+    { id: "B", title: "Section B: Withdrawn EPOC reference" },
+    { id: "C", title: "Section C: Withdrawal details" },
+  ],
+  fields: [
+    {
+      id: "A_issuingAuthority",
+      sectionId: "A",
+      label: "Issuing authority",
+      type: "text",
+      required: true,
+      span: "full",
+    },
+    {
+      id: "A_issuingFileNumber",
+      sectionId: "A",
+      label: "File number of the issuing authority",
+      type: "text",
+      required: true,
+      span: "half",
+    },
+    {
+      id: "A_dateOfWithdrawal",
+      sectionId: "A",
+      label: "Date of withdrawal notice",
+      type: "date",
+      required: true,
+      span: "half",
+    },
+    {
+      id: "B_originalEpocReference",
+      sectionId: "B",
+      label: "Reference of the withdrawn EPOC",
+      type: "text",
+      required: true,
+      span: "full",
+    },
+    {
+      id: "B_originalEpocType",
+      sectionId: "B",
+      label: "EPOC type",
+      type: "select",
+      span: "half",
+      options: [
+        { value: "EPOC_ER", label: "EPOC-ER (Production Order)" },
+        { value: "EPOC_PR", label: "EPOC-PR (Preservation Order)" },
+      ],
+    },
+    {
+      id: "C_effectiveDate",
+      sectionId: "C",
+      label: "Effective date of withdrawal",
+      type: "date",
+      required: true,
+      span: "half",
+      helperText:
+        "Anchors the 45-day retention clock. After this date + 45 days the held data must be deleted.",
+    },
+    {
+      id: "C_withdrawalReason",
+      sectionId: "C",
+      label: "Reason for withdrawal",
+      type: "textarea",
+      span: "full",
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 // Request Additional Information — outbound RFI letter
 // ─────────────────────────────────────────────────────────────────────────
 //
@@ -1237,6 +1323,7 @@ export const FORM_TEMPLATES: FormTemplate[] = [
   EPOC_FORM_6,
   EPOC_END_PRESERVATION,
   EPOC_PRESERVATION_ACK,
+  EPOC_WITHDRAWAL,
   REQUEST_ADDITIONAL_INFORMATION,
   PROVIDE_ADDITIONAL_INFORMATION,
   STANDARD_PRODUCTION_LETTER,

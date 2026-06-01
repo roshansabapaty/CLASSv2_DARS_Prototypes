@@ -394,6 +394,9 @@ function deriveThreadLabel(
   if (root.kind === "EndPreservation") {
     return { label: "End of Preservation", iconKey: "withdrawal" };
   }
+  if (root.kind === "Withdrawal") {
+    return { label: "EPOC Withdrawal Notice", iconKey: "withdrawal" };
+  }
   if (root.kind === "WithdrawalAmendment") {
     return { label: "Withdrawal / Amendment", iconKey: "withdrawal" };
   }

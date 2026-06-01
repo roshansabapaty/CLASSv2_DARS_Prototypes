@@ -407,5 +407,8 @@ export function buildLENS202600180FormData(): FormData {
     // Attorney review surfaces — Phase 2 of the prototype-to-prod merge.
     enterpriseContext,
     disclosureConstraints,
+    // Workflow 2 — Spain IA, cross-border to the Irish SP.
+    eevidenceWorkflow: 2,
+    isInternational: true,
   };
 }

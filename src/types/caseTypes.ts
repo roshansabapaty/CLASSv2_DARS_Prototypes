@@ -369,6 +369,10 @@ export interface EscalationAuditEvent {
     | "PreservationOrderAcknowledged"
     | "PreservationExtended"
     | "PreservationEnded"
+    // Workflow 8 — IA withdraws the EPOC at any point in the lifecycle.
+    // Fired by the Withdrawal inbound handler. Supersedes all other
+    // workflows; SP must cancel pending delivery + start 45-day retention.
+    | "EpocWithdrawn"
     // Phase 4 enterprise CTAs — attorney actions on enterprise cases
     // surface here so the AuditThread captures the full enterprise
     // workflow alongside the existing escalation lifecycle.
@@ -821,6 +825,19 @@ export interface EEvidenceAuthorisationFlags {
    *  Inform" should be reflected on the case so the Response Specialist
    *  treats the user-notification leg as paused. */
   delayInformingUser?: boolean;
+  /** Reg 2023/1543 Art. 9(2) emergency justification. Required for
+   *  Workflow 3 (Emergency Production) cases — the IA must declare which
+   *  imminent-danger category triggers the 8h SLA, and may attach a
+   *  free-text note for context. Surfaced on the EmergencyEEvidenceBanner
+   *  + the case header so the Specialist sees why the case is on the
+   *  accelerated clock. */
+  emergencyJustification?: {
+    category:
+      | "DangerToLife"
+      | "DangerOfInjury"
+      | "CriticalInfrastructure";
+    note?: string;
+  };
 }
 
 /** A snapshot of a prior resolution captured before it was edited or the

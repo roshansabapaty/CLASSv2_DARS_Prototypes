@@ -430,6 +430,61 @@ export const MOCK_CORRESPONDENCE_SEEDS: Record<string, CorrespondenceItem[]> = {
   // Dutch EPOC-PR preservation case — see mockCaseDataLENS202600220.ts.
   // Full lifecycle on this case: Form 2 (preservation order) →
   // Form 5 (production-incoming) → Form 6 (extension) → EndPreservation.
+  // Portuguese EPOC-ER — Workflow 8 mid-collection withdrawal demo.
+  // Single Withdrawal inbound; on case open the handler cancels pending
+  // delivery, starts the 45-day retention clock, flips caseStage to
+  // "Withdrawn", and appends EpocWithdrawn audit. See
+  // utils/mockCaseDataLENS202600280.ts.
+  "LNS-2026-00280": [
+    {
+      id: "corr-pt-withdrawal-001",
+      documentId: "IA-LNS-2026-00280-IN-01",
+      caseId: "LNS-2026-00280",
+      direction: "Inbound",
+      counterparty: "IssuingAuthority",
+      channel: "DecentralisedITSystem",
+      kind: "Withdrawal",
+      subject:
+        "EPOC Withdrawal Notice — DIAP-2026-EPOC-ER-0280",
+      body:
+        "Exmos. Senhores,\n\n" +
+        "Nos termos do artigo 9.º, n.º 7 do Regulamento (UE) 2023/1543, " +
+        "o Ministério Público — Departamento de Investigação e Ação " +
+        "Penal de Lisboa procede à retirada do EPOC com a referência " +
+        "DIAP-2026-EPOC-ER-0280, com efeitos a 20 de maio de 2026.\n\n" +
+        "A queixa-crime subjacente foi retirada pelo queixoso na " +
+        "presente data; o procedimento criminal foi arquivado e a " +
+        "presente ordem deixa de ter sustentação legal.\n\n" +
+        "Solicita-se ao prestador de serviços que cesse imediatamente " +
+        "qualquer entrega pendente e proceda à eliminação dos dados " +
+        "preservados ou recolhidos no prazo de 45 dias.\n\n" +
+        "Com os melhores cumprimentos,\n" +
+        "Procurador Adjunto Ricardo Almeida\n" +
+        "Ministério Público — DIAP Lisboa",
+      createdAt: new Date("2026-05-20T10:00:00"),
+      structuredForm: {
+        templateId: "EPOC_WITHDRAWAL",
+        values: {
+          A_issuingAuthority:
+            "Ministério Público — DIAP Lisboa (Portugal)",
+          A_issuingFileNumber: "DIAP-2026-EPOC-ER-0280",
+          A_dateOfWithdrawal: "2026-05-20",
+          B_originalEpocReference: "DIAP-2026-EPOC-ER-0280",
+          B_originalEpocType: "EPOC_ER",
+          // Anchors the 45-day retention clock. 7 days ago → ~38 days
+          // remaining when the case opens today.
+          C_effectiveDate: "2026-05-20",
+          C_withdrawalReason:
+            "Complainant rescinded the underlying criminal complaint; " +
+            "the proceeding was archived and the order no longer has " +
+            "legal foundation.",
+          issuingAuthorityName:
+            "Ministério Público — DIAP Lisboa (Portugal)",
+        },
+      },
+    },
+  ],
+
   // Spanish EPOC-PR — Workflow 4 active preservation demo.
   // Single Form 2 inbound; the PreservationOrderActiveBanner renders
   // with the "Acknowledge Receipt" CTA. No extensions, no end yet.

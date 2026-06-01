@@ -449,5 +449,8 @@ export function buildLENS202600150FormData(): FormData {
         resolutionReason: "Preserved",
       },
     ],
+    // Workflow 2 — Germany IA, cross-border to the Irish SP.
+    eevidenceWorkflow: 2,
+    isInternational: true,
   };
 }

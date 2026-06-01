@@ -275,5 +275,8 @@ export function buildLENS202600210FormData(): FormData {
       permissionToNotifyUser: true,
     },
     eevidenceRelatedCases: [],
+    // Workflow 2 — Italy IA, cross-border to the Irish SP.
+    eevidenceWorkflow: 2,
+    isInternational: true,
   };
 }

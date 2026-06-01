@@ -61,6 +61,7 @@ export type InboundKind =
   | "PreservationOrder" // Form 2 — original EPOC-PR (preservation order) arrival; handler appends PreservationOrderReceived audit + drives the active-banner / Acknowledge CTA
   | "PreservationExtension" // Form 6 (POST /eevidence/preservationextension) — IA extends preservation period; handler bumps AccountIdentifier.desiredPreservationExpiration
   | "EndPreservation" // POST /eevidence/endpreservation — IA ends the preservation obligation; handler starts the 45-day retention clock
+  | "Withdrawal" // POST /eevidence/withdrawal — IA withdraws the EPOC (Workflow 8); handler cancels pending delivery + starts retention clock + auto-flips caseStage
   | "GroundsForRefusal"; // EA's GFR message (ETSI 5.5) — None/Full/Partial decision; renders as GFR bubble
 
 /** Classifies an outbound correspondence record by document type, so the

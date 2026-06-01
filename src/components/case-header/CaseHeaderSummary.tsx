@@ -299,6 +299,8 @@ export function CaseHeaderSummary({ formData, onOpenCancellationWorkflow, cancel
             dueDate={formData.dueDate}
             dateReceived={formData.dateReceived ?? formData.createDate}
             paused={!!formData.slaPausedAt}
+            requestType={formData.requestType}
+            eevidenceWorkflow={formData.eevidenceWorkflow}
           />
           {/* Retention clock chip — renders only when a terminal event
               (EndPreservation / Full GFR / Form 3 / Withdrawal / Delivered)

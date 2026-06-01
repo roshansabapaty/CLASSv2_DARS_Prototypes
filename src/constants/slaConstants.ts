@@ -79,8 +79,49 @@ const TIER_INDEX: Record<string, number> = SLA_TIER_CONFIGS.reduce(
   {} as Record<string, number>,
 );
 
-/** Map from tier value (or unknown / "Standard" legacy value) → config. */
-export function getSlaConfig(tier: string | undefined): SlaTierConfig {
+/** Context that overrides the static tier config for spec-mandated
+ *  variants. Today this is only used by Reg 2023/1543 Art. 9(2)
+ *  Emergency Production — an eEvidence Emergency case under Workflow 3
+ *  has an 8-hour SLA window instead of the standard 3-hour Emergency
+ *  window. Other variants can plug into the same shim later. */
+export interface SlaContext {
+  requestType?: string;
+  eevidenceWorkflow?: number;
+}
+
+/** Spec-mandated 8h window for eEvidence Emergency Production. */
+const EEVIDENCE_EMERGENCY_8H: SlaTierConfig = {
+  tier: "Emergency",
+  label: "Emergency",
+  pLevel: "P0",
+  description:
+    "Emergency Production — Reg 2023/1543 Art. 9(2) (8h SLA)",
+  durationMs: 8 * HOUR,
+  durationLabel: "8 hours",
+};
+
+/** True when the case's context maps to the spec's 8h Emergency tier
+ *  (Reg 2023/1543 Art. 9(2)). Public so callers can branch on the
+ *  variant without duplicating the predicate. */
+export function isEEvidenceEmergency(
+  tier: string | undefined,
+  ctx?: SlaContext,
+): boolean {
+  if (tier !== "Emergency") return false;
+  if (!ctx) return false;
+  return ctx.requestType === "eEvidence" && ctx.eevidenceWorkflow === 3;
+}
+
+/** Map from tier value (or unknown / "Standard" legacy value) → config.
+ *  Optional `ctx` carries case-shape signals (requestType, workflow)
+ *  that swap the tier for spec-mandated variants like the eEvidence
+ *  Emergency 8h window. Legacy callers omit `ctx` and get the static
+ *  tier behaviour. */
+export function getSlaConfig(
+  tier: string | undefined,
+  ctx?: SlaContext,
+): SlaTierConfig {
+  if (isEEvidenceEmergency(tier, ctx)) return EEVIDENCE_EMERGENCY_8H;
   if (!tier) return SLA_TIER_CONFIGS[3]; // default to Routine
   // Legacy "Standard" collapses to Routine.
   if (tier === "Standard") return SLA_TIER_CONFIGS[3];
@@ -104,8 +145,9 @@ export function computeSlaDueDate(
   tier: string | undefined,
   dateReceived?: Date | string | null,
   now: Date = new Date(),
+  ctx?: SlaContext,
 ): Date {
-  const cfg = getSlaConfig(tier);
+  const cfg = getSlaConfig(tier, ctx);
   const received = dateReceived ? new Date(dateReceived) : null;
   const anchorMs =
     received && !Number.isNaN(received.getTime())
@@ -157,8 +199,9 @@ export function computeCountdown(
   dueDate: Date | string | undefined | null,
   dateReceived?: Date | string | null,
   now: Date = new Date(),
+  ctx?: SlaContext,
 ): Countdown {
-  const cfg = getSlaConfig(tier);
+  const cfg = getSlaConfig(tier, ctx);
   const due = dueDate ? new Date(dueDate) : null;
   if (!due || Number.isNaN(due.getTime())) {
     // No due date set → treat as OnTrack with no label.
