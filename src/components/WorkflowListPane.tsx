@@ -53,6 +53,7 @@ import {
   type PriorityLabel,
 } from "./workflow-nav/CaseScopeHeader";
 import { WorkflowListPaneFooter } from "./workflow-nav/WorkflowListPaneFooter";
+import { TruncatedText } from "./ui/truncated-text";
 import { useResizablePaneWidth } from "../hooks/useResizablePaneWidth";
 
 const PANE_MIN_WIDTH = 240;
@@ -274,6 +275,45 @@ export function WorkflowListPane({
                 <ul className="mt-1 space-y-0.5 pl-1.5" role="list">
                   {navState.steps.map((step, idx) => {
                     const isActiveStep = step.key === navState.activeStepKey;
+                    // When the step carries a `description`, the existing
+                    // hover tooltip is always meaningful — show it
+                    // unconditionally. Without a description, fall back to
+                    // <TruncatedText> on the label so a clipped label still
+                    // gets a hover-to-reveal escape hatch.
+                    const buttonClass = cn(
+                      "w-full flex items-center gap-2 px-2 py-1 rounded text-left text-xs transition-colors",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
+                      isActiveStep
+                        ? "bg-[#deecf9] font-semibold text-[#0078d4]"
+                        : step.isComplete
+                          ? "text-[#107c10] hover:bg-[#f3f2f1]"
+                          : "text-[#323130] hover:bg-[#f3f2f1]",
+                    );
+                    if (!step.description) {
+                      return (
+                        <li key={step.key}>
+                          <button
+                            type="button"
+                            onClick={() => onStepClick?.(step.key)}
+                            aria-current={isActiveStep ? "step" : undefined}
+                            className={buttonClass}
+                          >
+                            <SubStepStatusIcon
+                              index={idx}
+                              isActive={isActiveStep}
+                              isComplete={step.isComplete}
+                            />
+                            <TruncatedText
+                              className="truncate flex-1"
+                              tooltipText={step.label}
+                              side="right"
+                            >
+                              {step.label}
+                            </TruncatedText>
+                          </button>
+                        </li>
+                      );
+                    }
                     return (
                       <li key={step.key}>
                         <Tooltip>
@@ -282,15 +322,7 @@ export function WorkflowListPane({
                               type="button"
                               onClick={() => onStepClick?.(step.key)}
                               aria-current={isActiveStep ? "step" : undefined}
-                              className={cn(
-                                "w-full flex items-center gap-2 px-2 py-1 rounded text-left text-xs transition-colors",
-                                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
-                                isActiveStep
-                                  ? "bg-[#deecf9] font-semibold text-[#0078d4]"
-                                  : step.isComplete
-                                    ? "text-[#107c10] hover:bg-[#f3f2f1]"
-                                    : "text-[#323130] hover:bg-[#f3f2f1]",
-                              )}
+                              className={buttonClass}
                             >
                               <SubStepStatusIcon
                                 index={idx}

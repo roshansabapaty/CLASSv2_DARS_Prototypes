@@ -18,6 +18,7 @@ import {
   Scale,
 } from "lucide-react";
 import { CopyableText } from "../CopyButton";
+import { TruncatedText } from "../ui/truncated-text";
 import {
   Tooltip,
   TooltipContent,
@@ -86,9 +87,13 @@ export function CaseCardHeader({
     <div className="flex items-center justify-between gap-3">
       <div className="flex items-center gap-2.5">
         <CopyableText text={caseItem.caseId} copyLabel="Copy case ID">
-          <span className="font-mono text-base text-slate-900" style={{ fontWeight: 600 }}>
+          <TruncatedText
+            className="font-mono text-base text-slate-900 truncate min-w-0 max-w-[280px]"
+            style={{ fontWeight: 600 }}
+            tooltipText={caseItem.caseId}
+          >
             {caseItem.caseId}
-          </span>
+          </TruncatedText>
         </CopyableText>
 
         {/* Phase 2: unread inbound correspondence */}

@@ -35,6 +35,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "../ui/tooltip";
+import { TruncatedText } from "../ui/truncated-text";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -269,25 +270,30 @@ export function CaseScopeHeader({
         </div>
       </div>
 
-      {/* Row 2 — case context: id · priority · assignee */}
+      {/* Row 2 — case context: id · priority · assignee.
+          Wrapped in TruncatedText so narrow pane widths surface a
+          hover-to-reveal tooltip with the full string instead of just
+          clipping invisibly. */}
       <div className="flex items-center gap-2 px-3 pb-2 min-w-0">
-        <span
-          className="font-mono text-[13px] font-semibold text-[#323130] truncate"
+        <TruncatedText
+          className="font-mono text-[13px] font-semibold text-[#323130] truncate min-w-0"
           aria-label={`Case ID ${caseId}`}
+          tooltipText={caseId}
         >
           {caseId}
-        </span>
+        </TruncatedText>
         <PriorityChip label={priorityLabel} />
         <span className="text-[#a19f9d]" aria-hidden="true">·</span>
-        <span
+        <TruncatedText
           className={cn(
             "text-xs truncate min-w-0",
             assigneeIsUnassigned ? "text-[#a19f9d] italic" : "text-[#605e5c]",
           )}
           aria-label={`Assigned to ${assigneeDisplay}`}
+          tooltipText={`Assigned to ${assigneeDisplay}`}
         >
           {assigneeDisplay}
-        </span>
+        </TruncatedText>
       </div>
     </div>
   );

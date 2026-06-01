@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from "../ui/tooltip";
 import { CopyableText } from "../CopyButton";
+import { TruncatedText } from "../ui/truncated-text";
 import { SlaDeadlineChip } from "../sla/SlaDeadlineChip";
 import { isCaseSlaPausedById } from "../../utils/slaTimer";
 import { useCorrespondenceNotifications } from "../../hooks/useCorrespondenceNotifications";
@@ -294,12 +295,18 @@ export function CaseQueueListRow({
 
       {/* 1. Case ID — now just the copyable identifier. Unread / GFR /
           attorney-review chips moved out to the dedicated Badges cell
-          (rendered next) so they have room to breathe. */}
-      <div role="gridcell" className={cn("min-w-0 truncate flex items-center gap-1.5", cellPadding)}>
+          (rendered next) so they have room to breathe.
+          TruncatedText wraps the inner span so narrow column widths
+          (preview-pane mode, resized browser) surface a hover tooltip
+          with the full case-id instead of clipping invisibly. */}
+      <div role="gridcell" className={cn("min-w-0 flex items-center gap-1.5", cellPadding)}>
         <CopyableText text={caseItem.caseId} copyLabel="Copy case ID">
-          <span className="font-mono text-sm font-semibold text-slate-900">
+          <TruncatedText
+            className="font-mono text-sm font-semibold text-slate-900 truncate min-w-0"
+            tooltipText={caseItem.caseId}
+          >
             {caseItem.caseId}
-          </span>
+          </TruncatedText>
         </CopyableText>
       </div>
       {useInlineGrid && <Spacer />}
@@ -557,14 +564,23 @@ export function CaseQueueListRow({
 
       {/* 4. Country (dropped in dense mode) */}
       {!isDense && (
-        <div role="gridcell" className={cn("min-w-0 text-xs text-[#605e5c] truncate flex items-center", cellPadding)}>
-          <span className="text-[#323130] font-medium">{caseItem.country}</span>
-          {caseItem.jurisdiction && (
-            <>
-              <span className="text-slate-300 mx-1">·</span>
-              <span>{caseItem.jurisdiction}</span>
-            </>
-          )}
+        <div role="gridcell" className={cn("min-w-0 text-xs text-[#605e5c] flex items-center", cellPadding)}>
+          <TruncatedText
+            className="truncate min-w-0"
+            tooltipText={
+              caseItem.jurisdiction
+                ? `${caseItem.country} · ${caseItem.jurisdiction}`
+                : caseItem.country
+            }
+          >
+            <span className="text-[#323130] font-medium">{caseItem.country}</span>
+            {caseItem.jurisdiction && (
+              <>
+                <span className="text-slate-300 mx-1">·</span>
+                <span>{caseItem.jurisdiction}</span>
+              </>
+            )}
+          </TruncatedText>
         </div>
       )}
       {useInlineGrid && <Spacer />}
@@ -659,12 +675,13 @@ export function CaseQueueListRow({
           informational, not urgency-bearing. Internal Escalation moved
           to sit beside Escalated To below — see comment there. */}
       <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-        <span
+        <TruncatedText
           className="text-xs text-[#323130] truncate max-w-full"
           aria-label={`Stage: ${caseItem.caseStage}`}
+          tooltipText={caseItem.caseStage}
         >
           {caseItem.caseStage}
-        </span>
+        </TruncatedText>
       </div>
 
       {/* Assigned To — the RS who owns the case (distinct from the
@@ -675,15 +692,16 @@ export function CaseQueueListRow({
         <>
           {useInlineGrid && <Spacer />}
           <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            <span
+            <TruncatedText
               className={cn(
                 "text-xs truncate max-w-full",
                 caseItem.assigneeName ? "text-[#323130]" : "text-[#a19f9d] italic",
               )}
               aria-label={`Assigned to: ${caseItem.assigneeName || "Unassigned"}`}
+              tooltipText={`Assigned to ${caseItem.assigneeName || "Unassigned"}`}
             >
               {caseItem.assigneeName || "Unassigned"}
-            </span>
+            </TruncatedText>
           </div>
         </>
       )}
@@ -758,7 +776,7 @@ export function CaseQueueListRow({
                 ? "Unassigned"
                 : escalationSummary.assigneeLabel;
               return (
-                <span
+                <TruncatedText
                   className={cn(
                     "text-xs truncate max-w-full",
                     isUnassigned
@@ -766,9 +784,10 @@ export function CaseQueueListRow({
                       : "text-[#323130]",
                   )}
                   aria-label={`Escalated to: ${reviewerName}`}
+                  tooltipText={`Escalated to ${reviewerName}`}
                 >
                   {reviewerName}
-                </span>
+                </TruncatedText>
               );
             })()}
           </div>

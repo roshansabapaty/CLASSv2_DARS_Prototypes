@@ -142,6 +142,33 @@ export const MOCK_CASES: CaseQueueItem[] = [
       "Teams",
     ],
   },
+  // ── Portuguese eEvidence — Workflow 8 IA Withdrawal demo ──────────────
+  // EPOC-ER withdrawn mid-collection. On case open, the Withdrawal
+  // handler cancels pending delivery jobs, starts the 45-day retention
+  // clock, flips caseStage to "Withdrawn", and appends EpocWithdrawn
+  // audit. See utils/mockCaseDataLENS202600280.ts.
+  {
+    caseId: "LNS-2026-00280",
+    createDate: "May 12, 2026",
+    caseType: "Law Enforcement Request",
+    assigneeName: "Nicole Garcia",
+    requestType: "eEvidence",
+    requestSubType: "EPOC ER",
+    requestOrigin: "LEAPI",
+    caseStage: "In Progress", // Handler flips to "Withdrawn" on case open.
+    country: "Portugal",
+    jurisdiction: "National",
+    natureOfCrime: ["OtherFinancialCrimeOrFraud"],
+    isThreatToLife: false,
+    casePriority: "Routine",
+    dueDate: "May 22, 2026",
+    hasEnterpriseAccounts: false,
+    hasAzureAccounts: false,
+    accountExistenceChecked: true,
+    identifierCount: 1,
+    identifierTypes: { email: 1 },
+    servicesRequested: ["Email", "Microsoft Account Profile"],
+  },
   // ── Greek eEvidence — Form3Response-None-EaOverrulesSp (2 → 7 → 6) ────
   // SP submitted a Form 3 (ConflictWithThirdCountryLaw); EA reviewed it
   // and rejected the SP's claim via the second trigger path per ETSI
@@ -687,6 +714,59 @@ export const MOCK_CASES: CaseQueueItem[] = [
     identifierCount: 1,
     identifierTypes: { email: 1 },
     servicesRequested: ["Email", "Microsoft Account Profile", "Teams", "OneDrive"],
+  },
+  // ── Irish eEvidence — Workflow 1 Standard Production National ─────────
+  // IA + SP both in Ireland; no EA review leg. Full Collection → Package
+  // → Delivery pipeline, Routine 10-day SLA. The default eEvidence happy
+  // path. See utils/mockCaseDataLENS202600130.ts.
+  {
+    caseId: "LNS-2026-00130",
+    createDate: "May 26, 2026",
+    caseType: "Law Enforcement Request",
+    assigneeName: "Nicole Garcia",
+    requestType: "eEvidence",
+    requestSubType: "EPOC ER",
+    requestOrigin: "LEAPI",
+    caseStage: "In Progress",
+    country: "Ireland",
+    jurisdiction: "National",
+    natureOfCrime: ["Cybercrime"],
+    isThreatToLife: false,
+    casePriority: "Routine",
+    dueDate: "Jun 5, 2026",
+    hasEnterpriseAccounts: false,
+    hasAzureAccounts: false,
+    accountExistenceChecked: true,
+    identifierCount: 1,
+    identifierTypes: { email: 1 },
+    servicesRequested: ["Email", "Microsoft Account Profile"],
+  },
+  // ── German eEvidence — Workflow 3 Emergency Production (8h SLA) ───────
+  // BKA-issued emergency EPOC-ER for an active kidnapping case. Triggers
+  // Reg 2023/1543 Art. 9(2) 8-hour SLA window via the SlaContext shim.
+  // EmergencyEEvidenceBanner renders at top of CollectionTracker. See
+  // utils/mockCaseDataLENS202600140.ts.
+  {
+    caseId: "LNS-2026-00140",
+    createDate: "Jun 1, 2026",
+    caseType: "Law Enforcement Request",
+    assigneeName: "Nicole Garcia",
+    requestType: "eEvidence",
+    requestSubType: "EPOC ER",
+    requestOrigin: "LEAPI",
+    caseStage: "In Progress",
+    country: "Germany",
+    jurisdiction: "Federal",
+    natureOfCrime: ["Kidnapping", "Cybercrime"],
+    isThreatToLife: true,
+    casePriority: "Emergency",
+    dueDate: "Jun 1, 2026",
+    hasEnterpriseAccounts: false,
+    hasAzureAccounts: false,
+    accountExistenceChecked: true,
+    identifierCount: 1,
+    identifierTypes: { email: 1 },
+    servicesRequested: ["Email", "Microsoft Account Profile"],
   },
   // EU eEvidence demo case — exercises the Phase 1 Forms & Letters happy path
   // for EPOC Form 3 (Non-Execution Response). Defaults to requestSubType
