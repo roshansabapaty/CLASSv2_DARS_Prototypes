@@ -36,9 +36,21 @@ interface ReadOnlyReviewFormProps {
   onNavigateToFulfillment?: () => void;
   onNavigateToTriage?: () => void;
   onNavigateToQueue?: () => void;
+  /** WorkflowListPane hide-entirely visibility — plumbed from App.tsx. */
+  workflowPaneVisible?: boolean;
+  onShowWorkflowPane?: () => void;
+  workflowActiveStepLabel?: string;
 }
 
-export function ReadOnlyReviewForm({ formData, onNavigateToFulfillment, onNavigateToTriage, onNavigateToQueue }: ReadOnlyReviewFormProps) {
+export function ReadOnlyReviewForm({
+  formData,
+  onNavigateToFulfillment,
+  onNavigateToTriage,
+  onNavigateToQueue,
+  workflowPaneVisible,
+  onShowWorkflowPane,
+  workflowActiveStepLabel,
+}: ReadOnlyReviewFormProps) {
   // Copy to clipboard function
   const handleCopy = async (value: string) => {
     try {
@@ -87,12 +99,15 @@ export function ReadOnlyReviewForm({ formData, onNavigateToFulfillment, onNaviga
   return (
     <>
       {/* Sticky Case Header with Workflow Progress and Case Info */}
-      <StickyCaseHeader 
+      <StickyCaseHeader
         formData={formData}
         workflowStage="fulfillment"
         onNavigateToTriage={onNavigateToTriage}
         onNavigateToFulfillment={onNavigateToFulfillment}
         onNavigateToQueue={onNavigateToQueue}
+        workflowPaneVisible={workflowPaneVisible}
+        onShowWorkflowPane={onShowWorkflowPane}
+        workflowActiveStepLabel={workflowActiveStepLabel}
       />
 
       <div className="max-w-7xl mx-auto px-8 pt-[120px] py-8">

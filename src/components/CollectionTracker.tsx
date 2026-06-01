@@ -4,6 +4,7 @@ import { StickyCaseHeader } from "./StickyCaseHeader";
 import { PageContainer } from "./layout/PageContainer";
 import { DocumentViewerPanel } from "./DocumentViewerPanel";
 import { useDocumentViewer } from "../hooks/useDocumentViewer";
+import { usePersistedBoolean } from "../hooks/usePaneVisibility";
 import {
   CorrespondenceBanner,
   CorrespondencePanel,
@@ -324,6 +325,11 @@ interface CollectionTrackerProps {
   onWorkflowPaneActions?: (
     actions: import("../types/workflowPaneActions").WorkflowPaneActions,
   ) => void;
+  /** WorkflowListPane hide-entirely visibility — plumbed from App.tsx's
+   *  usePaneVisibility hook through StickyCaseHeader. */
+  workflowPaneVisible?: boolean;
+  onShowWorkflowPane?: () => void;
+  workflowActiveStepLabel?: string;
 }
 
 export function CollectionTracker({
@@ -341,6 +347,9 @@ export function CollectionTracker({
   stageBarNavState,
   onStageBarStepClick,
   onWorkflowPaneActions,
+  workflowPaneVisible,
+  onShowWorkflowPane,
+  workflowActiveStepLabel,
 }: CollectionTrackerProps) {
   const [expandedIdentifiers, setExpandedIdentifiers] = useState<Set<string>>(new Set());
   const [internalReadinessFilter, setInternalReadinessFilter] = useState<'all' | 'needs-action' | 'by-identifier' | 'complete'>('by-identifier');
@@ -405,7 +414,8 @@ export function CollectionTracker({
   // this open; the panel itself uses re-resizable so the user can widen
   // it to read correspondence side-by-side with the case data, and the
   // scrollable case body shrinks its `marginRight` to match.
-  const [correspondencePanelOpen, setCorrespondencePanelOpenRaw] = useState(false);
+  const [correspondencePanelOpen, setCorrespondencePanelOpenRaw] =
+    usePersistedBoolean("dars.correspondencePanel.open", false);
   const [correspondencePanelWidth, setCorrespondencePanelWidth] = useState(540);
   // External composer request — bumped when an EPOC-PR action CTA fires
   // ("Cannot Preserve" → EPOC_FORM_3, "Acknowledge Receipt" → EPOC_PRESERVATION_ACK).
@@ -2188,6 +2198,9 @@ export function CollectionTracker({
       onToggleDocumentPanel: onToggleDocumentPanel ?? (() => setDocumentPanelOpen(!documentPanelOpen)),
       // Identifier panel is fulfillment-only — omitted on Collection so the
       // pane suppresses the icon entirely.
+      correspondencePanelOpen,
+      onToggleCorrespondencePanel: () =>
+        setCorrespondencePanelOpen(!correspondencePanelOpen),
       escalationActionLabel: collectionEscalationLabel,
       onEscalate: handleOpenEscalateDialog,
       onOpenResolveDialog: (mode) => {
@@ -2205,6 +2218,8 @@ export function CollectionTracker({
     documentPanelOpen,
     onToggleDocumentPanel,
     setDocumentPanelOpen,
+    correspondencePanelOpen,
+    setCorrespondencePanelOpen,
     collectionEscalationLabel,
     handleOpenEscalateDialog,
     collectionIsResolved,
@@ -2645,6 +2660,9 @@ export function CollectionTracker({
         stageCompletion={stageCompletion}
         navState={stageBarNavState}
         onStepClick={onStageBarStepClick}
+        workflowPaneVisible={workflowPaneVisible}
+        onShowWorkflowPane={onShowWorkflowPane}
+        workflowActiveStepLabel={workflowActiveStepLabel}
       />
 
       <div

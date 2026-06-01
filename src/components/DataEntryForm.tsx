@@ -19,6 +19,7 @@ import { useAutosave } from "../hooks/useAutosave";
 import { useNavigationGuards } from "../hooks/useNavigationGuards";
 import { DocumentViewerPanel } from "./DocumentViewerPanel";
 import { useDocumentViewer } from "../hooks/useDocumentViewer";
+import { usePersistedBoolean } from "../hooks/usePaneVisibility";
 import { useNDOManagement } from "../hooks/useNDOManagement";
 import { useIdentifierManagement } from "../hooks/useIdentifierManagement";
 import { useServiceHandlers } from "../hooks/useServiceHandlers";
@@ -333,6 +334,12 @@ interface DataEntryFormProps {
   };
   stageBarNavState?: SidebarNavState | null;
   onStageBarStepClick?: (key: string) => void;
+  /** WorkflowListPane hide-entirely visibility. When false, the sticky
+   *  header surfaces the Show-workflow button + stage breadcrumb. Plumbed
+   *  from App.tsx's usePaneVisibility hook through StickyCaseHeader. */
+  workflowPaneVisible?: boolean;
+  onShowWorkflowPane?: () => void;
+  workflowActiveStepLabel?: string;
 }
 
 export function DataEntryForm({ 
@@ -354,6 +361,9 @@ export function DataEntryForm({
   stageCompletion,
   stageBarNavState,
   onStageBarStepClick,
+  workflowPaneVisible,
+  onShowWorkflowPane,
+  workflowActiveStepLabel,
 }: DataEntryFormProps = {}) {
   // Shared screen-reader live region. The provider is mounted at the
   // app shell (App.tsx) so this `announce` reaches the same `<div
@@ -541,7 +551,8 @@ export function DataEntryForm({
   // pattern as DocumentViewerPanel — width owned by us, applied as
   // `marginRight` on the case form so the user reads correspondence
   // side-by-side with the case data.
-  const [correspondencePanelOpen, setCorrespondencePanelOpenRaw] = useState(false);
+  const [correspondencePanelOpen, setCorrespondencePanelOpenRaw] =
+    usePersistedBoolean("dars.correspondencePanel.open", false);
   const [correspondencePanelWidth, setCorrespondencePanelWidth] = useState(540);
   // External composer request — fires when something OUTSIDE the
   // correspondence panel (e.g. the AwaitingInfoReplyBanner's "Send
@@ -1883,6 +1894,9 @@ export function DataEntryForm({
               }
             }
           : undefined,
+      correspondencePanelOpen,
+      onToggleCorrespondencePanel: () =>
+        setCorrespondencePanelOpen(!correspondencePanelOpen),
       escalationActionLabel,
       onEscalate: handleOpenEscalateDialog,
       onOpenResolveDialog: (mode) => {
@@ -1915,6 +1929,8 @@ export function DataEntryForm({
     setIdentifierPanelOpen,
     setIdentifierViewMode,
     setFulfillmentInitialStep,
+    correspondencePanelOpen,
+    setCorrespondencePanelOpen,
     escalationActionLabel,
     handleOpenEscalateDialog,
     isResolved,
@@ -2540,6 +2556,9 @@ export function DataEntryForm({
           setFormData((prev) => ({ ...prev, caseStage: stage }));
           toast.success(`Case status set to ${stage}.`);
         }}
+        workflowPaneVisible={workflowPaneVisible}
+        onShowWorkflowPane={onShowWorkflowPane}
+        workflowActiveStepLabel={workflowActiveStepLabel}
       />
 
       {/* Main content area - flex-1 takes remaining space below header */}

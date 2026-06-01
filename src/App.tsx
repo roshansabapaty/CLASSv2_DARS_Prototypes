@@ -29,6 +29,7 @@ import { MOCK_CASES } from "./components/case-queue/case-queue-types";
 import type { SidebarNavState } from "./types/sidebarNav";
 import { useOutboundAutoSim } from "./hooks/useOutboundAutoSim";
 import { useCorrespondenceNotifications } from "./hooks/useCorrespondenceNotifications";
+import { usePaneVisibility } from "./hooks/usePaneVisibility";
 import { CURRENT_USER } from "./constants/caseConstants";
 import { FF_NAV_V2_LIST_PANE } from "./constants/featureFlags";
 import { toast } from "sonner";
@@ -162,6 +163,30 @@ export default function App() {
   // ── Collection page readiness filter (lifted for sidebar nav) ──
   const [collectionReadinessFilter, setCollectionReadinessFilter] = useState<'all' | 'needs-action' | 'by-identifier' | 'complete'>('by-identifier');
 
+  // ── WorkflowListPane hide-entirely visibility (Teams pattern) ─────────
+  // Hidden state collapses the pane off-canvas; stage / sub-step context
+  // re-anchors in the StickyCaseHeader's WorkflowStageBanner via the
+  // `workflowPaneVisible` + `workflowActiveStepLabel` props plumbed
+  // through DataEntryForm / CollectionTracker / ReadOnlyReviewForm.
+  // Toggle is wired to the « button in CaseScopeHeader, the » button in
+  // WorkflowStageBanner, and the Ctrl+Shift+W global shortcut.
+  const workflowPaneVisibility = usePaneVisibility({
+    storageKey: "dars.workflowListPane.visible",
+    defaultVisible: true,
+  });
+
+  // Active sub-step label feeding the breadcrumb pill. Looks up the
+  // currently-active step in the dynamic stepper state emitted by the
+  // form component. Falls back to "" so the banner can decide to suppress
+  // the pill when no specific step is active.
+  const workflowActiveStepLabel = React.useMemo(() => {
+    if (!sidebarNavState) return "";
+    const active = sidebarNavState.steps.find(
+      (s) => s.key === sidebarNavState.activeStepKey,
+    );
+    return active?.label ?? "";
+  }, [sidebarNavState]);
+
   const handleSidebarStepClick = useCallback((key: string) => {
     setRequestedStepKey(key);
     // Reset after a tick so repeated clicks on the same step still fire
@@ -240,12 +265,90 @@ export default function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
       }
+
+      // Toggle WorkflowListPane visibility with Ctrl+Shift+W (Teams parity:
+      // Teams uses Ctrl+Shift+B for the channel-list toggle; we pick W for
+      // "workflow" so it doesn't collide with browser back / bookmark bar).
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "w" || e.key === "W") &&
+        selectedCaseId &&
+        FF_NAV_V2_LIST_PANE
+      ) {
+        e.preventDefault();
+        workflowPaneVisibility.toggle();
+        announce(
+          workflowPaneVisibility.visible
+            ? "Workflow pane hidden"
+            : "Workflow pane shown",
+        );
+      }
+
+      // Side-panel shortcuts — same Ctrl+Shift+<letter> convention. Each
+      // routes through workflowPaneActions, which the active form component
+      // (DataEntryForm / CollectionTracker) emits. When the handler isn't
+      // wired (e.g. identifier panel on a non-fulfillment stage), the
+      // shortcut is silently a no-op rather than throwing.
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "d" || e.key === "D") &&
+        selectedCaseId &&
+        workflowPaneActions?.onToggleDocumentPanel
+      ) {
+        e.preventDefault();
+        workflowPaneActions.onToggleDocumentPanel();
+        announce(
+          workflowPaneActions.documentPanelOpen
+            ? "Document panel closed"
+            : "Document panel opened",
+        );
+      }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "i" || e.key === "I") &&
+        selectedCaseId &&
+        workflowPaneActions?.onToggleIdentifierPanel
+      ) {
+        e.preventDefault();
+        workflowPaneActions.onToggleIdentifierPanel();
+        announce(
+          workflowPaneActions.identifierPanelOpen
+            ? "Identifier panel closed"
+            : "Identifier panel opened",
+        );
+      }
+
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        e.shiftKey &&
+        (e.key === "c" || e.key === "C") &&
+        selectedCaseId &&
+        workflowPaneActions?.onToggleCorrespondencePanel
+      ) {
+        e.preventDefault();
+        workflowPaneActions.onToggleCorrespondencePanel();
+        announce(
+          workflowPaneActions.correspondencePanelOpen
+            ? "Correspondence panel closed"
+            : "Correspondence panel opened",
+        );
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () =>
       window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedCaseId, stageCompletion]);
+  }, [
+    selectedCaseId,
+    stageCompletion,
+    workflowPaneVisibility,
+    workflowPaneActions,
+    announce,
+  ]);
 
   const handleCaseSelect = (
     caseId: string,
@@ -582,11 +685,15 @@ export default function App() {
               onToggleDocumentPanel={workflowPaneActions?.onToggleDocumentPanel}
               identifierPanelOpen={workflowPaneActions?.identifierPanelOpen}
               onToggleIdentifierPanel={workflowPaneActions?.onToggleIdentifierPanel}
+              correspondencePanelOpen={workflowPaneActions?.correspondencePanelOpen}
+              onToggleCorrespondencePanel={workflowPaneActions?.onToggleCorrespondencePanel}
               escalationActionLabel={workflowPaneActions?.escalationActionLabel}
               onEscalate={workflowPaneActions?.onEscalate}
               onOpenResolveDialog={workflowPaneActions?.onOpenResolveDialog}
               isResolved={workflowPaneActions?.isResolved}
               onReopenCase={workflowPaneActions?.onReopenCase}
+              hidden={!workflowPaneVisibility.visible}
+              onHidePane={workflowPaneVisibility.hide}
             />
           )}
 
@@ -629,6 +736,9 @@ export default function App() {
                   stageCompletion={stageCompletion}
                   stageBarNavState={sidebarNavState}
                   onStageBarStepClick={handleSidebarStepClick}
+                  workflowPaneVisible={workflowPaneVisibility.visible}
+                  onShowWorkflowPane={workflowPaneVisibility.show}
+                  workflowActiveStepLabel={workflowActiveStepLabel}
                 />
               </div>
 
@@ -658,6 +768,9 @@ export default function App() {
                       stageBarNavState={sidebarNavState}
                       onStageBarStepClick={handleSidebarStepClick}
                       onWorkflowPaneActions={setWorkflowPaneActions}
+                      workflowPaneVisible={workflowPaneVisibility.visible}
+                      onShowWorkflowPane={workflowPaneVisibility.show}
+                      workflowActiveStepLabel={workflowActiveStepLabel}
                     />
                   </CollectionSidebarNav>
                 </div>

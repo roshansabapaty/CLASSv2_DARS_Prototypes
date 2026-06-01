@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner@2.0.3";
 import { DEFAULT_AVAILABLE_DOCUMENTS } from "../data/documentViewerData";
+import { usePersistedBoolean } from "./usePaneVisibility";
 
 export interface DocumentVerification {
   verified: boolean;
@@ -16,8 +17,13 @@ interface UseDocumentViewerOptions {
 }
 
 export function useDocumentViewer({ sidebarCollapsed }: UseDocumentViewerOptions) {
-  // Panel state
-  const [warrantModalOpen, setWarrantModalOpen] = useState(false);
+  // Panel state — open/closed persisted per-user so the panel returns to
+  // its last state on reload. Matches the workflow-pane visibility pattern;
+  // panel-internal state (which doc, zoom, etc.) stays ephemeral.
+  const [warrantModalOpen, setWarrantModalOpen] = usePersistedBoolean(
+    "dars.documentPanel.open",
+    false,
+  );
   const [attachmentZoom, setAttachmentZoom] = useState(100);
   const [attachmentRotation, setAttachmentRotation] = useState(0);
   const [documentViewMode, setDocumentViewMode] = useState<'image' | 'text'>('image');

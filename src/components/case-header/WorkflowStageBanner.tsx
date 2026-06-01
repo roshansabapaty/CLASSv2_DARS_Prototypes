@@ -16,6 +16,8 @@ import {
   RotateCcw,
   Pencil,
   Scale,
+  PanelLeftOpen,
+  ChevronRight,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -79,6 +81,20 @@ interface WorkflowStageBannerProps {
   escalationActionLabel?: "Escalate" | "Update Escalation" | "Resume Escalation";
   /** Open the EscalateToAttorneyDialog in the appropriate mode. */
   onOpenEscalateDialog?: () => void;
+
+  // ── WorkflowListPane visibility re-anchor (Teams hide-entirely pattern) ──
+  /** Whether the WorkflowListPane is currently visible. When false, the
+   *  banner surfaces a "Show workflow" button + breadcrumb pill so the user
+   *  doesn't lose stage / sub-step orientation while the pane is hidden.
+   *  Undefined → assume visible (original behaviour). */
+  workflowPaneVisible?: boolean;
+  /** Re-show the WorkflowListPane. Wired to the Show-workflow button that
+   *  surfaces in the banner when `workflowPaneVisible === false`. */
+  onShowWorkflowPane?: () => void;
+  /** Active sub-step label inside the current stage — drives the breadcrumb
+   *  pill ("Triage › Identifier & Data Services"). Only surfaces when the
+   *  pane is hidden; the pane itself owns sub-step display when visible. */
+  workflowActiveStepLabel?: string;
 }
 
 export function WorkflowStageBanner({
@@ -104,6 +120,9 @@ export function WorkflowStageBanner({
   onAssigneeChange,
   responseSpecialists,
   currentUser,
+  workflowPaneVisible,
+  onShowWorkflowPane,
+  workflowActiveStepLabel,
 }: WorkflowStageBannerProps) {
   const priorityConfig = casePriority ? getPriorityConfig(casePriority) : null;
   const displayCaseNumber = caseNumber || caseId || "—";
@@ -146,6 +165,66 @@ export function WorkflowStageBanner({
       </CopyableText>
     </>
   );
+
+  // ── WorkflowListPane "hide-entirely" re-anchor (Teams pattern) ────────
+  // When the pane is hidden, surface (a) a Show-workflow button at the left
+  // edge of the banner and (b) a breadcrumb pill showing the active stage +
+  // sub-step. Together they keep the user oriented without consuming any
+  // workspace width. Both are no-ops when `onShowWorkflowPane` is not wired,
+  // so this is backwards-compatible with banner callers that don't yet care
+  // about pane visibility.
+  const paneHidden = workflowPaneVisible === false;
+
+  const stageLabelMap: Record<typeof workflowStage, string> = {
+    triage: "Triage",
+    fulfillment: "Review Case",
+    collection: "Collection",
+  };
+
+  const showPaneButton =
+    paneHidden && onShowWorkflowPane ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={onShowWorkflowPane}
+            aria-label="Show workflow pane (Ctrl+Shift+W)"
+            aria-pressed="false"
+            className={cn(
+              "inline-flex items-center justify-center h-7 w-7 rounded-md flex-shrink-0",
+              "bg-white/15 hover:bg-white/30 text-white border border-white/25",
+              "transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/85",
+            )}
+          >
+            <PanelLeftOpen className="w-3.5 h-3.5" aria-hidden="true" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p className="text-xs">
+            Show workflow pane{" "}
+            <kbd className="ml-1 px-1 py-0.5 bg-black/20 rounded text-[10px] font-mono">
+              Ctrl+Shift+W
+            </kbd>
+          </p>
+        </TooltipContent>
+      </Tooltip>
+    ) : null;
+
+  const paneBreadcrumb =
+    paneHidden && workflowActiveStepLabel ? (
+      <div
+        className="inline-flex items-center gap-1 h-6 px-2 rounded bg-white/15 border border-white/25 text-[11px] text-white/95 flex-shrink-0 max-w-[320px]"
+        role="status"
+        aria-label={`Active step: ${stageLabelMap[workflowStage]} › ${workflowActiveStepLabel}`}
+      >
+        <span className="font-semibold uppercase tracking-wide">
+          {stageLabelMap[workflowStage]}
+        </span>
+        <ChevronRight className="w-3 h-3 text-white/60 flex-shrink-0" aria-hidden="true" />
+        <span className="truncate">{workflowActiveStepLabel}</span>
+      </div>
+    ) : null;
 
   // Assignee chip lives in the action cluster on the right so it sits with
   // other CTAs (Escalate / Resolve / Save), not with passive metadata badges
@@ -386,10 +465,12 @@ export function WorkflowStageBanner({
     return (
       <div className="bg-gradient-to-r from-[#0078d4] to-[#106ebe] py-1.5 px-4">
         <div className="flex items-center gap-3 text-white">
+          {showPaneButton}
           <div className="w-7 h-7 bg-white/20 rounded-md flex items-center justify-center flex-shrink-0">
             <Clock className="w-4 h-4" />
           </div>
           <h2 className="text-sm">Triage</h2>
+          {paneBreadcrumb}
           {caseInfo}
           {escalationChipNode}
           {saveCloseButtons}
@@ -402,10 +483,12 @@ export function WorkflowStageBanner({
     return (
       <div className="bg-gradient-to-r from-[#0078d4] to-[#106ebe] py-1.5 px-4 border-l-4 border-l-[#107c10]">
         <div className="flex items-center gap-3 text-white">
+          {showPaneButton}
           <div className="w-7 h-7 bg-white/20 rounded-md flex items-center justify-center flex-shrink-0">
             <CheckCircle2 className="w-4 h-4" />
           </div>
           <h2 className="text-sm">Review Case</h2>
+          {paneBreadcrumb}
           {caseInfo}
           {escalationChipNode}
           <Badge variant="outline" className="bg-white/20 text-white border-white/30 text-xs">
@@ -422,10 +505,12 @@ export function WorkflowStageBanner({
     <div className="bg-gradient-to-r from-[#8764b8] to-[#7253a8] py-1.5 px-4">
       <div className="flex items-center justify-between text-white">
         <div className="flex items-center gap-3">
+          {showPaneButton}
           <div className="w-7 h-7 bg-white/20 rounded-md flex items-center justify-center flex-shrink-0">
             <Database className="w-4 h-4" />
           </div>
           <h2 className="text-sm">Collection</h2>
+          {paneBreadcrumb}
           {caseInfo}
           {escalationChipNode}
           <Badge variant="outline" className="bg-white/20 text-white border-white/30 text-xs">

@@ -46,6 +46,11 @@ export interface WorkflowPaneActions {
   identifierPanelOpen?: boolean;
   onToggleIdentifierPanel?: () => void;
 
+  /** Correspondence panel state — surfaces inbound / outbound messages and
+   *  the composer alongside the case form. */
+  correspondencePanelOpen?: boolean;
+  onToggleCorrespondencePanel?: () => void;
+
   // ── Overflow menu (⋯) ───────────────────────────────────────────────────
   /** Dynamic label — "Escalate" / "Update Escalation" / "Resume Escalation". */
   escalationActionLabel?: string;

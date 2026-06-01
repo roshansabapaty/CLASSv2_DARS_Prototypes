@@ -71,7 +71,7 @@
    * Phase 3 (later): bumps --page-max-w from 100% to 1280px once the
    *   PageContainer wrapper is in place.
    */
-  --page-max-w: 1280px;      /* Phase 3: centered body column. Matches Copilot Studio / M365 Copilot Chat at desktop sizes. Only applies inside <PageContainer> wrappers (case form body, queue, collection body, wizard steps). The sticky header stays full-bleed. */
+  --page-max-w: min(1600px, calc(100vw - 96px)); /* Workspace grows with viewport up to a 1600px comfort cap, with 48px gutters guaranteed at every width. Wider than the original 1280px M365 Copilot Chat cap because DARS' case-form surface is data-dense (identifier tables, two-column property grids, side panes) and benefits from horizontal headroom on wider monitors. Only applies inside <PageContainer> wrappers (case form body, queue, collection body, wizard steps). The sticky header stays full-bleed. */
   --page-gutter-x: 2rem;     /* Phase 2: bumped to Fluent spacingHorizontalXXXL (32px) — was spacingHorizontalL (16px) in Phase 1. */
   --section-gap: 1.5rem;     /* Phase 2: bumped to Fluent spacingVerticalXXL (24px) — was spacingVerticalL (16px) in Phase 1. */
   --section-pad: 1.5rem;     /* Phase 2: bumped to Fluent spacingVerticalXXL (24px) — was spacingVerticalL (16px) in Phase 1. */

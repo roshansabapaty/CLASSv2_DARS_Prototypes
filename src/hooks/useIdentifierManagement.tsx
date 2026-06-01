@@ -6,6 +6,7 @@ import {
 } from "../constants/caseConstants";
 import { getTaskStatusConfig, validateIdentifierFormat } from "../utils/caseHelpers";
 import { createNewIdentifier, generateTaskId } from "../utils/caseFactories";
+import { usePersistedBoolean } from "./usePaneVisibility";
 
 interface UseIdentifierManagementOptions {
   formData: FormData;
@@ -46,7 +47,13 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
   const [editingIdentifierId, setEditingIdentifierId] = useState<string | null>(null);
   const [editIdentifierValue, setEditIdentifierValue] = useState("");
   const [editIdentifierType, setEditIdentifierType] = useState("");
-  const [identifierPanelOpen, setIdentifierPanelOpen] = useState(false);
+  // Identifier panel open/closed persisted per-user. Panel-internal state
+  // (selected identifier, view mode, fulfillment step) stays ephemeral so
+  // the panel doesn't reopen mid-workflow on a stale selection.
+  const [identifierPanelOpen, setIdentifierPanelOpen] = usePersistedBoolean(
+    "dars.identifierPanel.open",
+    false,
+  );
   const [fulfillmentInitialStep, setFulfillmentInitialStep] = useState<1 | 2 | 3>(1);
   const [expandedNotFoundIdentifiers, setExpandedNotFoundIdentifiers] = useState<Record<string, boolean>>({});
 

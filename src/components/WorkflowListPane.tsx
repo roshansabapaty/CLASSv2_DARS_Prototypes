@@ -95,6 +95,8 @@ export interface WorkflowListPaneProps {
   onToggleDocumentPanel?: () => void;
   identifierPanelOpen?: boolean;
   onToggleIdentifierPanel?: () => void;
+  correspondencePanelOpen?: boolean;
+  onToggleCorrespondencePanel?: () => void;
   escalationActionLabel?: string;
   onEscalate?: () => void;
   onOpenResolveDialog?: (mode: "resolve" | "edit") => void;
@@ -111,6 +113,18 @@ export interface WorkflowListPaneProps {
   onSubmit: () => void;
   blockingFieldLabels?: string[];
   onGoToBlockingField?: (label: string) => void;
+
+  // ── Hide-entirely visibility (Teams pattern) ───────────────────────────
+  /** When false, the pane renders nothing (width 0, off-canvas). The user's
+   *  saved expanded width is preserved by useResizablePaneWidth so the next
+   *  show returns to whatever width they last dragged to. Stage / sub-step
+   *  context is re-anchored in the StickyCaseHeader's WorkflowStageBanner
+   *  via its own paneVisible / breadcrumb props. */
+  hidden?: boolean;
+  /** Wire the « PanelLeftClose toggle in the scope header. No-op when
+   *  omitted — leaves the pane as-was for callers that don't yet care
+   *  about hide visibility. */
+  onHidePane?: () => void;
 }
 
 /** Sub-step status icon — green ✓ when complete, blue filled disc when
@@ -167,6 +181,8 @@ export function WorkflowListPane({
   onToggleDocumentPanel,
   identifierPanelOpen,
   onToggleIdentifierPanel,
+  correspondencePanelOpen,
+  onToggleCorrespondencePanel,
   escalationActionLabel,
   onEscalate,
   onOpenResolveDialog,
@@ -181,6 +197,8 @@ export function WorkflowListPane({
   onSubmit,
   blockingFieldLabels,
   onGoToBlockingField,
+  hidden,
+  onHidePane,
 }: WorkflowListPaneProps) {
   const stageNav = (stageId: WorkflowStage) => {
     if (stageId === "triage") return onNavigateToTriage;
@@ -202,6 +220,14 @@ export function WorkflowListPane({
     storageKey: "dars.workflowListPane.width",
   });
 
+  // Hide-entirely: render nothing when collapsed. The user's last expanded
+  // width is preserved by useResizablePaneWidth so re-showing returns to
+  // the same visual state. Stage / sub-step context is re-anchored in the
+  // StickyCaseHeader breadcrumb pill, wired at the App level.
+  if (hidden) {
+    return null;
+  }
+
   return (
     <nav
       role="navigation"
@@ -219,11 +245,14 @@ export function WorkflowListPane({
         onToggleDocumentPanel={onToggleDocumentPanel}
         identifierPanelOpen={identifierPanelOpen}
         onToggleIdentifierPanel={onToggleIdentifierPanel}
+        correspondencePanelOpen={correspondencePanelOpen}
+        onToggleCorrespondencePanel={onToggleCorrespondencePanel}
         escalationActionLabel={escalationActionLabel}
         onEscalate={onEscalate}
         onOpenResolveDialog={onOpenResolveDialog}
         isResolved={isResolved}
         onReopenCase={onReopenCase}
+        onHidePane={onHidePane}
       />
 
       {/* ── Stage groups ──────────────────────────────────────────────── */}

@@ -73,6 +73,16 @@ interface StickyCaseHeaderProps {
   navState?: SidebarNavState | null;
   onStepClick?: (key: string) => void;
   onNavigateToCollection?: () => void;
+  // ── WorkflowListPane visibility re-anchor (Teams pattern) ──────────────
+  /** When false, the embedded WorkflowStageBanner surfaces a Show-workflow
+   *  button + breadcrumb pill so the user keeps stage/sub-step orientation
+   *  while the WorkflowListPane is hidden. Undefined → pane assumed visible. */
+  workflowPaneVisible?: boolean;
+  /** Re-show the WorkflowListPane (wired by App.tsx via usePaneVisibility). */
+  onShowWorkflowPane?: () => void;
+  /** Active sub-step label inside the current stage. Drives the breadcrumb
+   *  pill that surfaces when the pane is hidden. */
+  workflowActiveStepLabel?: string;
 }
 
 export function StickyCaseHeader({
@@ -110,6 +120,9 @@ export function StickyCaseHeader({
   navState,
   onStepClick,
   onNavigateToCollection,
+  workflowPaneVisible,
+  onShowWorkflowPane,
+  workflowActiveStepLabel,
 }: StickyCaseHeaderProps) {
   // Keyboard shortcut: Ctrl+S / Cmd+S to save
   useEffect(() => {
@@ -187,6 +200,9 @@ export function StickyCaseHeader({
           onAssigneeChange={onAssigneeChange}
           responseSpecialists={responseSpecialists}
           currentUser={currentUser}
+          workflowPaneVisible={workflowPaneVisible}
+          onShowWorkflowPane={onShowWorkflowPane}
+          workflowActiveStepLabel={workflowActiveStepLabel}
         />
 
         {/* Unified Case Card Header — priority border + summary + actions */}

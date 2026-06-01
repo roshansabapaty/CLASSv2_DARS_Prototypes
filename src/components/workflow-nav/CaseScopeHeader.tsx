@@ -24,7 +24,9 @@ import * as React from "react";
 import {
   FileText,
   PanelRightClose,
+  PanelLeftClose,
   Fingerprint,
+  Mail,
   MoreHorizontal,
   Scale,
   CheckCircle2,
@@ -68,6 +70,11 @@ export interface CaseScopeHeaderProps {
   identifierPanelOpen?: boolean;
   onToggleIdentifierPanel?: () => void;
 
+  /** Correspondence panel state — drives icon swap + aria-pressed. Rendered
+   *  on every stage so the user can pull up the Hub at any time. */
+  correspondencePanelOpen?: boolean;
+  onToggleCorrespondencePanel?: () => void;
+
   // ── Overflow menu — row 1 right side ────────────────────────────────────
   /** Opens the EscalateToAttorneyDialog. Label varies based on current
    *  escalation state (Escalate / Update Escalation / Resume Escalation). */
@@ -82,6 +89,11 @@ export interface CaseScopeHeaderProps {
    *  Edit-resolution + Re-open-case. */
   isResolved?: boolean;
   onReopenCase?: () => void;
+
+  /** Hide the workflow pane (Teams hide-entirely pattern). When provided,
+   *  a « PanelLeftClose button is rendered as the rightmost action icon.
+   *  The button surfaces the Ctrl+Shift+W shortcut in its tooltip. */
+  onHidePane?: () => void;
 }
 
 /** Inline priority chip rendered next to the case-id on row 2.
@@ -116,11 +128,14 @@ export function CaseScopeHeader({
   onToggleDocumentPanel,
   identifierPanelOpen,
   onToggleIdentifierPanel,
+  correspondencePanelOpen,
+  onToggleCorrespondencePanel,
   escalationActionLabel = "Escalate",
   onEscalate,
   onOpenResolveDialog,
   isResolved = false,
   onReopenCase,
+  onHidePane,
 }: CaseScopeHeaderProps) {
   const assigneeDisplay = assigneeName?.trim() || "Unassigned";
   const assigneeIsUnassigned = !assigneeName?.trim();
@@ -149,8 +164,8 @@ export function CaseScopeHeader({
                   )}
                   aria-label={
                     documentPanelOpen
-                      ? "Close document panel"
-                      : "Open document panel"
+                      ? "Close document panel (Ctrl+Shift+D)"
+                      : "Open document panel (Ctrl+Shift+D)"
                   }
                   aria-pressed={!!documentPanelOpen}
                 >
@@ -165,7 +180,10 @@ export function CaseScopeHeader({
                 <p>
                   {documentPanelOpen
                     ? "Close document panel"
-                    : "Open document panel"}
+                    : "Open document panel"}{" "}
+                  <kbd className="ml-1 px-1 py-0.5 bg-black/20 rounded text-[10px] font-mono text-white">
+                    Ctrl+Shift+D
+                  </kbd>
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -184,8 +202,8 @@ export function CaseScopeHeader({
                   )}
                   aria-label={
                     identifierPanelOpen
-                      ? "Close fulfillment wizard"
-                      : "Open fulfillment wizard"
+                      ? "Close fulfillment wizard (Ctrl+Shift+I)"
+                      : "Open fulfillment wizard (Ctrl+Shift+I)"
                   }
                   aria-pressed={!!identifierPanelOpen}
                 >
@@ -200,7 +218,48 @@ export function CaseScopeHeader({
                 <p>
                   {identifierPanelOpen
                     ? "Close fulfillment wizard"
-                    : "Open fulfillment wizard"}
+                    : "Open fulfillment wizard"}{" "}
+                  <kbd className="ml-1 px-1 py-0.5 bg-black/20 rounded text-[10px] font-mono text-white">
+                    Ctrl+Shift+I
+                  </kbd>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {onToggleCorrespondencePanel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onToggleCorrespondencePanel}
+                  className={cn(
+                    "inline-flex items-center justify-center h-7 w-7 rounded text-[#605e5c] hover:bg-[#f3f2f1] hover:text-[#323130]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
+                    correspondencePanelOpen && "bg-[#eef7ee] text-[#107c10] hover:bg-[#dff6dd] hover:text-[#107c10]",
+                  )}
+                  aria-label={
+                    correspondencePanelOpen
+                      ? "Close correspondence hub (Ctrl+Shift+C)"
+                      : "Open correspondence hub (Ctrl+Shift+C)"
+                  }
+                  aria-pressed={!!correspondencePanelOpen}
+                >
+                  {correspondencePanelOpen ? (
+                    <PanelRightClose className="w-3.5 h-3.5" aria-hidden="true" />
+                  ) : (
+                    <Mail className="w-3.5 h-3.5" aria-hidden="true" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  {correspondencePanelOpen
+                    ? "Close correspondence hub"
+                    : "Open correspondence hub"}{" "}
+                  <kbd className="ml-1 px-1 py-0.5 bg-black/20 rounded text-[10px] font-mono text-white">
+                    Ctrl+Shift+C
+                  </kbd>
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -267,6 +326,36 @@ export function CaseScopeHeader({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Hide-pane « toggle (Teams pattern). Rightmost in the action
+              cluster so it reads as a pane-level control, distinct from the
+              case-action icons to its left. Pairs with the » Show-workflow
+              button that appears in the WorkflowStageBanner once hidden. */}
+          {onHidePane && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onHidePane}
+                  className={cn(
+                    "inline-flex items-center justify-center h-7 w-7 rounded text-[#605e5c] hover:bg-[#f3f2f1] hover:text-[#323130]",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
+                  )}
+                  aria-label="Hide workflow pane (Ctrl+Shift+W)"
+                >
+                  <PanelLeftClose className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Hide workflow pane{" "}
+                  <kbd className="ml-1 px-1 py-0.5 bg-black/20 rounded text-[10px] font-mono text-white">
+                    Ctrl+Shift+W
+                  </kbd>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </div>
       </div>
 
