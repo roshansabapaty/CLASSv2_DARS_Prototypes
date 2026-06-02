@@ -30,6 +30,12 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
   const [supplementalServiceOpen, setSupplementalServiceOpen] = useState(false);
   const [supplementalDataCategory, setSupplementalDataCategory] = useState<string[]>([]);
   const [supplementalDataCategoryOpen, setSupplementalDataCategoryOpen] = useState(false);
+  // Supplemental Account Check pre-population. Used to pre-stamp
+  // `accountExistenceStatus` + `checkAccounts.accountType` on the new
+  // row so the Account Check column renders the configured state right
+  // away (skips having to re-run Check Accounts).
+  const [supplementalAccountFound, setSupplementalAccountFound] = useState<boolean>(true);
+  const [supplementalAccountType, setSupplementalAccountType] = useState<"Consumer" | "Enterprise">("Consumer");
 
   // Existence check & display state
   const [checkingExistence, setCheckingExistence] = useState(false);
@@ -91,6 +97,27 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
     newIdentifier.value = newIdentifierValue;
     newIdentifier.type = newIdentifierType;
     newIdentifier.createdBy = newIdentifierIsSupplemental ? `Supplemental ${CURRENT_USER}` : CURRENT_USER;
+    // Persist the supplemental → LE-provided link so the IdentifierTable
+    // can group the new row under its parent and surface the "Linked to LE"
+    // caption. Previously the link was only emitted in a one-shot toast.
+    if (newIdentifierIsSupplemental && supplementalLinkedIdentifierId) {
+      newIdentifier.linkedIdentifierId = supplementalLinkedIdentifierId;
+    }
+    // Apply the Account Check pre-population for supplementals so the
+    // table's Account Check column lands populated (skips having to
+    // re-run Check Accounts just for the new row).
+    if (newIdentifierIsSupplemental) {
+      // accountExistenceStatus="success" + no accountType → renders as
+      // "Not Found" in the Account Check column via AccountCheckCell's
+      // `success && !hasAccount` branch. The canonical not-found state.
+      newIdentifier.accountExistenceStatus = "success";
+      if (supplementalAccountFound) {
+        newIdentifier.checkAccounts = {
+          ...(newIdentifier.checkAccounts ?? {}),
+          accountType: supplementalAccountType,
+        };
+      }
+    }
 
     // Enable selected services with all their data categories
     newIdentifierServices.forEach(serviceKey => {
@@ -124,6 +151,8 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
     setSupplementalLinkedIdentifierId("");
     setSupplementalService("");
     setSupplementalDataCategory([]);
+    setSupplementalAccountFound(true);
+    setSupplementalAccountType("Consumer");
 
     const serviceMsg = newIdentifierServices.length > 0
       ? ` with ${newIdentifierServices.length} service${newIdentifierServices.length !== 1 ? 's' : ''}`
@@ -360,6 +389,8 @@ export function useIdentifierManagement({ formData, setFormData }: UseIdentifier
     supplementalServiceOpen, setSupplementalServiceOpen,
     supplementalDataCategory, setSupplementalDataCategory,
     supplementalDataCategoryOpen, setSupplementalDataCategoryOpen,
+    supplementalAccountFound, setSupplementalAccountFound,
+    supplementalAccountType, setSupplementalAccountType,
 
     // Existence check & display
     checkingExistence, setCheckingExistence,

@@ -1042,6 +1042,8 @@ export function DataEntryForm({
     supplementalServiceOpen, setSupplementalServiceOpen,
     supplementalDataCategory, setSupplementalDataCategory,
     supplementalDataCategoryOpen, setSupplementalDataCategoryOpen,
+    supplementalAccountFound, setSupplementalAccountFound,
+    supplementalAccountType, setSupplementalAccountType,
     checkingExistence, setCheckingExistence,
     displayFrozen, setDisplayFrozen,
     expandedIdentifiers, setExpandedIdentifiers,
@@ -2314,6 +2316,12 @@ export function DataEntryForm({
           sentItem.transmission?.sentAt instanceof Date
             ? sentItem.transmission.sentAt
             : new Date();
+        // Capture whether the case already had a retention clock running
+        // BEFORE the helper runs, so the toast can accurately reflect
+        // whether this Form 3 send actually opened a new 45-day window
+        // or merely added the audit + SLA pause on top of an existing
+        // terminal-event clock.
+        const hadRetentionClockBefore = !!formData.retentionClock;
         setFormData((prev) =>
           applyForm3Submission(pauseSlaTimerOnFormThreeSubmission(prev), {
             documentId: form3DocumentId,
@@ -2321,12 +2329,21 @@ export function DataEntryForm({
             source: `Form 3 doc ${form3DocumentId}`,
           }),
         );
-        toast.success("Form 3 sent — SLA paused, 45-day retention started", {
-          description:
-            "The case's SLA countdown is halted and the 45-day data-deletion " +
-            "window opened. Form3Submitted + SLAStopped events appended to the " +
-            "audit thread.",
-        });
+        if (hadRetentionClockBefore) {
+          toast.success("Form 3 sent — SLA paused", {
+            description:
+              "The case's SLA countdown is halted. Form3Submitted + SLAStopped " +
+              "events appended to the audit thread. (Retention clock from a " +
+              "prior terminal event is already running — start time preserved.)",
+          });
+        } else {
+          toast.success("Form 3 sent — SLA paused, 45-day retention started", {
+            description:
+              "The case's SLA countdown is halted and the 45-day data-deletion " +
+              "window opened. Form3Submitted + SLAStopped events appended to the " +
+              "audit thread.",
+          });
+        }
       } else if (isPreservationAck) {
         const ackDocumentId =
           sentItem.documentId ?? `outbound:${sentItem.id}`;
@@ -2473,7 +2490,9 @@ export function DataEntryForm({
         lastSaved={lastSavedTime}
         caseIdentificationCompletionCount={caseIdentificationCompletionCount}
         isFormValid={isFormValid()}
-        onSubmit={handleSubmit}
+        onSubmit={() =>
+          handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+        }
         sidebarCollapsed={sidebarCollapsed}
         onOpenCancellationWorkflow={() => setShowCancellationWorkflow(true)}
         cancellationAllStepsComplete={cancellationAllStepsComplete}
@@ -2536,6 +2555,9 @@ export function DataEntryForm({
             ? () => guardedNavigate(onNavigateToCollection)
             : undefined
         }
+        workflowPaneVisible={workflowPaneVisible}
+        onShowWorkflowPane={onShowWorkflowPane}
+        workflowActiveStepLabel={workflowActiveStepLabel}
       />
 
       {/* Cancellation Workflow Dialog */}
@@ -2556,9 +2578,6 @@ export function DataEntryForm({
           setFormData((prev) => ({ ...prev, caseStage: stage }));
           toast.success(`Case status set to ${stage}.`);
         }}
-        workflowPaneVisible={workflowPaneVisible}
-        onShowWorkflowPane={onShowWorkflowPane}
-        workflowActiveStepLabel={workflowActiveStepLabel}
       />
 
       {/* Main content area - flex-1 takes remaining space below header */}
@@ -4537,6 +4556,15 @@ export function DataEntryForm({
                   }
                   if (data.dataCategories) {
                     setSupplementalDataCategory(data.dataCategories);
+                  }
+                  // Supplemental Account Check pre-population — drive the
+                  // useIdentifierManagement state so handleAddIdentifier
+                  // stamps the new row's Account Check column up front.
+                  if (data.isSupplemental) {
+                    setSupplementalAccountFound(data.accountFound ?? true);
+                    if (data.accountType) {
+                      setSupplementalAccountType(data.accountType);
+                    }
                   }
                   setTimeout(() => handleAddIdentifier(), 0);
                 }}

@@ -943,6 +943,13 @@ export interface AccountIdentifier {
   accountExistenceError?: string;
   geoLocation?: string;
   createdBy?: string; // Who created this identifier: "LE Agency" or "Supplemental <User Name>"
+  /** When this identifier was added as a Supplemental (createdBy starts
+   *  with "Supplemental"), this references the LE-provided identifier it
+   *  was linked to in the Add Identifier dialog. Drives the IdentifierTable
+   *  grouping — supplemental rows sort immediately under their parent and
+   *  surface a "Linked to LE: <parent value>" caption. Undefined for
+   *  LE-provided identifiers. */
+  linkedIdentifierId?: string;
   checkAccounts?: {
     dataLocation?: string;
     accountType?: string;

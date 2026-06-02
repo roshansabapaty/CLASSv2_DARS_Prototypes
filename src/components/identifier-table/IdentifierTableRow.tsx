@@ -114,6 +114,43 @@ const useStyles = makeStyles({
     rowGap: "4px",
     alignItems: "flex-start",
   },
+  // Type label — borderless text in place of the prior outline Badge so
+  // longer identifier types (e.g. "XBOX 5X5 Token", "Other Payment
+  // Instrument") wrap naturally inside the narrow Type cell instead of
+  // overflowing a rounded chip. Visual weight matches what the Badge
+  // gave us — semibold, 14px, primary foreground colour.
+  typeLabel: {
+    fontSize: tokens.fontSizeBase300,
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
+    lineHeight: tokens.lineHeightBase300,
+    wordBreak: "break-word",
+  },
+  // Supplemental row treatment — a soft indent + a ↳ connector glyph
+  // before the type badges so the row reads as "child of the LE row
+  // above." Driven by IdentifierTable.displayRows when the row's
+  // linkedIdentifierId resolves to a visible parent.
+  supplementalTypeRow: {
+    display: "flex",
+    alignItems: "flex-start",
+    columnGap: "6px",
+    paddingLeft: tokens.spacingHorizontalM,
+  },
+  supplementalConnector: {
+    color: tokens.colorNeutralForeground3,
+    fontSize: tokens.fontSizeBase300,
+    lineHeight: tokens.lineHeightBase300,
+    flexShrink: 0,
+    userSelect: "none",
+  },
+  // "Linked to LE: <parent value>" caption rendered in the value cell's
+  // metaRow stack. Purple to match the Supplemental badge palette so the
+  // relationship reads at a glance.
+  linkedToCaption: {
+    fontSize: tokens.fontSizeBase200,
+    color: "#8764b8",
+    fontWeight: tokens.fontWeightSemibold,
+  },
   valueStack: {
     display: "flex",
     flexDirection: "column",
@@ -386,6 +423,14 @@ const useStyles = makeStyles({
 interface IdentifierTableRowProps {
   identifier: any;
   index: number;
+  /** Display label rendered in the # column (e.g. "1", "1a", "1b").
+   *  When omitted, falls back to `index + 1`. Drives the supplemental-
+   *  under-parent grouping computed in IdentifierTable. */
+  displayLabel?: string;
+  /** When set, this row is a supplemental and the value is the
+   *  parent LE-identifier's value. Drives the ↳ connector + indent +
+   *  "Linked to LE: <parent value>" caption. */
+  parentValue?: string;
   readOnly?: boolean;
   forceExpanded?: boolean;
   /** Incremented each time the parent toggles expand/collapse all, to re-trigger the effect */
@@ -423,6 +468,8 @@ interface IdentifierTableRowProps {
 export function IdentifierTableRow({
   identifier,
   index,
+  displayLabel,
+  parentValue,
   readOnly = false,
   forceExpanded,
   forceExpandedKey,
@@ -591,7 +638,7 @@ export function IdentifierTableRow({
               aria-label={isExpanded ? "Collapse row" : "Expand row"}
               onClick={() => setIsExpanded(!isExpanded)}
             />
-            <span>{index + 1}</span>
+            <span>{displayLabel ?? String(index + 1)}</span>
           </div>
         </td>
 
@@ -616,15 +663,29 @@ export function IdentifierTableRow({
               ))}
             </Combobox>
           ) : (
-            <div className={styles.typeStack}>
-              <Badge appearance="outline" size="small">
-                {identifier.type}
-              </Badge>
-              {identifier.createdBy?.includes("Supplemental") && (
-                <Badge appearance="tint" color="important" size="small">
-                  Supplemental
-                </Badge>
+            <div
+              className={
+                parentValue
+                  ? styles.supplementalTypeRow
+                  : undefined
+              }
+            >
+              {parentValue && (
+                <span
+                  className={styles.supplementalConnector}
+                  aria-hidden="true"
+                >
+                  ↳
+                </span>
               )}
+              <div className={styles.typeStack}>
+                <span className={styles.typeLabel}>{identifier.type}</span>
+                {identifier.createdBy?.includes("Supplemental") && (
+                  <Badge appearance="tint" color="important" size="small">
+                    Supplemental
+                  </Badge>
+                )}
+              </div>
             </div>
           )}
         </td>
@@ -684,6 +745,11 @@ export function IdentifierTableRow({
                   </span>
                 )}
               </div>
+              {parentValue && (
+                <div className={styles.linkedToCaption}>
+                  Linked to LE: <span>{parentValue}</span>
+                </div>
+              )}
             </div>
           )}
         </td>

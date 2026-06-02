@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
@@ -115,6 +115,66 @@ export function IdentifierTable({
       id.value.toLowerCase().includes(searchTerm.toLowerCase()) ||
       id.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // ── Supplemental grouping (Phase 4 of the linkedIdentifierId merge) ──
+  // Order rows so each supplemental appears immediately after its parent
+  // LE identifier with a sub-letter label (1, 1a, 1b, 2, 2a). Parent and
+  // child rows are still part of the same flat table — we just sort the
+  // mapped list and stamp a `displayLabel`.
+  //
+  // Edge cases:
+  //   * Search filter hides the parent but keeps the supplemental →
+  //     supplemental falls back to a flat numeric label.
+  //   * Legacy supplemental rows without `linkedIdentifierId` → same.
+  //   * Multiple supplementals per parent → ordered by their position in
+  //     the source `identifiers` array (typically creation order).
+  const displayRows = useMemo<
+    Array<{
+      identifier: any;
+      displayLabel: string;
+      parentValue?: string;
+    }>
+  >(() => {
+    const filteredIds = new Set(filteredIdentifiers.map((id) => id.id));
+    const supplementalsByParent = new Map<string, any[]>();
+    for (const id of filteredIdentifiers) {
+      if (id.linkedIdentifierId && filteredIds.has(id.linkedIdentifierId)) {
+        const arr = supplementalsByParent.get(id.linkedIdentifierId) ?? [];
+        arr.push(id);
+        supplementalsByParent.set(id.linkedIdentifierId, arr);
+      }
+    }
+    const childIdSet = new Set<string>();
+    for (const children of supplementalsByParent.values()) {
+      for (const c of children) childIdSet.add(c.id);
+    }
+
+    const rows: Array<{
+      identifier: any;
+      displayLabel: string;
+      parentValue?: string;
+    }> = [];
+    let parentCounter = 0;
+    for (const id of filteredIdentifiers) {
+      if (childIdSet.has(id.id)) continue;
+      parentCounter++;
+      rows.push({ identifier: id, displayLabel: String(parentCounter) });
+
+      const children = supplementalsByParent.get(id.id);
+      if (children) {
+        children.forEach((child, i) => {
+          rows.push({
+            identifier: child,
+            // 1a, 1b, … 1z, then 1aa is unreachable in practice (a parent
+            // with >26 supplementals is far beyond any real demo).
+            displayLabel: `${parentCounter}${String.fromCharCode(97 + i)}`,
+            parentValue: id.value,
+          });
+        });
+      }
+    }
+    return rows;
+  }, [filteredIdentifiers]);
 
   const handleUpdate = (id: string, updates: { type: string; value: string }) => {
     if (!onUpdateIdentifiers) return;
@@ -440,11 +500,13 @@ export function IdentifierTable({
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredIdentifiers.map((identifier, index) => (
+                displayRows.map(({ identifier, displayLabel, parentValue }, index) => (
                   <IdentifierTableRow
                     key={identifier.id}
                     identifier={identifier}
                     index={index}
+                    displayLabel={displayLabel}
+                    parentValue={parentValue}
                     readOnly={readOnly}
                     forceExpanded={allExpanded}
                     forceExpandedKey={expandToggleCount}

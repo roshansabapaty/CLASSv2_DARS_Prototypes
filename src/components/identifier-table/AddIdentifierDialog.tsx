@@ -58,6 +58,17 @@ export interface AddIdentifierData {
   linkedIdentifierId: string;
   service: string;
   dataCategories: string[];
+  /** Supplemental-only: whether the RS knows the account exists. When
+   *  true, the new identifier is created with `accountExistenceStatus:
+   *  "success"` so the Account Check column shows the configured type
+   *  immediately, without the user having to run Check Accounts. When
+   *  false, the column shows "not-found" up front. Undefined for
+   *  non-supplemental rows (which always start "not-checked"). */
+  accountFound?: boolean;
+  /** Supplemental-only: account type written onto `checkAccounts.accountType`
+   *  when `accountFound === true`. Drives the Consumer/Enterprise badge
+   *  in the Account Check column. */
+  accountType?: "Consumer" | "Enterprise";
 }
 
 interface AddIdentifierDialogProps {
@@ -80,6 +91,13 @@ export function AddIdentifierDialog({
   const [linkedIdentifierId, setLinkedIdentifierId] = useState("");
   const [service, setService] = useState("");
   const [dataCategories, setDataCategories] = useState<string[]>([]);
+  // Supplemental-only: pre-populate the Account Check column on the new
+  // row. Default Account Found = true (most supplementals are discovered
+  // because they exist) and account type = "Consumer".
+  const [supplementalAccountFound, setSupplementalAccountFound] = useState(true);
+  const [supplementalAccountType, setSupplementalAccountType] = useState<
+    "Consumer" | "Enterprise"
+  >("Consumer");
 
   // Combobox open states
   const [typeOpen, setTypeOpen] = useState(false);
@@ -104,6 +122,8 @@ export function AddIdentifierDialog({
     setLinkedIdentifierId("");
     setService("");
     setDataCategories([]);
+    setSupplementalAccountFound(true);
+    setSupplementalAccountType("Consumer");
   };
 
   const handleAdd = () => {
@@ -114,6 +134,13 @@ export function AddIdentifierDialog({
       linkedIdentifierId,
       service,
       dataCategories,
+      // Supplemental-only fields — undefined on LE-provided rows so the
+      // downstream handler can distinguish "pre-populate the Account
+      // Check column" from "leave it not-checked".
+      accountFound: isSupplemental ? supplementalAccountFound : undefined,
+      accountType: isSupplemental && supplementalAccountFound
+        ? supplementalAccountType
+        : undefined,
     });
     resetForm();
   };
@@ -185,7 +212,7 @@ export function AddIdentifierDialog({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[350px] p-0" align="start">
+                <PopoverContent className="w-[350px] p-0 z-[70]" align="start">
                   <Command>
                     <CommandInput
                       placeholder="Search identifier types..."
@@ -355,6 +382,79 @@ export function AddIdentifierDialog({
                 </p>
               </div>
 
+              {/* Account Check pre-population — supplementals are typically
+                  discovered during review (the RS already knows the account
+                  exists and what type it is). Pre-stamp the Account Check
+                  column so the user doesn't have to re-run Check Accounts
+                  just for the new row. */}
+              <div className="sm:col-span-3 flex flex-wrap items-end gap-4 pb-2 border-b border-[#edebe9]">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-[#323130] font-semibold">
+                    Account Found
+                  </Label>
+                  <div className="flex items-center gap-2 h-9">
+                    <Switch
+                      id="supplementalAccountFound"
+                      checked={supplementalAccountFound}
+                      onCheckedChange={setSupplementalAccountFound}
+                      className="data-[state=checked]:bg-[#107c10]"
+                    />
+                    <Label
+                      htmlFor="supplementalAccountFound"
+                      className="text-sm text-[#605e5c] cursor-pointer"
+                    >
+                      {supplementalAccountFound
+                        ? "Account exists"
+                        : "Account not found"}
+                    </Label>
+                  </div>
+                </div>
+
+                {supplementalAccountFound && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#323130] font-semibold">
+                      Account Type
+                    </Label>
+                    <div
+                      role="radiogroup"
+                      aria-label="Account type"
+                      className="inline-flex h-9 rounded-md border border-[#c8c6c4] bg-white overflow-hidden"
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={supplementalAccountType === "Consumer"}
+                        onClick={() => setSupplementalAccountType("Consumer")}
+                        className={cn(
+                          "px-3 text-xs transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8764b8] focus-visible:ring-offset-1",
+                          supplementalAccountType === "Consumer"
+                            ? "bg-[#0078d4] text-white"
+                            : "text-[#323130] hover:bg-[#f3f2f1]",
+                        )}
+                      >
+                        Consumer
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={supplementalAccountType === "Enterprise"}
+                        onClick={() => setSupplementalAccountType("Enterprise")}
+                        className={cn(
+                          "px-3 text-xs border-l border-[#c8c6c4] transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8764b8] focus-visible:ring-offset-1",
+                          supplementalAccountType === "Enterprise"
+                            ? "bg-[#8764b8] text-white"
+                            : "text-[#323130] hover:bg-[#f3f2f1]",
+                        )}
+                      >
+                        Enterprise
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* Linked LE Identifier */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-[#323130] font-semibold">
@@ -382,7 +482,7 @@ export function AddIdentifierDialog({
                       <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-[350px] p-0" align="start">
+                  <PopoverContent className="w-[350px] p-0 z-[70]" align="start">
                     <Command>
                       <CommandInput
                         placeholder="Search identifiers..."
@@ -544,7 +644,7 @@ function ServicePicker({
             <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[350px] p-0" align="start">
+        <PopoverContent className="w-[350px] p-0 z-[70]" align="start">
           <Command>
             <CommandInput
               placeholder="Search services..."
@@ -638,7 +738,7 @@ function DataCategoryPicker({
             <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[350px] p-0" align="start">
+        <PopoverContent className="w-[350px] p-0 z-[70]" align="start">
           <Command>
             <CommandInput
               placeholder="Search categories..."

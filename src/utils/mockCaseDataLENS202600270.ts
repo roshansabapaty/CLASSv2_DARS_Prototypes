@@ -48,7 +48,7 @@ const genId = () =>
 
 export function buildLENS202600270FormData(): FormData {
   const createDate = new Date("2026-05-15");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-02-15");
   const endDate = new Date("2026-05-14");
   const leDateRange = { start: "2026-02-15", end: "2026-05-14" };
@@ -273,6 +273,119 @@ export function buildLENS202600270FormData(): FormData {
       "a deliberate mix of automated and manual collection categories.",
   } as any;
 
+  // ── Supplementals (Phase 4 of the linkedIdentifierId merge) ───────────
+  // Two supplementals seeded under id1 so the IdentifierTable demonstrates
+  // the parent → child grouping out of the box (rows 1, 1a, 1b with the
+  // ↳ connector and "Linked to LE:" caption). Narrative: during Case
+  // Review the RS discovered an alternate Outlook alias and a phone
+  // recovery number tied to the same MSA profile.
+  const id1aServices = createDefaultIdentifierServices() as Record<string, any>;
+  if (id1aServices.exchangeConsumer) {
+    id1aServices.exchangeConsumer.enabled = true;
+    id1aServices.exchangeConsumer.includeConsumerAccount = true;
+  }
+  if (id1aServices.msaProfile) {
+    id1aServices.msaProfile.enabled = true;
+    id1aServices.msaProfile.includeConsumerAccount = true;
+  }
+  const id1a: AccountIdentifier = {
+    id: genId(),
+    value: "phisher.alias@outlook.com",
+    type: "Email Address",
+    taskId: "LDID-100270-S1",
+    taskStatus: "InProgress",
+    // Not yet checked — running Check Accounts on this row will populate
+    // it as Consumer per the deterministic mock seed pipeline.
+    accountExistenceStatus: "not-checked",
+    geoLocation: "Europe - North Europe",
+    createdBy: "Supplemental Nicole Garcia",
+    services: id1aServices,
+    checkAccounts: { accountType: "Consumer" },
+    linkedIdentifierId: id1.id,
+  } as any;
+
+  const id1bServices = createDefaultIdentifierServices() as Record<string, any>;
+  if (id1bServices.msaProfile) {
+    id1bServices.msaProfile.enabled = true;
+    id1bServices.msaProfile.includeConsumerAccount = true;
+  }
+  const id1b: AccountIdentifier = {
+    id: genId(),
+    value: "+46 70 555 04 12",
+    type: "Phone Number",
+    taskId: "LDID-100270-S2",
+    taskStatus: "InProgress",
+    accountExistenceStatus: "not-checked",
+    geoLocation: "Europe - North Europe",
+    createdBy: "Supplemental Nicole Garcia",
+    services: id1bServices,
+    checkAccounts: { accountType: "Consumer" },
+    linkedIdentifierId: id1.id,
+  } as any;
+
+  // ── XBOX 5x5 gift-card token (LE-provided) + resolved MSA supplemental ──
+  // Real-world scenario: the IA intercepted an XBOX gift-card redemption
+  // code believed to be one of several payments funneled through the
+  // phishing operation. The IA only knows the 25-character token — they
+  // don't know who redeemed it. Microsoft resolves the token via the
+  // external XBOX gift-card-registry tool, then the RS attaches the
+  // resolved MSA as a Supplemental linked back to the token row.
+  //
+  // id2  = the LE-provided 5x5 token (Check Accounts is N/A — needs
+  //         external resolution before account-existence is meaningful)
+  // id2a = the resolved MSA email surfaced by the gift-card-registry
+  //         lookup. This is the row the RS actually runs Check Accounts
+  //         against; pre-seeded Consumer to demonstrate the end-state.
+  const id2Services = createDefaultIdentifierServices() as Record<string, any>;
+  const id2: AccountIdentifier = {
+    id: genId(),
+    value: "M2Q4T-PQRJX-7HK9F-WVNB3-RSTYZ",
+    type: "XBOX 5X5 Token",
+    taskId: "LDID-100270-T1",
+    taskStatus: "InProgress",
+    accountExistenceStatus: "not-checked",
+    geoLocation: "Europe - North Europe",
+    createdBy: "LE Agency",
+    services: id2Services,
+    // accountType "N/A" prevents Check Accounts from rolling Consumer/
+    // Enterprise on the token row (see accountExistenceCheck.ts —
+    // XBOX 5X5 Token is always treated as lookup-only).
+    checkAccounts: { accountType: "N/A" },
+    issuingAuthorityNotes:
+      "Intercepted XBOX gift-card redemption code believed to be one " +
+      "of several micro-payments funneled through the phishing " +
+      "operation. The IA has no information about who redeemed the " +
+      "card. Microsoft will need to resolve the token via the XBOX " +
+      "gift-card registry to surface the associated MSA before any " +
+      "production order on the redeeming account can issue.",
+  } as any;
+
+  const id2aServices = createDefaultIdentifierServices() as Record<string, any>;
+  if (id2aServices.msaProfile) {
+    id2aServices.msaProfile.enabled = true;
+    id2aServices.msaProfile.includeConsumerAccount = true;
+  }
+  if (id2aServices.xbox) {
+    id2aServices.xbox.enabled = true;
+    id2aServices.xbox.includeConsumerAccount = true;
+  }
+  const id2a: AccountIdentifier = {
+    id: genId(),
+    value: "gamer.redeemer@outlook.com",
+    type: "Email Address",
+    taskId: "LDID-100270-T1-S1",
+    taskStatus: "InProgress",
+    // Pre-stamped as a successful Check Accounts result so the demo
+    // shows the lookup-then-resolve workflow end-to-end without the
+    // user having to re-run Check Accounts manually on the supplemental.
+    accountExistenceStatus: "success",
+    geoLocation: "Europe - North Europe",
+    createdBy: "Supplemental Nicole Garcia",
+    services: id2aServices,
+    checkAccounts: { accountType: "Consumer" },
+    linkedIdentifierId: id2.id,
+  } as any;
+
   return {
     caseId: "LNS-2026-00270",
     createDate,
@@ -356,7 +469,7 @@ export function buildLENS202600270FormData(): FormData {
     userResponseDueDate: undefined,
     userResponseReceived: "",
     dateOfUserResponse: undefined,
-    identifiers: [id1],
+    identifiers: [id1, id1a, id1b, id2, id2a],
     nonDisclosureOrders: [],
     startDate,
     endDate,
