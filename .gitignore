@@ -33,6 +33,10 @@ test-results/
 .DS_Store
 Thumbs.db
 
+# ── Office lock files (Word / Excel / PowerPoint create these while a
+#    file is open; never commit them) ────────────────────────────────
+~$*
+
 # ── Logs ─────────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
