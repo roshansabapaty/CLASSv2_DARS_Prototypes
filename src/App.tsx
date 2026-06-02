@@ -306,10 +306,15 @@ export default function App() {
         );
       }
 
+      // NOTE: Ctrl+Shift+I is the browser's DevTools shortcut on
+      // Chromium / Firefox and is intercepted at the browser-app level
+      // BEFORE the page sees the event, so preventDefault here cannot win.
+      // Use Ctrl+Shift+F instead (mnemonic: Fulfillment wizard) to avoid
+      // the collision while keeping a one-handed chord on the home row.
       if (
         (e.ctrlKey || e.metaKey) &&
         e.shiftKey &&
-        (e.key === "i" || e.key === "I") &&
+        (e.key === "f" || e.key === "F") &&
         selectedCaseId &&
         workflowPaneActions?.onToggleIdentifierPanel
       ) {

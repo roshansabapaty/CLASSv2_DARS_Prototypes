@@ -202,8 +202,8 @@ export function CaseScopeHeader({
                   )}
                   aria-label={
                     identifierPanelOpen
-                      ? "Close fulfillment wizard (Ctrl+Shift+I)"
-                      : "Open fulfillment wizard (Ctrl+Shift+I)"
+                      ? "Close fulfillment wizard (Ctrl+Shift+F)"
+                      : "Open fulfillment wizard (Ctrl+Shift+F)"
                   }
                   aria-pressed={!!identifierPanelOpen}
                 >
@@ -220,7 +220,7 @@ export function CaseScopeHeader({
                     ? "Close fulfillment wizard"
                     : "Open fulfillment wizard"}{" "}
                   <kbd className="ml-1 px-1 py-0.5 bg-black/20 rounded text-[10px] font-mono text-white">
-                    Ctrl+Shift+I
+                    Ctrl+Shift+F
                   </kbd>
                 </p>
               </TooltipContent>

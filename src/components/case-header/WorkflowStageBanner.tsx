@@ -18,6 +18,7 @@ import {
   Scale,
   PanelLeftOpen,
   ChevronRight,
+  Send,
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -95,6 +96,18 @@ interface WorkflowStageBannerProps {
    *  pill ("Triage › Identifier & Data Services"). Only surfaces when the
    *  pane is hidden; the pane itself owns sub-step display when visible. */
   workflowActiveStepLabel?: string;
+
+  // ── Submit-when-pane-hidden plumbing ──────────────────────────────────
+  /** Submit handler. Surfaced as a banner button when the pane is hidden
+   *  (or when FF_NAV_V2_LIST_PANE is off) so the user can submit without
+   *  re-expanding the pane. */
+  onSubmit?: () => void;
+  /** True when every required field for the current stage is valid. */
+  canSubmit?: boolean;
+  /** Spinner state while submit is in flight. */
+  isSubmitting?: boolean;
+  /** Names of fields blocking submit — shown in the disabled-Submit tooltip. */
+  blockingFieldLabels?: string[];
 }
 
 export function WorkflowStageBanner({
@@ -123,6 +136,10 @@ export function WorkflowStageBanner({
   workflowPaneVisible,
   onShowWorkflowPane,
   workflowActiveStepLabel,
+  onSubmit,
+  canSubmit,
+  isSubmitting,
+  blockingFieldLabels,
 }: WorkflowStageBannerProps) {
   const priorityConfig = casePriority ? getPriorityConfig(casePriority) : null;
   const displayCaseNumber = caseNumber || caseId || "—";
@@ -363,9 +380,9 @@ export function WorkflowStageBanner({
           FF_NAV_V2_LIST_PANE is on — they live in the WorkflowListPane's
           scope-header overflow menu (Escalate / Resolve) and pane footer
           (Save) instead. Keeps single-home for each action. */}
-      {!FF_NAV_V2_LIST_PANE && escalationAction}
-      {!FF_NAV_V2_LIST_PANE && resolveActions}
-      {!FF_NAV_V2_LIST_PANE && onSave && (
+      {(!FF_NAV_V2_LIST_PANE || workflowPaneVisible === false) && escalationAction}
+      {(!FF_NAV_V2_LIST_PANE || workflowPaneVisible === false) && resolveActions}
+      {(!FF_NAV_V2_LIST_PANE || workflowPaneVisible === false) && onSave && (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -431,6 +448,77 @@ export function WorkflowStageBanner({
                 </p>
               ) : (
                 <p>No unsaved changes</p>
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )}
+      {/* Submit button — surfaces here when the WorkflowListPane is
+          hidden (or FF_NAV_V2_LIST_PANE is off) so the user can still
+          submit without re-expanding the pane. Disabled-state tooltip
+          lists the blocking fields, same shape as the pane footer. */}
+      {(!FF_NAV_V2_LIST_PANE || workflowPaneVisible === false) && onSubmit && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canSubmit || isSubmitting}
+              className={cn(
+                "inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs transition-all duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/85",
+                canSubmit && !isSubmitting
+                  ? "bg-[#107c10] hover:bg-[#0e6b0e] text-white border border-[#0a5b0a] shadow-sm"
+                  : isSubmitting
+                    ? "bg-white/15 text-white/70 border border-white/20"
+                    : "bg-white/15 text-white/60 border border-white/20 cursor-not-allowed",
+              )}
+              aria-label={
+                isSubmitting
+                  ? "Submitting case..."
+                  : canSubmit
+                    ? "Submit case"
+                    : "Submit disabled — required fields missing"
+              }
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Submitting</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-3 h-3" />
+                  <span>Submit</span>
+                </>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="text-xs max-w-[280px]">
+              {isSubmitting ? (
+                <p>Submitting your case...</p>
+              ) : canSubmit ? (
+                <p>Submit this case for review.</p>
+              ) : blockingFieldLabels && blockingFieldLabels.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="font-semibold">
+                    {blockingFieldLabels.length} required field
+                    {blockingFieldLabels.length === 1 ? "" : "s"} missing:
+                  </p>
+                  <ul className="list-disc list-inside text-white/90">
+                    {blockingFieldLabels.slice(0, 5).map((label) => (
+                      <li key={label}>{label}</li>
+                    ))}
+                    {blockingFieldLabels.length > 5 && (
+                      <li className="italic text-white/70">
+                        + {blockingFieldLabels.length - 5} more
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              ) : (
+                <p>Fill in all required fields to enable submit.</p>
               )}
             </div>
           </TooltipContent>

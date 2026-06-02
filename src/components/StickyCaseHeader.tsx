@@ -39,6 +39,8 @@ interface StickyCaseHeaderProps {
   caseIdentificationCompletionCount?: number;
   isFormValid?: boolean;
   onSubmit?: () => void;
+  isSubmitting?: boolean;
+  blockingFieldLabels?: string[];
   sidebarCollapsed?: boolean;
   onRefreshPipeline?: () => void;
   isRefreshingPipeline?: boolean;
@@ -104,6 +106,8 @@ export function StickyCaseHeader({
   caseIdentificationCompletionCount = 0,
   isFormValid = false,
   onSubmit,
+  isSubmitting = false,
+  blockingFieldLabels,
   sidebarCollapsed,
   onRefreshPipeline,
   isRefreshingPipeline = false,
@@ -203,6 +207,10 @@ export function StickyCaseHeader({
           workflowPaneVisible={workflowPaneVisible}
           onShowWorkflowPane={onShowWorkflowPane}
           workflowActiveStepLabel={workflowActiveStepLabel}
+          onSubmit={onSubmit}
+          canSubmit={isFormValid}
+          isSubmitting={isSubmitting}
+          blockingFieldLabels={blockingFieldLabels}
         />
 
         {/* Unified Case Card Header — priority border + summary + actions */}

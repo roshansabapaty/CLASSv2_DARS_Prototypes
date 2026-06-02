@@ -24,14 +24,16 @@ async function main() {
     out.push(m);
   };
 
-  // Clean panel state every run.
-  await page.addInitScript(() => {
+  // Visit once to establish localStorage origin, then seed clean panel
+  // state via a one-shot evaluate (NOT addInitScript — that would re-fire
+  // on every navigation and nuke the persistence test below).
+  await page.goto(BASE, { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => {
     localStorage.setItem("dars.workflowListPane.visible", "true");
     localStorage.setItem("dars.documentPanel.open", "false");
     localStorage.setItem("dars.identifierPanel.open", "false");
     localStorage.setItem("dars.correspondencePanel.open", "false");
   });
-
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(2_000);
@@ -98,13 +100,25 @@ async function main() {
   log(`Identifier toggle button present on fulfillment: ${idCount >= 1 ? "YES" : "NO"}`);
   if (idCount >= 1) {
     const idInitial = await idBtn.first().getAttribute("aria-pressed");
-    await page.keyboard.press("Control+Shift+I");
+    // Verify the shortcut both via keyboard AND via direct click — the
+    // click confirms the toggle wiring works end-to-end even if the
+    // browser intercepts the keyboard combo (Ctrl+Shift+I = DevTools
+    // in Chrome/Edge; preventDefault may not be enough in headed mode).
+    await page.keyboard.press("Control+Shift+F");
     await page.waitForTimeout(600);
-    const idAfter = await idBtn.first().getAttribute("aria-pressed");
-    log(`Ctrl+Shift+I: aria-pressed ${idInitial} → ${idAfter}`);
-    // Close back
-    await page.keyboard.press("Control+Shift+I");
+    const idAfterShortcut = await idBtn.first().getAttribute("aria-pressed");
+    log(`Ctrl+Shift+F shortcut: aria-pressed ${idInitial} → ${idAfterShortcut}`);
+
+    // Click test — independent of keyboard interception
+    await idBtn.first().click({ force: true });
     await page.waitForTimeout(400);
+    const idAfterClick = await idBtn.first().getAttribute("aria-pressed");
+    log(`Identifier toggle button click: aria-pressed → ${idAfterClick}`);
+    // Reset back to closed
+    if (idAfterClick === "true") {
+      await idBtn.first().click({ force: true });
+      await page.waitForTimeout(300);
+    }
   }
 
   // ── Persistence: open Correspondence, reload, confirm still open ────

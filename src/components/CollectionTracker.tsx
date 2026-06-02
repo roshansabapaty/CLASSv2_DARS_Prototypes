@@ -55,8 +55,10 @@ import {
 import { startRetentionClock } from "../utils/retentionClock";
 import { applyPreservationExtension } from "../utils/preservationExtension";
 import { applyEndPreservation } from "../utils/endPreservation";
-import { applyPreservationOrderReceipt } from "../utils/preservationOrderReceipt";
+import { applyPreservationOrderReceipt, applyPreservationOrderAcknowledged } from "../utils/preservationOrderReceipt";
 import { applyWithdrawal } from "../utils/withdrawal";
+import { applyForm3Submission } from "../utils/form3Submission";
+import { pauseSlaTimerOnFormThreeSubmission } from "../utils/slaTimer";
 import { PreservationExtensionBanner } from "./preservation/PreservationExtensionBanner";
 import { EndPreservationBanner } from "./preservation/EndPreservationBanner";
 import { PreservationOrderActiveBanner } from "./preservation/PreservationOrderActiveBanner";
@@ -968,9 +970,78 @@ export function CollectionTracker({
       };
       const current = getCorrespondenceForCase(caseId);
       setCorrespondenceForCase(caseId, [...current, sentItem]);
-      toast.success("Message sent", {
-        description: "Auto-delivery in ~10s. The thread shows the lifecycle.",
-      });
+
+      // Detect outbound templates that drive case-state side effects.
+      // Mirrors DataEntryForm.handleSendOutbound so the Collection-page
+      // composer fires the same audit + retention + SLA flips as the
+      // case-form composer. Without this, "Cannot Preserve → Form 3"
+      // and "Acknowledge Receipt" CTAs land the outbound but skip every
+      // downstream state mutation.
+      const detectTemplate = (templateId: string) => {
+        if (!sentItem.formInstanceId) return false;
+        const instance = (formData.formInstances ?? []).find(
+          (fi) => fi.instanceId === sentItem.formInstanceId,
+        );
+        return instance?.templateId === templateId;
+      };
+      const isFormThree = detectTemplate("EPOC_FORM_3");
+      const isPreservationAck = detectTemplate("EPOC_PRESERVATION_ACK");
+
+      if (isFormThree) {
+        const form3DocumentId =
+          sentItem.documentId ?? `outbound:${sentItem.id}`;
+        const form3SentAt =
+          sentItem.transmission?.sentAt instanceof Date
+            ? sentItem.transmission.sentAt
+            : new Date();
+        // Mirror DataEntryForm — toast wording differs depending on
+        // whether the retention clock was already running.
+        const hadRetentionClockBefore = !!formData.retentionClock;
+        setSharedFormData(
+          applyForm3Submission(pauseSlaTimerOnFormThreeSubmission(formData), {
+            documentId: form3DocumentId,
+            sentAt: form3SentAt,
+            source: `Form 3 doc ${form3DocumentId}`,
+          }),
+        );
+        if (hadRetentionClockBefore) {
+          toast.success("Form 3 sent — SLA paused", {
+            description:
+              "The case's SLA countdown is halted. Form3Submitted + SLAStopped " +
+              "events appended to the audit thread. (Retention clock from a " +
+              "prior terminal event is already running — start time preserved.)",
+          });
+        } else {
+          toast.success("Form 3 sent — SLA paused, 45-day retention started", {
+            description:
+              "The case's SLA countdown is halted and the 45-day data-deletion " +
+              "window opened. Form3Submitted + SLAStopped events appended to the " +
+              "audit thread.",
+          });
+        }
+      } else if (isPreservationAck) {
+        const ackDocumentId =
+          sentItem.documentId ?? `outbound:${sentItem.id}`;
+        const ackSentAt =
+          sentItem.transmission?.sentAt instanceof Date
+            ? sentItem.transmission.sentAt
+            : new Date();
+        setSharedFormData(
+          applyPreservationOrderAcknowledged(formData, {
+            documentId: ackDocumentId,
+            sentAt: ackSentAt,
+            actor: CURRENT_USER,
+          }),
+        );
+        toast.success("Preservation receipt acknowledged to the IA", {
+          description:
+            "The PreservationOrderAcknowledged event landed in the audit thread.",
+        });
+      } else {
+        toast.success("Message sent", {
+          description: "Auto-delivery in ~10s. The thread shows the lifecycle.",
+        });
+      }
     },
     [formData, setSharedFormData],
   );
