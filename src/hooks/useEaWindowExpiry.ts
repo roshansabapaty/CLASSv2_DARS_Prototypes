@@ -44,15 +44,6 @@ interface UseEaWindowExpiryArgs {
   setSharedFormData: ((next: FormData) => void) | undefined;
 }
 
-/** Whether the audit log already carries an event of the given kind. */
-function hasAuditKind(
-  events: EscalationAuditEvent[] | undefined,
-  kind: EscalationAuditEvent["kind"],
-): boolean {
-  if (!events) return false;
-  return events.some((ev) => ev.kind === kind);
-}
-
 export function useEaWindowExpiry({
   formData,
   setSharedFormData,
@@ -78,15 +69,17 @@ export function useEaWindowExpiry({
     const auditEvents = next.escalationAuditEvents ?? [];
 
     // ── Effect 1: Day-10 lapse ───────────────────────────────────────
+    // Dedupe is per-GFR-block via `block.windowLapsed`. The previous
+    // belt-and-braces `hasAuditKind(events, "EaWindowExpired")` check
+    // would block a fresh window-expiry firing if the case ever
+    // received a re-issued EPOC with a new GFR block — the audit from
+    // the first block stays in the log forever. The new block carries
+    // its own `windowLapsed: false`, so the per-block flag is the
+    // correct source of truth.
     const decision = currentDecision(next);
     const expiresAt = new Date(block.eaReviewWindowExpiresAt).getTime();
     const windowHasPassed = expiresAt < now.getTime();
-    if (
-      !decision &&
-      windowHasPassed &&
-      !block.windowLapsed &&
-      !hasAuditKind(auditEvents, "EaWindowExpired")
-    ) {
+    if (!decision && windowHasPassed && !block.windowLapsed) {
       const lapsedAt = new Date();
       const lapseAudit: EscalationAuditEvent = {
         id: `audit-ea-window-expired-${lapsedAt.getTime().toString(36)}`,
@@ -111,34 +104,45 @@ export function useEaWindowExpiry({
     }
 
     // ── Effect 2: EA cleared (Form1Review + None) ────────────────────
+    // Dedupe by matching against the decision's `decidedAt` timestamp
+    // rather than the global presence of `GfrCleared`. A case that
+    // ever receives a second None decision (e.g. re-issued EPOC) will
+    // append a fresh audit event tagged with the new decision's
+    // timestamp; the old audit's timestamp stays distinct.
     const trigger = gfrTrigger(next);
     const decisionAfter = currentDecision(next);
-    if (
-      decisionAfter?.kind === "None" &&
-      trigger === "Form1Review" &&
-      !hasAuditKind(next.escalationAuditEvents, "GfrCleared")
-    ) {
+    if (decisionAfter?.kind === "None" && trigger === "Form1Review") {
       const clearedAuditAt =
         decisionAfter.decidedAt instanceof Date
           ? decisionAfter.decidedAt
           : new Date(decisionAfter.decidedAt);
-      const clearedAudit: EscalationAuditEvent = {
-        id: `audit-gfr-cleared-${Date.now().toString(36)}`,
-        kind: "GfrCleared",
-        actor: decisionAfter.decidedBy ?? "Enforcing Authority",
-        performedAt: clearedAuditAt,
-        note:
-          "EA confirmed no grounds for refusal (NoGroundsForRefusal). " +
-          "Production may proceed.",
-      };
-      next = {
-        ...next,
-        escalationAuditEvents: [
-          ...(next.escalationAuditEvents ?? []),
-          clearedAudit,
-        ],
-      };
-      changed = true;
+      const alreadyFired = (next.escalationAuditEvents ?? []).some((ev) => {
+        if (ev.kind !== "GfrCleared") return false;
+        const evAt =
+          ev.performedAt instanceof Date
+            ? ev.performedAt
+            : new Date(ev.performedAt);
+        return evAt.getTime() === clearedAuditAt.getTime();
+      });
+      if (!alreadyFired) {
+        const clearedAudit: EscalationAuditEvent = {
+          id: `audit-gfr-cleared-${Date.now().toString(36)}`,
+          kind: "GfrCleared",
+          actor: decisionAfter.decidedBy ?? "Enforcing Authority",
+          performedAt: clearedAuditAt,
+          note:
+            "EA confirmed no grounds for refusal (NoGroundsForRefusal). " +
+            "Production may proceed.",
+        };
+        next = {
+          ...next,
+          escalationAuditEvents: [
+            ...(next.escalationAuditEvents ?? []),
+            clearedAudit,
+          ],
+        };
+        changed = true;
+      }
     }
 
     if (changed) {

@@ -27,3 +27,23 @@ export function isEpocPrCase(formData: FormData): boolean {
     formData.requestSubType === "EPOC PR"
   );
 }
+
+/** True when the case is an eEvidence Emergency Production case per
+ *  Reg 2023/1543 Art. 9(2). Drives the 8h SLA tier (via the
+ *  `SlaContext` shim in slaConstants) AND the EmergencyEEvidenceBanner.
+ *  Both predicates use this single helper so the chip + banner can
+ *  never disagree about whether Art. 9(2) applies.
+ *
+ *  Per spec, the 8h window is triggered by `requestType === "eEvidence"`
+ *  plus `casePriority === "Emergency"` — the explicit `eevidenceWorkflow:
+ *  3` discriminator is helpful metadata but NOT load-bearing for the
+ *  SLA. Legacy and new seeds both qualify. */
+export function isEEvidenceArt92Emergency(
+  formData: FormData | null | undefined,
+): boolean {
+  if (!formData) return false;
+  return (
+    formData.requestType === "eEvidence" &&
+    formData.casePriority === "Emergency"
+  );
+}

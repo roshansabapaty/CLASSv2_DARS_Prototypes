@@ -33,7 +33,7 @@ const genIdentifierTaskId = () =>
 export function buildLENS202600170FormData(): FormData {
   // ── Dates anchored to the walkthrough demo day ─────────────────────────
   const createDate = new Date("2026-05-12");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-01-01");
   const endDate = new Date("2026-05-12");
   const leDateRange = { start: "2026-01-01", end: "2026-05-12" };

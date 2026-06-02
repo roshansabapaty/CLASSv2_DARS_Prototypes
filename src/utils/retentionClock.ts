@@ -25,11 +25,15 @@ import type {
 /** The statutory window length in days (Reg 2023/1543). */
 export const RETENTION_WINDOW_DAYS = 45;
 
-/** Compute the expiry timestamp for a retention window opened at `startedAt`. */
+/** Compute the expiry timestamp for a retention window opened at `startedAt`.
+ *  Uses UTC millisecond math so DST transitions inside the 45-day window
+ *  don't shift the wall-clock expiration time by ±1 hour relative to the
+ *  start. `setDate` in local time would otherwise drift across the DST
+ *  boundary; the regulation pins the duration, not the local clock. */
 export function computeRetentionExpiry(startedAt: Date): Date {
-  const expires = new Date(startedAt);
-  expires.setDate(expires.getDate() + RETENTION_WINDOW_DAYS);
-  return expires;
+  return new Date(
+    startedAt.getTime() + RETENTION_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  );
 }
 
 /** Return a new FormData with the retention clock started, or the existing

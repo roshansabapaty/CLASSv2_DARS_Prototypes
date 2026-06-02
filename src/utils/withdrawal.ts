@@ -141,6 +141,13 @@ function cancelPendingDelivery(
             mainPatch = { ...cancelDeliveryFields };
             cancelledCount++;
           }
+          // Walk additionalJobs once, tracking how many we flipped so we
+          // know whether the array reference actually needs to change.
+          // `.map()` ALWAYS returns a fresh array, so the previous
+          // `updatedAdditional === category.additionalJobs` check at this
+          // site could never short-circuit — that triggered a deep clone
+          // of every category in the case for nothing.
+          let addCancelledThisCategory = 0;
           const updatedAdditional = (category.additionalJobs ?? []).map(
             (addJob: AdditionalJob) => {
               const shouldCancelAdd =
@@ -150,17 +157,18 @@ function cancelPendingDelivery(
                   addJob.deliveryStatus,
                 );
               if (!shouldCancelAdd) return addJob;
-              cancelledCount++;
+              addCancelledThisCategory++;
               return { ...addJob, ...cancelDeliveryFields };
             },
           );
-          if (!mainPatch && updatedAdditional === category.additionalJobs) {
+          cancelledCount += addCancelledThisCategory;
+          if (!mainPatch && addCancelledThisCategory === 0) {
             continue;
           }
           nextGroup[itemKey] = {
             ...category,
             ...(mainPatch ?? {}),
-            ...(updatedAdditional.length > 0
+            ...(addCancelledThisCategory > 0
               ? { additionalJobs: updatedAdditional }
               : {}),
           };

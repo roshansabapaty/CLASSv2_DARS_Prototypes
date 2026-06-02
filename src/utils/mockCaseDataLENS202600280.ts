@@ -42,7 +42,7 @@ export function buildLENS202600280FormData(): FormData {
   //   Withdrawal effective 2026-05-20 (7 days ago) → retention expires
   //   2026-07-04 (~38 days remaining, neutral chip tone).
   const createDate = new Date("2026-05-12");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-02-15");
   const endDate = new Date("2026-05-05");
   const leDateRange = { start: "2026-02-15", end: "2026-05-05" };

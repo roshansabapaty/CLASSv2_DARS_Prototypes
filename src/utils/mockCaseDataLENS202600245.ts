@@ -39,7 +39,7 @@ export function buildLENS202600245FormData(): FormData {
   //   EPOC received 2026-05-22 → EA notified same day.
   //   Window expires 2026-06-01 → 5 days remaining on case open.
   const createDate = new Date("2026-05-22");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-03-01");
   const endDate = new Date("2026-05-15");
   const leDateRange = { start: "2026-03-01", end: "2026-05-15" };

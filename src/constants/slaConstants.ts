@@ -102,14 +102,20 @@ const EEVIDENCE_EMERGENCY_8H: SlaTierConfig = {
 
 /** True when the case's context maps to the spec's 8h Emergency tier
  *  (Reg 2023/1543 Art. 9(2)). Public so callers can branch on the
- *  variant without duplicating the predicate. */
+ *  variant without duplicating the predicate.
+ *
+ *  The 8h SLA applies whenever an eEvidence case is marked Emergency —
+ *  the spec does not require the case to also carry the explicit
+ *  `eevidenceWorkflow: 3` discriminator. Legacy + new seeds both get
+ *  the 8h treatment as long as `requestType === "eEvidence"` and the
+ *  tier is `"Emergency"`. */
 export function isEEvidenceEmergency(
   tier: string | undefined,
   ctx?: SlaContext,
 ): boolean {
   if (tier !== "Emergency") return false;
   if (!ctx) return false;
-  return ctx.requestType === "eEvidence" && ctx.eevidenceWorkflow === 3;
+  return ctx.requestType === "eEvidence";
 }
 
 /** Map from tier value (or unknown / "Standard" legacy value) → config.

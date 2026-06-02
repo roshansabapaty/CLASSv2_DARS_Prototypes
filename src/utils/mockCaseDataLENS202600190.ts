@@ -37,7 +37,7 @@ export function buildLENS202600190FormData(): FormData {
   // though Form 3 was sent — see `slaPausedAt` below — so the SLA chip
   // can show what the impending due date would be if the timer were to
   // restart.
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-02-01");
   const endDate = new Date("2026-05-12");
   const leDateRange = { start: "2026-02-01", end: "2026-05-12" };

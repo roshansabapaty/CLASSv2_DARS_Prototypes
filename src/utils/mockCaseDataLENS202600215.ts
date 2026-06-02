@@ -40,7 +40,7 @@ export function buildLENS202600215FormData(): FormData {
   //   EPOC-PR received 2026-05-25 (2 days ago).
   //   Initial preservation expiration 2026-11-25 (6 months out).
   const createDate = new Date("2026-05-25");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-02-15");
   const endDate = new Date("2026-05-20");
   const leDateRange = { start: "2026-02-15", end: "2026-05-20" };

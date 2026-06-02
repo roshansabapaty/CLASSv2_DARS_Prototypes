@@ -1,5 +1,5 @@
 /**
- * EmergencyEEvidenceBanner — Workflow 3 surface.
+ * EmergencyEEvidenceBanner — Art. 9(2) emergency surface.
  *
  * Renders on eEvidence cases that are flagged Emergency under Reg
  * 2023/1543 Art. 9(2). Surfaces the IA's stated emergency category
@@ -7,8 +7,15 @@
  * sees the urgency before scrolling through other case context.
  *
  * Self-hides when:
- *   - the case is not an eEvidence Workflow 3 case, OR
+ *   - the case is not an eEvidence Emergency case (per
+ *     `isEEvidenceArt92Emergency`), OR
  *   - the case is withdrawn (WithdrawalBanner supersedes).
+ *
+ * Note: the explicit `eevidenceWorkflow: 3` discriminator is helpful
+ * metadata when present but NOT required — the spec triggers the 8h
+ * SLA whenever an eEvidence case is marked Emergency, with or without
+ * the explicit workflow tag. The banner mirrors that gate so the
+ * chip + banner can never disagree.
  *
  * The 8h SLA itself is enforced via `getSlaConfig(tier, ctx)` —
  * this banner just gives the urgency a visible identity beyond the
@@ -19,6 +26,7 @@ import * as React from "react";
 import { AlertOctagon, X } from "lucide-react";
 import type { FormData } from "../../types/caseTypes";
 import { isCaseWithdrawn } from "../../utils/withdrawal";
+import { isEEvidenceArt92Emergency } from "../../utils/eEvidenceHelpers";
 
 const CATEGORY_LABEL: Record<string, string> = {
   DangerToLife: "Imminent danger to life",
@@ -26,14 +34,20 @@ const CATEGORY_LABEL: Record<string, string> = {
   CriticalInfrastructure: "Imminent danger of damage to critical infrastructure",
 };
 
-interface EmergencyEEvidenceBannerProps {
-  formData: FormData | null | undefined;
+/** Defensive: a seed using `as any` could slip an unknown category
+ *  through TypeScript. If that happens, render a generic fallback
+ *  instead of leaking the internal enum identifier into the UI. */
+function resolveCategoryLabel(rawCategory: string | undefined): string {
+  if (!rawCategory) {
+    return "Emergency production declared (no category specified)";
+  }
+  const label = CATEGORY_LABEL[rawCategory];
+  if (label) return label;
+  return "Emergency production declared (unrecognised category)";
 }
 
-function isEmergencyWorkflow3(formData: FormData): boolean {
-  if (formData.requestType !== "eEvidence") return false;
-  if (formData.eevidenceWorkflow !== 3) return false;
-  return formData.casePriority === "Emergency";
+interface EmergencyEEvidenceBannerProps {
+  formData: FormData | null | undefined;
 }
 
 export function EmergencyEEvidenceBanner({
@@ -41,14 +55,14 @@ export function EmergencyEEvidenceBanner({
 }: EmergencyEEvidenceBannerProps): React.ReactElement | null {
   const [dismissed, setDismissed] = React.useState(false);
   if (!formData) return null;
-  if (!isEmergencyWorkflow3(formData)) return null;
+  // Single Art. 9(2) predicate shared with the SLA-tier shim — chip + banner
+  // can't disagree about whether the 8h emergency window applies.
+  if (!isEEvidenceArt92Emergency(formData)) return null;
   if (isCaseWithdrawn(formData)) return null;
   if (dismissed) return null;
 
   const justification = formData.eevidenceAuthorisationFlags?.emergencyJustification;
-  const categoryLabel = justification
-    ? CATEGORY_LABEL[justification.category] ?? justification.category
-    : "Emergency production declared (no category specified)";
+  const categoryLabel = resolveCategoryLabel(justification?.category);
 
   return (
     <div

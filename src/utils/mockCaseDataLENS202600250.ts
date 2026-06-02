@@ -38,7 +38,7 @@ const genId = () =>
 
 export function buildLENS202600250FormData(): FormData {
   const createDate = new Date("2026-05-10");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-02-01");
   const endDate = new Date("2026-05-08");
   const leDateRange = { start: "2026-02-01", end: "2026-05-08" };

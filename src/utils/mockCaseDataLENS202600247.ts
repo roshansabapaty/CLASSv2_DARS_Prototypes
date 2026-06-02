@@ -39,7 +39,7 @@ export function buildLENS202600247FormData(): FormData {
   //   Window expired 2026-05-25 (2 days ago) → useEaWindowExpiry
   //   hook fires EaWindowExpired on case mount.
   const createDate = new Date("2026-05-15");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-02-15");
   const endDate = new Date("2026-05-10");
   const leDateRange = { start: "2026-02-15", end: "2026-05-10" };

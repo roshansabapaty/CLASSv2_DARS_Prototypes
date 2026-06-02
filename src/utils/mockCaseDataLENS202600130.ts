@@ -40,7 +40,10 @@ export function buildLENS202600130FormData(): FormData {
   //   EPOC received 2026-05-26 (6 days ago) → Routine 10-day SLA
   //   → due 2026-06-05 (4 days remaining, OnTrack chip).
   const createDate = new Date("2026-05-26");
-  const dueDate = computeSlaDueDate("Routine", createDate);
+  // Pass createDate as both `received` and `now` so the helper's
+  // Math.max(received, now) guard doesn't slide the dueDate forward to
+  // "today + 10d" — for a demo seed we want the chronology fixed.
+  const dueDate = computeSlaDueDate("Routine", createDate, createDate);
   const startDate = new Date("2026-03-01");
   const endDate = new Date("2026-05-20");
   const leDateRange = { start: "2026-03-01", end: "2026-05-20" };

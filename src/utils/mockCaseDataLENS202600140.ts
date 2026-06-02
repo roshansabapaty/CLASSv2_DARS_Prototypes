@@ -39,7 +39,11 @@ export function buildLENS202600140FormData(): FormData {
   const createDate = new Date("2026-06-01T04:00:00Z");
   // Compute the due date EXPLICITLY with the Emergency-eEvidence context
   // so the seeded dueDate matches the 8h SLA (not the legacy 3h tier).
-  const dueDate = computeSlaDueDate("Emergency", createDate, new Date(), {
+  // Pass createDate as both `received` and `now` so Math.max(received, now)
+  // resolves to createDate — otherwise the dueDate slides to "now + 8h"
+  // every time the case-data builder runs and the chip's "Approaching"
+  // demo never lands.
+  const dueDate = computeSlaDueDate("Emergency", createDate, createDate, {
     requestType: "eEvidence",
     eevidenceWorkflow: 3,
   });
