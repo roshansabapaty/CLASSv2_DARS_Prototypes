@@ -63,6 +63,15 @@ export async function runAccountExistenceCheck(
 
         // Decide account type ONCE per identifier.
         //
+        // XBOX 5x5 gift-card redemption tokens cannot be resolved by the
+        // standard account-existence check — the IA only knows the
+        // redemption code, not which MSA redeemed it. Production resolves
+        // these through the external XBOX gift-card-registry; the RS then
+        // attaches the resolved MSA as a Supplemental identifier and runs
+        // Check Accounts on that row. So the token row is always "N/A"
+        // here; the per-row Account Check column should stay informational.
+        const isTokenLookupOnly = identifier.type === "XBOX 5X5 Token";
+
         // Honour the mock-seeded `checkAccounts.accountType` first so demo
         // cases can deterministically force Consumer / Enterprise / N/A
         // outcomes (e.g. the LNS-2026-00190 manifest-error scenario seeds
@@ -74,7 +83,9 @@ export async function runAccountExistenceCheck(
           | "N/A"
           | undefined;
         let identifierAccountType: "Consumer" | "Enterprise" | "N/A";
-        if (seededAccountType) {
+        if (isTokenLookupOnly) {
+          identifierAccountType = "N/A";
+        } else if (seededAccountType) {
           identifierAccountType = seededAccountType;
         } else {
           const identifierAccountRoll = Math.random();

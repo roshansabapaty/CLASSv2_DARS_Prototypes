@@ -754,7 +754,19 @@ export const IDENTIFIER_FORMAT_RULES: Record<string, {
     pattern: /^\d{3}\s\d{3}\s\d{3}$/,
     description: "Must be in format: ### ### ###",
     example: "123 456 789"
-  }
+  },
+  // XBOX gift-card redemption codes are 25 alphanumeric characters
+  // printed as five groups of five, separated by hyphens. The IA only
+  // sees this token — they don't know which MSA redeemed it. Account
+  // existence cannot be checked against the token directly; the RS
+  // resolves it via an external XBOX gift-card-registry tool, then
+  // attaches the resolved MSA as a Supplemental identifier and runs
+  // Check Accounts on the supplemental.
+  "XBOX 5X5 Token": {
+    pattern: /^[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/i,
+    description: "Must be 5 groups of 5 alphanumeric characters separated by hyphens",
+    example: "M2Q4T-PQRJX-7HK9F-WVNB3-RSTYZ",
+  },
 };
 
 // MICROSOFT_SERVICES_CONFIG was previously duplicated here; canonical source is
