@@ -987,6 +987,22 @@ function Step1IdentifierReview({ identifiers, onUpdateIdentifiers, formData, ann
     newIdentifier.value = data.value;
     newIdentifier.type = data.type;
     newIdentifier.createdBy = data.isSupplemental ? `Supplemental ${CURRENT_USER}` : CURRENT_USER;
+    if (data.isSupplemental && data.linkedIdentifierId) {
+      newIdentifier.linkedIdentifierId = data.linkedIdentifierId;
+    }
+    // Pre-populate the Account Check column for supplementals so the
+    // user doesn't have to re-run Check Accounts just for the new row.
+    if (data.isSupplemental) {
+      // accountExistenceStatus="success" + no accountType → "Not Found"
+      // per AccountCheckCell's `success && !hasAccount` branch.
+      newIdentifier.accountExistenceStatus = "success";
+      if (data.accountFound) {
+        newIdentifier.checkAccounts = {
+          ...(newIdentifier.checkAccounts ?? {}),
+          accountType: data.accountType ?? "Consumer",
+        };
+      }
+    }
 
     // Enable selected service with data categories
     if (data.service && (newIdentifier.services as any)[data.service]) {
@@ -1039,91 +1055,54 @@ function Step1IdentifierReview({ identifiers, onUpdateIdentifiers, formData, ann
   const step1NotFoundCount = Object.values(accountCheckResults).filter((r: any) => r.checked && !r.exists).length;
 
   // Simulate account check for all identifiers
+  // Account check — delegates to the authoritative path used by the
+  // case-form Triage stage (see useCaseWorkflow.checkAccountsForIdentifiers).
+  // Honours seeded `checkAccounts.accountType` so demo cases like
+  // LNS-2026-00265 surface their Athens / NYC logins as documented.
+  // Replaces a prior Math.random() implementation that overrode seeds
+  // and made the Consumer User Location Summary column flaky.
   const handleCheckAllAccounts = async () => {
     setIsCheckingAccounts(true);
     setAccountCheckProgress(0);
 
-    const results: Record<string, any> = { ...accountCheckResults };
-    const totalSteps = identifiers.length;
-
-    for (let i = 0; i < identifiers.length; i++) {
-      const identifier = identifiers[i];
-
-      // Simulate network delay
-      await new Promise((resolve) => setTimeout(resolve, 600));
-
-      // Randomly assign account existence (80% success rate for demo)
-      // An account can only be Consumer OR Enterprise, never both
-      const exists = Math.random() > 0.2;
-      const accountRoll = exists ? Math.random() : -1;
-      const hasConsumer = accountRoll >= 0 && accountRoll < 0.55;
-      const hasEnterprise = accountRoll >= 0.55;
-
-      results[identifier.id] = {
-        checked: true,
-        exists,
-        accountTypes: [
-          ...(hasConsumer ? ["Consumer"] : []),
-          ...(hasEnterprise ? ["Enterprise"] : []),
-        ],
-        consumer: hasConsumer ? {
-          storageLocation: ["US-West", "US-East", "EU-West"][Math.floor(Math.random() * 3)],
-          primaryId: identifier.type === "Email address" ? identifier.value : `consumer_${identifier.value.substring(0, 8)}@outlook.com`,
-          relatedIdentifiers: ["alias1@outlook.com"],
-        } : null,
-        enterprise: hasEnterprise ? {
-          storageLocation: ["EU-West", "US-Central", "Asia-East"][Math.floor(Math.random() * 3)],
-          primaryId: identifier.type === "Email address" ? identifier.value : `ent_${identifier.value.substring(0, 8)}@contoso.com`,
-          relatedIdentifiers: ["work.alias@company.com"],
-          organizationId: "org-" + Math.random().toString(36).substring(7),
-        } : null,
-      };
-
-      setAccountCheckProgress(Math.round(((i + 1) / totalSteps) * 100));
-    }
-
-    // Write results to wizard-level accountCheckResults
-    onUpdateAccountCheckResults(results);
-
-    // Also write back to identifier objects so the Account Check column renders them
-    const updatedIdentifiers = identifiers.map((identifier) => {
-      const r = results[identifier.id];
-      if (!r) return identifier;
-
-      const updatedServices = { ...identifier.services };
-      // Stamp accountExistence on first enabled service (or first service)
-      const serviceKeys = Object.keys(updatedServices);
-      if (serviceKeys.length > 0) {
-        const firstKey = serviceKeys[0];
-        updatedServices[firstKey] = {
-          ...updatedServices[firstKey],
-          accountExistence: {
-            consumerExists: !!r.consumer,
-            consumerStorageLocation: r.consumer?.storageLocation || null,
-            consumerPrimaryId: r.consumer?.primaryId || null,
-            consumerRelatedIdentifiers: r.consumer?.relatedIdentifiers || [],
-            enterpriseExists: !!r.enterprise,
-            enterpriseStorageLocation: r.enterprise?.storageLocation || null,
-            enterprisePrimaryId: r.enterprise?.primaryId || null,
-            enterpriseRelatedIdentifiers: r.enterprise?.relatedIdentifiers || [],
-            enterpriseOrganizationId: r.enterprise?.organizationId || null,
-          },
-        };
-      }
-
-      return {
-        ...identifier,
-        accountExistenceStatus: r.exists ? "success" : "not-found",
-        services: updatedServices,
-      };
-    });
-
-    onUpdateIdentifiers(updatedIdentifiers);
-
-    // Phase 3 cross-border merge — populate the IP History store for
-    // Consumer-tagged identifiers. 30-day window ending today.
+    const { runAccountExistenceCheck, applyAccountExistenceResults } =
+      await import("../utils/accountExistenceCheck");
+    const { isEpocPrCase } = await import("../utils/eEvidenceHelpers");
     const { queryLogins } = await import("../services/loginQuery");
     const { setLastLogon } = await import("../state/ipHistoryStore");
+
+    const { resultsMap, successCount } = await runAccountExistenceCheck(
+      identifiers,
+      formData?.caseStage ?? "In Progress",
+      "fulfillment",
+      isEpocPrCase((formData ?? {}) as any),
+    );
+    setAccountCheckProgress(100);
+
+    const updatedIdentifiers = applyAccountExistenceResults(
+      identifiers,
+      resultsMap,
+    );
+
+    // Mirror outcomes to the wizard-level `accountCheckResults` map so
+    // the IdentifierTable's checked / found / not-found counters stay
+    // accurate. The map's shape matters only for those counters — the
+    // table reads `accountType` from each identifier directly.
+    const wizardResults: Record<string, any> = { ...accountCheckResults };
+    for (const id of updatedIdentifiers) {
+      const accountType = id.checkAccounts?.accountType;
+      wizardResults[id.id] = {
+        checked: true,
+        exists: accountType === "Consumer" || accountType === "Enterprise",
+      };
+    }
+    onUpdateAccountCheckResults(wizardResults);
+    onUpdateIdentifiers(updatedIdentifiers);
+
+    // Phase 3 cross-border — populate IP History for Consumer
+    // identifiers (30-day window ending today). Mirrors the
+    // useCaseWorkflow.checkAccountsForIdentifiers loop so every Check
+    // Accounts surface produces the same column data.
     const today = new Date();
     const rangeEnd = today.toISOString().slice(0, 10);
     const rangeStart = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -1141,15 +1120,15 @@ function Step1IdentifierReview({ identifiers, onUpdateIdentifiers, formData, ann
           : ("Law Enforcement" as const),
     };
     for (const id of updatedIdentifiers) {
-      const r = results[id.id];
-      if (!r?.consumer) continue; // Consumer-tagged only
+      if (id.checkAccounts?.accountType !== "Consumer") continue;
       const q = queryLogins({
         identifier: id.value,
         rangeStart,
         rangeEnd,
         issuingAgency,
       });
-      const latest = q.events.length > 0 ? q.events[q.events.length - 1] : null;
+      const latest =
+        q.events.length > 0 ? q.events[q.events.length - 1] : null;
       setLastLogon(id.id, {
         lastEvent: latest,
         totalEvents: q.totalEvents,
@@ -1161,8 +1140,7 @@ function Step1IdentifierReview({ identifiers, onUpdateIdentifiers, formData, ann
 
     setIsCheckingAccounts(false);
 
-    const foundCount = Object.values(results).filter((r: any) => r.exists).length;
-    const msg = `Account check complete: ${foundCount} of ${identifiers.length} accounts found`;
+    const msg = `Account check complete: ${successCount} of ${identifiers.length} accounts found`;
     toast.success(msg);
     announce?.(msg);
   };
