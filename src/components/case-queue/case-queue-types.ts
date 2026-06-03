@@ -794,6 +794,42 @@ export const MOCK_CASES: CaseQueueItem[] = [
     identifierTypes: { email: 2 },
     servicesRequested: ["Email", "Microsoft Account Profile", "Outlook", "Teams"],
   },
+  // ── Romanian eEvidence — LE service mapping failure demo ─────────────
+  // Three identifiers exercise every resolver failure mode that an
+  // EU eEvidence Form 1 free-text Services field can produce:
+  //   • Consumer + FastFax + YammerLite + Email → 2× unmapped-name
+  //   • Consumer + SharePoint + Email          → 1× wrong-account-type
+  //   • Enterprise + XBOX/Minecraft + Email    → 1× wrong-account-type
+  // See utils/mockCaseDataLENS202600310.ts. Surfaces in the LEReviewPanel
+  // (red unmappedChip Tag) and Step 1 validateIdentifier chips.
+  {
+    caseId: "LNS-2026-00310",
+    createDate: "Jun 3, 2026",
+    caseType: "Law Enforcement Request",
+    assigneeName: "Nicole Garcia",
+    requestType: "eEvidence",
+    requestSubType: "EPOC ER",
+    requestOrigin: "LEAPI",
+    caseStage: "Waiting on Triage",
+    country: "Romania",
+    jurisdiction: "National",
+    natureOfCrime: ["Cybercrime", "OtherFinancialCrimeOrFraud"],
+    isThreatToLife: false,
+    casePriority: "Routine",
+    dueDate: "Jun 13, 2026",
+    hasEnterpriseAccounts: true,
+    hasAzureAccounts: false,
+    accountExistenceChecked: true,
+    identifierCount: 3,
+    identifierTypes: { email: 3 },
+    servicesRequested: [
+      "Email",
+      "FastFax",
+      "YammerLite",
+      "SharePoint",
+      "XBOX/Minecraft",
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------

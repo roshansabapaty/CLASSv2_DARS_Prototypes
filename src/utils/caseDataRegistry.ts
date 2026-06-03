@@ -49,6 +49,7 @@ import { buildLENS202600265FormData } from "./mockCaseDataLENS202600265";
 import { buildLENS202600270FormData } from "./mockCaseDataLENS202600270";
 import { buildLENS202600280FormData } from "./mockCaseDataLENS202600280";
 import { buildLENS202600300FormData } from "./mockCaseDataLENS202600300";
+import { buildLENS202600310FormData } from "./mockCaseDataLENS202600310";
 
 export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
   "LNS-2025-00095": buildLENS202500095FormData,
@@ -101,6 +102,12 @@ export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
   // Multi-tenant TPID demo — Contoso US + Contoso France share TPID-CONTOSO.
   // Exercises the EscalateToAttorneyDialog tenant + tpid scope variants.
   "LNS-2026-00300": buildLENS202600300FormData,
+  // LE → internal service mapping failure demo (Romanian EPOC ER).
+  // eEvidence Form 1's free-text Services field is where this failure
+  // mode actually surfaces in production. Three identifiers, each
+  // exercising a different resolver failure mode (unmapped-name x2 +
+  // wrong-account-type x2). See mockCaseDataLENS202600310.ts.
+  "LNS-2026-00310": buildLENS202600310FormData,
 };
 
 const cache = new Map<string, FormData>();
