@@ -8,6 +8,12 @@
  * impossible-travel chip, the VPN indeterminate path, and the empty-
  * state copy all have at least one real demo path.
  *
+ * Phase 4 add-on: LNS-2026-00270 (Swedish phishing operation) — a
+ * deliberately simple Stockholm-only narrative so the Consumer User
+ * Location Summary column AND the Consumer User Locations drilldown
+ * panel light up with real city + country data right after Check
+ * Accounts runs, without any cross-border noise.
+ *
  * Conventions:
  *   - `identifier` here is the AccountIdentifier.value string (email /
  *     phone / address) — not the internal UUID. The lookup in
@@ -231,4 +237,49 @@ export const LOGIN_EVENTS: LoginEvent[] = [
   mk("treasury.ops@globex-uk.example", "2025-01-07T14:55:00Z", "82.132.244.10", "Windows laptop"),
   mk("treasury.ops@globex-uk.example", "2025-01-10T08:30:00Z", "82.132.244.10", "Windows laptop"),
   mk("treasury.ops@globex-uk.example", "2025-01-14T09:14:00Z", "82.132.244.10", "Windows laptop"),
+
+  // ═══ LNS-2026-00270 (Sweden, dateServed 2026-05-15) ════════════════
+  // Stockholm-only narrative. Single-country in-jurisdiction story so
+  // the Consumer User Location Summary column lights up with city +
+  // country data and the Consumer User Locations drilldown shows a
+  // populated timeline + country summary card without any cross-border
+  // complexity. Three IPs total:
+  //   - 78.69.142.10  Telia (home)
+  //   - 213.114.155.42 Telenor (mobile)
+  //   - 90.230.88.117 Comhem  (occasional)
+  // Events seeded in May 14 – June 1 so they fall inside the lookup's
+  // 30-day window relative to the prototype's "today" (2026-06-02).
+  //
+  // phisher.target@hotmail.com — LE-provided target (id1). Baseline
+  // Stockholm activity across the full window.
+  mk("phisher.target@hotmail.com", "2026-05-14T07:42:00Z", "78.69.142.10", "Windows laptop"),
+  mk("phisher.target@hotmail.com", "2026-05-15T18:20:00Z", "213.114.155.42", "iPhone 15"),
+  mk("phisher.target@hotmail.com", "2026-05-17T09:11:00Z", "78.69.142.10", "Windows laptop"),
+  mk("phisher.target@hotmail.com", "2026-05-19T08:33:00Z", "78.69.142.10", "Windows laptop"),
+  mk("phisher.target@hotmail.com", "2026-05-21T14:55:00Z", "90.230.88.117", "Windows laptop"),
+  mk("phisher.target@hotmail.com", "2026-05-23T09:18:00Z", "213.114.155.42", "iPhone 15"),
+  mk("phisher.target@hotmail.com", "2026-05-25T08:30:00Z", "78.69.142.10", "Windows laptop"),
+  mk("phisher.target@hotmail.com", "2026-05-28T08:14:00Z", "78.69.142.10", "Windows laptop"),
+  mk("phisher.target@hotmail.com", "2026-05-30T19:42:00Z", "213.114.155.42", "iPhone 15"),
+  mk("phisher.target@hotmail.com", "2026-06-01T09:30:00Z", "78.69.142.10", "Windows laptop"),
+
+  // phisher.alias@outlook.com — Supplemental alias (id1a). Recent
+  // activity only, surfaces the alias is in active use from the same
+  // Stockholm base as the LE target.
+  mk("phisher.alias@outlook.com", "2026-05-20T11:22:00Z", "78.69.142.10", "Windows laptop"),
+  mk("phisher.alias@outlook.com", "2026-05-23T16:45:00Z", "78.69.142.10", "Mac"),
+  mk("phisher.alias@outlook.com", "2026-05-26T09:11:00Z", "213.114.155.42", "iPhone 15"),
+  mk("phisher.alias@outlook.com", "2026-05-29T20:08:00Z", "78.69.142.10", "Mac"),
+  mk("phisher.alias@outlook.com", "2026-06-01T08:42:00Z", "78.69.142.10", "Windows laptop"),
+
+  // gamer.redeemer@outlook.com — Supplemental MSA resolved via XBOX
+  // gift-card-registry lookup (id2a). Same Stockholm baseline as the
+  // primary target, supporting the demo's "phishing operation funneled
+  // micro-payments via XBOX gift cards" narrative.
+  mk("gamer.redeemer@outlook.com", "2026-05-16T20:15:00Z", "90.230.88.117", "Windows laptop"),
+  mk("gamer.redeemer@outlook.com", "2026-05-19T21:30:00Z", "90.230.88.117", "Windows laptop"),
+  mk("gamer.redeemer@outlook.com", "2026-05-22T19:45:00Z", "78.69.142.10", "Windows laptop"),
+  mk("gamer.redeemer@outlook.com", "2026-05-25T22:08:00Z", "90.230.88.117", "Windows laptop"),
+  mk("gamer.redeemer@outlook.com", "2026-05-28T20:33:00Z", "78.69.142.10", "Windows laptop"),
+  mk("gamer.redeemer@outlook.com", "2026-05-31T21:50:00Z", "90.230.88.117", "Windows laptop"),
 ];

@@ -199,6 +199,29 @@ export const GEO_TABLE: Record<string, Omit<GeoLocation, "ip">> = {
     isp: "NTT Docomo", isVpn: false, isTor: false,
   },
 
+  // ── Sweden ─────────────────────────────────────────────────────────
+  // Stockholm residential IPs used by LNS-2026-00270 (Swedish phishing
+  // operation). All in-jurisdiction Sweden so the panel shows a clean
+  // single-country story without cross-border noise.
+  "78.69.142.10": {
+    country: "Sweden", countryCode: "SE",
+    region: "Stockholm County", city: "Stockholm",
+    latitude: 59.3293, longitude: 18.0686,
+    isp: "Telia Sweden", isVpn: false, isTor: false,
+  },
+  "213.114.155.42": {
+    country: "Sweden", countryCode: "SE",
+    region: "Stockholm County", city: "Stockholm",
+    latitude: 59.3326, longitude: 18.0649,
+    isp: "Telenor Sweden", isVpn: false, isTor: false,
+  },
+  "90.230.88.117": {
+    country: "Sweden", countryCode: "SE",
+    region: "Stockholm County", city: "Stockholm",
+    latitude: 59.3251, longitude: 18.0710,
+    isp: "Comhem (Tele2)", isVpn: false, isTor: false,
+  },
+
   // ── VPN exit nodes (flagged) ───────────────────────────────────────
   "45.83.220.15": {
     country: "Switzerland", countryCode: "CH",
