@@ -84,6 +84,15 @@ interface IdentifierTableProps {
   /** Phase 3 cross-border merge — forwarded to each row so the Logins
    *  button in the Actions column can open the cross-border drawer. */
   onOpenLoginLocation?: (identifierId: string) => void;
+  /** Phase 5 (Enterprise surfacing) — opens the PriorTenantHistoryPanel
+   *  drawer for the tenant associated with an Enterprise identifier
+   *  row. Forwarded to each row; rows hide the link entirely if this
+   *  handler isn't wired. */
+  onOpenPriorTenantHistory?: (args: {
+    tenantId: string;
+    tpid?: string;
+    tenantDisplayName?: string;
+  }) => void;
 }
 
 export function IdentifierTable({
@@ -104,6 +113,7 @@ export function IdentifierTable({
   formData,
   onAttorneyAction,
   onOpenLoginLocation,
+  onOpenPriorTenantHistory,
 }: IdentifierTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -517,6 +527,7 @@ export function IdentifierTable({
                     formData={formData}
                     onAttorneyAction={onAttorneyAction}
                     onOpenLoginLocation={onOpenLoginLocation}
+                    onOpenPriorTenantHistory={onOpenPriorTenantHistory}
                   />
                 ))
               )}

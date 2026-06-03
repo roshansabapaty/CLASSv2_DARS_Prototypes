@@ -28,10 +28,12 @@
 import type {
   AccountIdentifier,
   CaseLegalContext,
+  EnterpriseContext,
   FormData,
 } from "../types/caseTypes";
 import { createDefaultIdentifierServices } from "../config/lensServicesConfig";
 import { computeSlaDueDate } from "../constants/slaConstants";
+import { MOCK_ORGS } from "../data/mockOrgs";
 
 const genId = () =>
   `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -130,6 +132,31 @@ export function buildLENS202600210FormData(): FormData {
       "Enterprise on the EPOC envelope.",
   } as any;
 
+  // ACME IT enterprise context — manifest-error case where Check
+  // Accounts surfaces an Enterprise tenant the IA didn't classify. The
+  // `class_account_check` trigger anchors the Enterprise-detected branch
+  // of the ManifestErrorWarningBanner. The org seed drives the Enterprise
+  // Org Summary card so the RS / TS can see who the actual controller
+  // is before they fire Form 3.
+  const enterpriseContext: EnterpriseContext = {
+    triggers: ["class_account_check"],
+    manifestErrorPresent: true,
+    org: MOCK_ORGS["acme-it"],
+    users: [
+      {
+        identifierId: id1.id,
+        identifierValue: id1.value,
+        lastLogonLocation: "Milan, IT",
+        geoResolutions30d: ["IT"],
+        mailboxRegion: "EU West",
+        oneDriveRegion: "EU West",
+        conflictOfLawJurisdictions: ["IT"],
+      },
+    ],
+    policyReviewRequired: false,
+    execReviewRequired: false,
+  };
+
   return {
     caseId: "LNS-2026-00210",
     createDate,
@@ -218,6 +245,7 @@ export function buildLENS202600210FormData(): FormData {
     userResponseReceived: "",
     dateOfUserResponse: undefined,
     identifiers: [id1],
+    enterpriseContext,
     nonDisclosureOrders: [],
     startDate,
     endDate,

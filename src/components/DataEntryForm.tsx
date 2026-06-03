@@ -80,6 +80,7 @@ import { getTemplateById } from "../config/formTemplates";
 import { EnterpriseRequestCard } from "./enterprise-request/EnterpriseRequestCard";
 import { EnterpriseContextSection } from "./attorney-escalation/EnterpriseContextSection";
 import { LoginLocationPanel } from "./cross-border/LoginLocationPanel";
+import { PriorTenantHistoryPanel } from "./enterprise-context/PriorTenantHistoryPanel";
 import { ManifestErrorWarningBanner } from "./enterprise-request/ManifestErrorWarningBanner";
 import { InformControllerNoticeBanner } from "./enterprise-request/InformControllerNoticeBanner";
 import { NotifyUserNoticeBanner } from "./enterprise-request/NotifyUserNoticeBanner";
@@ -447,6 +448,16 @@ export function DataEntryForm({
   const [ipHistoryIdentifierId, setIpHistoryIdentifierId] = useState<
     string | null
   >(null);
+
+  // Phase 5 (Enterprise surfacing) — PriorTenantHistoryPanel state.
+  // Opened from the "View other cases on this tenant" link on Enterprise
+  // identifier rows in the IdentifierTable. Same drawer the attorney
+  // workspace uses, but mounted here for RS / TS visibility too.
+  const [priorTenantDrawer, setPriorTenantDrawer] = useState<{
+    tenantId: string;
+    tpid?: string;
+    tenantDisplayName?: string;
+  } | null>(null);
 
   // Resolve Case dialog — opened from the Step 2/3 banner secondary CTA,
   // the collection-page resolve bar, and (Phase 5c.5+) the workflow-stage
@@ -4575,6 +4586,9 @@ export function DataEntryForm({
                    onAttorneyAction wired, so escalated-row styling +
                    inline AttorneyReviewPanel stay off). */
                 onOpenLoginLocation={(id) => setIpHistoryIdentifierId(id)}
+                onOpenPriorTenantHistory={(args) =>
+                  setPriorTenantDrawer(args)
+                }
               />
             </div>
           )}
@@ -5103,6 +5117,18 @@ export function DataEntryForm({
         onClose={() => setIpHistoryIdentifierId(null)}
         caseFormData={formData}
         identifierId={ipHistoryIdentifierId ?? undefined}
+      />
+
+      {/* Phase 5 — PriorTenantHistoryPanel drawer for RS / TS.
+          Opens when the user clicks the "View other cases on this tenant"
+          link on an Enterprise identifier row. Read-only — no attorney
+          actions leak into this surface. */}
+      <PriorTenantHistoryPanel
+        open={priorTenantDrawer !== null}
+        onClose={() => setPriorTenantDrawer(null)}
+        tenantId={priorTenantDrawer?.tenantId}
+        tpid={priorTenantDrawer?.tpid}
+        tenantDisplayName={priorTenantDrawer?.tenantDisplayName}
       />
     </div>
   );

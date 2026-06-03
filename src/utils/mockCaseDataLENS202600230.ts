@@ -28,10 +28,12 @@
 import type {
   AccountIdentifier,
   CaseLegalContext,
+  EnterpriseContext,
   FormData,
 } from "../types/caseTypes";
 import { createDefaultIdentifierServices } from "../config/lensServicesConfig";
 import { computeSlaDueDate } from "../constants/slaConstants";
+import { MOCK_ORGS } from "../data/mockOrgs";
 
 const genId = () =>
   `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -129,7 +131,14 @@ export function buildLENS202600230FormData(): FormData {
     geoLocation: "Europe - North Europe",
     createdBy: "LE Agency",
     services: createDefaultIdentifierServices(),
-    checkAccounts: { accountType: "Enterprise" },
+    checkAccounts: {
+      accountType: "Enterprise",
+      tenantId: "5f02a18c-3e64-4b92-a371-87d1f0c4e215",
+      tenantPrimaryDomain: "stichting-leiden.onmicrosoft.com",
+      tenantAdminName: "Pieter de Jong",
+      tenantAdminEmail: "tenant.admin@stichting-leiden.example",
+      tenantAdminPhone: "+31 71 521 4040",
+    },
     leExternalServices: ["Email", "Microsoft Account Profile", "OneDrive"],
     leExternalServiceDates: {
       Email: leDateRange,
@@ -140,6 +149,29 @@ export function buildLENS202600230FormData(): FormData {
       "Production request for the enterprise account previously preserved " +
       "under LNS-2026-00220. Same Stichting Leiden Holding B.V. context.",
   } as any;
+
+  // Stichting Leiden enterprise context — follow-on EPOC-ER under the
+  // same tenant as LNS-2026-00220 (preservation order). Prior tenant
+  // history surfaces 00220 as the related case when the RS opens the
+  // drawer.
+  const enterpriseContext: EnterpriseContext = {
+    triggers: ["class_account_check"],
+    manifestErrorPresent: false,
+    org: MOCK_ORGS["stichting-leiden-nl"],
+    users: [
+      {
+        identifierId: id2.id,
+        identifierValue: id2.value,
+        lastLogonLocation: "Amsterdam, NL",
+        geoResolutions30d: ["NL"],
+        mailboxRegion: "EU West",
+        oneDriveRegion: "EU West",
+        conflictOfLawJurisdictions: ["NL"],
+      },
+    ],
+    policyReviewRequired: false,
+    execReviewRequired: false,
+  };
 
   return {
     caseId: "LNS-2026-00230",
@@ -226,6 +258,7 @@ export function buildLENS202600230FormData(): FormData {
     userResponseReceived: "",
     dateOfUserResponse: undefined,
     identifiers: [id1, id2],
+    enterpriseContext,
     nonDisclosureOrders: [],
     startDate,
     endDate,

@@ -18,10 +18,12 @@
 import type {
   AccountIdentifier,
   CaseLegalContext,
+  EnterpriseContext,
   FormData,
 } from "../types/caseTypes";
 import { createDefaultIdentifierServices } from "../config/lensServicesConfig";
 import { computeSlaDueDate } from "../constants/slaConstants";
+import { MOCK_ORGS } from "../data/mockOrgs";
 
 const genId = () =>
   `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -99,7 +101,11 @@ export function buildLENS202500125FormData(): FormData {
     services: createDefaultIdentifierServices(),
     checkAccounts: {
       accountType: "Enterprise",
+      tenantId: "8b3f9c2e-7d14-4a26-9e87-f31a02d4c581",
       tenantPrimaryDomain: "globex-uk.example",
+      tenantAdminName: "Michael Thompson",
+      tenantAdminEmail: "tenant.admin@globex-uk.example",
+      tenantAdminPhone: "+44 20 7946 0480",
     },
     leExternalServices: ["Email", "OneDrive"],
     leExternalServiceDates: {
@@ -126,6 +132,30 @@ export function buildLENS202500125FormData(): FormData {
       actions: [],
     },
   } as any;
+
+  // Globex UK enterprise context — single-tenant preservation case.
+  // Drives the Enterprise Org Summary card in the case form and the
+  // attorney workspace's EnterpriseContextSection (org panel + user
+  // panel). Conflict of law is UK-only (LE country, tenant HQ, mailbox
+  // region all align) so no cross-border heat.
+  const enterpriseContext: EnterpriseContext = {
+    triggers: ["class_account_check"],
+    manifestErrorPresent: false,
+    org: MOCK_ORGS["globex-uk"],
+    users: [
+      {
+        identifierId: id1.id,
+        identifierValue: id1.value,
+        lastLogonLocation: "London, UK",
+        geoResolutions30d: ["GB"],
+        mailboxRegion: "UK South",
+        oneDriveRegion: "UK South",
+        conflictOfLawJurisdictions: ["GB"],
+      },
+    ],
+    policyReviewRequired: false,
+    execReviewRequired: false,
+  };
 
   return {
     caseId: "LNS-2025-00125",
@@ -208,6 +238,7 @@ export function buildLENS202500125FormData(): FormData {
     userResponseReceived: "",
     dateOfUserResponse: undefined,
     identifiers: [id1],
+    enterpriseContext,
     nonDisclosureOrders: [],
     startDate,
     endDate,
