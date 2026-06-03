@@ -43,6 +43,7 @@ import {
 } from "lucide-react";
 import { cn } from "../ui/utils";
 import { MICROSOFT_SERVICES_CONFIG } from "../../config/microsoftServices";
+import { LENS_SERVICES } from "../../config/lensServicesConfig";
 import {
   IDENTIFIER_TYPES,
   IDENTIFIER_FORMAT_RULES,
@@ -150,7 +151,10 @@ export function AddIdentifierDialog({
     identifierType &&
     validation.valid &&
     service &&
-    dataCategories.length > 0 &&
+    // Data Categories is OPTIONAL — full service + category configuration
+    // happens in the Fulfillment Wizard's Step 2. Requiring it here forced
+    // the user to make decisions they may not have yet and blocked the
+    // common "I just need this identifier in scope" flow.
     (!isSupplemental || linkedIdentifierId);
 
   // Get available services for supplemental (from linked identifier)
@@ -347,8 +351,8 @@ export function AddIdentifierDialog({
               <div className="sm:col-span-2">
                 <p className="text-xs text-[#605e5c] font-medium mb-2">
                   <AlertCircle className="w-3 h-3 inline-block mr-1" />
-                  Required: Specify Microsoft Service and Data Categories for
-                  fulfillment
+                  Specify a Microsoft Service. Data Categories are optional
+                  — full configuration lives in the Fulfillment Wizard.
                 </p>
               </div>
               <ServicePicker
@@ -377,8 +381,9 @@ export function AddIdentifierDialog({
               <div className="sm:col-span-3">
                 <p className="text-xs text-[#605e5c] font-medium mb-2">
                   <AlertCircle className="w-3 h-3 inline-block mr-1" />
-                  Required: Link to LE-provided identifier and specify
-                  associated service/category
+                  Link to an LE-provided identifier and pick a service.
+                  Data Categories are optional — full configuration lives
+                  in the Fulfillment Wizard.
                 </p>
               </div>
 
@@ -542,6 +547,19 @@ export function AddIdentifierDialog({
                 }}
                 open={serviceOpen}
                 onOpenChange={setServiceOpen}
+                // When Account Found is on, filter the dropdown to services
+                // tagged with the chosen account type (Consumer or
+                // Enterprise) — matches the "Add Service" pattern in the
+                // Fulfillment Wizard, where each picker row is scoped to
+                // the identifier's account type.
+                filterByAccountType={
+                  supplementalAccountFound
+                    ? supplementalAccountType
+                    : undefined
+                }
+                // Fall-back paths used when accountType isn't applicable
+                // (Account Found = off, or the legacy enabledServiceKeys
+                // flow). Account-type filtering takes precedence when set.
                 allServices={linkedEnabledServices.length === 0}
                 enabledServiceKeys={linkedEnabledServices}
                 disabled={!linkedIdentifierId}
@@ -604,6 +622,7 @@ function ServicePicker({
   allServices,
   enabledServiceKeys,
   disabled,
+  filterByAccountType,
 }: {
   value: string;
   onChange: (val: string) => void;
@@ -612,13 +631,27 @@ function ServicePicker({
   allServices?: boolean;
   enabledServiceKeys?: string[];
   disabled?: boolean;
+  /** When set, filter the dropdown to services in LENS_SERVICES whose
+   *  `accountType` matches. Takes precedence over the legacy
+   *  `allServices` / `enabledServiceKeys` paths. Mirrors the Fulfillment
+   *  Wizard's per-identifier service routing. */
+  filterByAccountType?: "Consumer" | "Enterprise";
 }) {
-  const serviceEntries = allServices
-    ? Object.entries(MICROSOFT_SERVICES_CONFIG)
-    : (enabledServiceKeys || []).map((key) => [
-        key,
-        MICROSOFT_SERVICES_CONFIG[key as keyof typeof MICROSOFT_SERVICES_CONFIG],
-      ]).filter(([_, v]) => v);
+  // Account-type filtering uses LENS_SERVICES (22 tagged services) so
+  // the dropdown shows exactly what the Fulfillment Wizard would route
+  // for an identifier of that type — no enabledServiceKeys intermediary,
+  // no MICROSOFT_SERVICES_CONFIG (which is a smaller, untagged catalog).
+  const serviceEntries: Array<[string, { name: string; description?: string; icon?: string }]> =
+    filterByAccountType
+      ? LENS_SERVICES.filter((s) => s.accountType === filterByAccountType).map(
+          (s) => [s.key, { name: s.name, description: filterByAccountType, icon: s.icon }],
+        )
+      : allServices
+        ? Object.entries(MICROSOFT_SERVICES_CONFIG)
+        : (enabledServiceKeys || []).map((key) => [
+            key,
+            MICROSOFT_SERVICES_CONFIG[key as keyof typeof MICROSOFT_SERVICES_CONFIG],
+          ]).filter(([_, v]) => v) as Array<[string, any]>;
 
   return (
     <div className="space-y-1.5">
@@ -637,9 +670,14 @@ function ServicePicker({
             )}
           >
             {value
-              ? MICROSOFT_SERVICES_CONFIG[
+              ? // Resolve the display name from whichever catalog the value
+                // came from — LENS_SERVICES for account-type-filtered picks,
+                // MICROSOFT_SERVICES_CONFIG for the legacy paths.
+                MICROSOFT_SERVICES_CONFIG[
                   value as keyof typeof MICROSOFT_SERVICES_CONFIG
-                ]?.name || value
+                ]?.name ||
+                LENS_SERVICES.find((s) => s.key === value)?.name ||
+                value
               : "Select service..."}
             <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
           </Button>
@@ -707,7 +745,7 @@ function DataCategoryPicker({
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-[#323130] font-semibold">
-        Data Categories *
+        Data Categories
       </Label>
       <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger asChild>
