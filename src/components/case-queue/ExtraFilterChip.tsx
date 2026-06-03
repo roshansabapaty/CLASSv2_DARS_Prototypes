@@ -28,6 +28,7 @@ import type {
   WorkflowStageValue,
   CaseStatusValue,
   CountryValue,
+  JurisdictionValue,
   RequestTypeValue,
   RequestSubTypeValue,
   ServicesValue,
@@ -53,6 +54,7 @@ export interface ExtraFilterChipProps {
   crimeOptions: string[];
   caseStatusOptions: string[];
   countryOptions: string[];
+  jurisdictionOptions: string[];
   requestTypeOptions: string[];
   requestSubTypeOptions?: string[];
   servicesOptions?: string[];
@@ -70,6 +72,7 @@ export function ExtraFilterChip({
   crimeOptions,
   caseStatusOptions,
   countryOptions,
+  jurisdictionOptions,
   requestTypeOptions,
   requestSubTypeOptions = [],
   servicesOptions = [],
@@ -126,6 +129,7 @@ export function ExtraFilterChip({
           crimeOptions={crimeOptions}
           caseStatusOptions={caseStatusOptions}
           countryOptions={countryOptions}
+          jurisdictionOptions={jurisdictionOptions}
           requestTypeOptions={requestTypeOptions}
           requestSubTypeOptions={requestSubTypeOptions}
           servicesOptions={servicesOptions}
@@ -147,6 +151,7 @@ interface FilterValueControlProps {
   crimeOptions: string[];
   caseStatusOptions: string[];
   countryOptions: string[];
+  jurisdictionOptions: string[];
   requestTypeOptions: string[];
   requestSubTypeOptions?: string[];
   servicesOptions?: string[];
@@ -160,6 +165,7 @@ export function FilterValueControl({
   crimeOptions,
   caseStatusOptions,
   countryOptions,
+  jurisdictionOptions,
   requestTypeOptions,
   requestSubTypeOptions = [],
   servicesOptions = [],
@@ -228,6 +234,15 @@ export function FilterValueControl({
           value={value as CountryValue}
           onChange={onChange}
           options={countryOptions.map((c) => ({ key: c, label: c }))}
+        />
+      );
+    case "jurisdiction":
+      return (
+        <MultiCheckControl
+          label="Jurisdiction"
+          value={value as JurisdictionValue}
+          onChange={onChange}
+          options={jurisdictionOptions.map((j) => ({ key: j, label: j }))}
         />
       );
     case "requestType":

@@ -31,6 +31,7 @@ export interface AdvancedFiltersPanelProps {
   crimeOptions: string[];
   caseStatusOptions: string[];
   countryOptions: string[];
+  jurisdictionOptions: string[];
   requestTypeOptions: string[];
   requestSubTypeOptions?: string[];
   servicesOptions?: string[];
@@ -54,6 +55,7 @@ export function AdvancedFiltersPanel({
   crimeOptions,
   caseStatusOptions,
   countryOptions,
+  jurisdictionOptions,
   requestTypeOptions,
   requestSubTypeOptions = [],
   servicesOptions = [],
@@ -164,6 +166,7 @@ export function AdvancedFiltersPanel({
                               crimeOptions={crimeOptions}
                               caseStatusOptions={caseStatusOptions}
                               countryOptions={countryOptions}
+                              jurisdictionOptions={jurisdictionOptions}
                               requestTypeOptions={requestTypeOptions}
                               requestSubTypeOptions={requestSubTypeOptions}
                               servicesOptions={servicesOptions}

@@ -47,6 +47,7 @@ export type WorkflowStageValue = Array<"triage" | "fulfillment" | "collection">;
 // multi-select to match the chip pattern used by Crime / Account Type.
 export type CaseStatusValue = string[]; // queue item caseStage values
 export type CountryValue = string[];
+export type JurisdictionValue = string[]; // e.g. "Federal", "State", "National"
 export type RequestTypeValue = string[];
 export type RequestSubTypeValue = string[];
 export type ServicesValue = string[];
@@ -69,6 +70,7 @@ export type ExtraFilterValue =
   | WorkflowStageValue
   | CaseStatusValue
   | CountryValue
+  | JurisdictionValue
   | RequestTypeValue
   | RequestSubTypeValue
   | ServicesValue
@@ -295,6 +297,29 @@ export const FILTER_CATALOG: ReadonlyArray<FilterDef> = [
     },
   } as FilterDef<CountryValue>,
 
+  // ── Jurisdiction (paired with Country for two-tier geo filtering) ───
+  // Sub-property of Country (Federal / State / National / Provincial /
+  // Local). Useful for routing splits — e.g. surfacing only Federal
+  // cases inside the US bucket, or only Länder/State-level demands.
+  {
+    id: "jurisdiction",
+    label: "Jurisdiction",
+    group: "Case meta",
+    defaultValue: [] as JurisdictionValue,
+    isActive: (value) => (value as JurisdictionValue).length > 0,
+    predicate: (c, value) => {
+      const selected = value as JurisdictionValue;
+      if (selected.length === 0) return true;
+      return selected.includes(c.jurisdiction);
+    },
+    summary: (value) => {
+      const v = value as JurisdictionValue;
+      if (v.length === 0) return "Any";
+      if (v.length === 1) return v[0];
+      return `${v.length} selected`;
+    },
+  } as FilterDef<JurisdictionValue>,
+
   // ── Request Type (moved out of the toolbar dropdown row) ────────────
   {
     id: "requestType",
@@ -480,6 +505,16 @@ export function distinctCaseStatuses(cases: CaseQueueItem[]): string[] {
 export function distinctCountries(cases: CaseQueueItem[]): string[] {
   const set = new Set<string>();
   for (const c of cases) if (c.country) set.add(c.country);
+  return Array.from(set).sort();
+}
+
+/** Jurisdiction catalog — distinct jurisdiction values in the queue
+ *  (Federal / State / National / Provincial / Local etc.). Ordered
+ *  alphabetically since there's no canonical hierarchy that holds
+ *  across every country in the catalog. */
+export function distinctJurisdictions(cases: CaseQueueItem[]): string[] {
+  const set = new Set<string>();
+  for (const c of cases) if (c.jurisdiction) set.add(c.jurisdiction);
   return Array.from(set).sort();
 }
 

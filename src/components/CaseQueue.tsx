@@ -66,6 +66,7 @@ import { getCaseIdentifierValues } from "../utils/caseDataRegistry";
 // BadgeFilterPopover removed — operational-badges filter now mounted
 // through the catalog-driven "+ Add filter" menu (`extraFilterCatalog`).
 import { SavedViewsMenu } from "./case-queue/SavedViewsMenu";
+import { CaseQueueSortByMenu } from "./case-queue/CaseQueueSortByMenu";
 import { SaveViewDialog } from "./case-queue/SaveViewDialog";
 import { AddFilterMenu } from "./case-queue/AddFilterMenu";
 import { ExtraFilterChip } from "./case-queue/ExtraFilterChip";
@@ -517,6 +518,9 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   const availableCountries = Array.from(
     new Set(cases.map((c) => c.country).filter(Boolean)),
   ).sort((a, b) => a.localeCompare(b));
+  const availableJurisdictions = Array.from(
+    new Set(cases.map((c) => c.jurisdiction).filter(Boolean)),
+  ).sort((a, b) => a.localeCompare(b));
   const availableRequestTypes = Array.from(
     new Set(cases.map((c) => c.requestType).filter(Boolean)),
   ).sort((a, b) => a.localeCompare(b));
@@ -864,6 +868,12 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           onAdd={handleAddExtraFilter}
           onOpenAdvanced={() => setAdvancedPanelOpen(true)}
         />
+
+        {/* Sort By — drives the same `sortState` the Detailed-list
+            column headers use. Surfaced here so Card-view / Preview-pane
+            users (who have no column headers to click) can still pick a
+            sort order. */}
+        <CaseQueueSortByMenu sortState={sortState} onChange={setSortState} />
       </div>
       {/* Active extra-filter chips — one chip per filter mounted via
           the "+ Add filter" menu or the Advanced Filters panel. The
@@ -886,6 +896,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
               crimeOptions={distinctCrimes(cases)}
               caseStatusOptions={availableCaseStatuses}
               countryOptions={availableCountries}
+              jurisdictionOptions={availableJurisdictions}
               requestTypeOptions={availableRequestTypes}
               requestSubTypeOptions={availableRequestSubTypes}
               servicesOptions={availableServices}
@@ -1145,6 +1156,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
         crimeOptions={distinctCrimes(cases)}
         caseStatusOptions={availableCaseStatuses}
         countryOptions={availableCountries}
+        jurisdictionOptions={availableJurisdictions}
         requestTypeOptions={availableRequestTypes}
         requestSubTypeOptions={availableRequestSubTypes}
         servicesOptions={availableServices}
