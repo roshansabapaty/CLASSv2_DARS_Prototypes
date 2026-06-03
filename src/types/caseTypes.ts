@@ -152,7 +152,7 @@ export interface UserNotificationRecord {
   // ── LE phase: when LE was notified + when LE responded ──────────────
   dateOfLeNotification?: Date;
   leResponseDueDate?: Date;
-  /** "Proceed with notification" | "Non-Disclosure Order" | "None" |
+  /** "Proceed with notification" | "Non-Disclosure Tracking" | "None" |
    *  "Withdrawn". Same enum the legacy `leResponseReceived` used. */
   leResponseReceived?: string;
   dateOfLeResponse?: Date;
@@ -988,6 +988,31 @@ export interface AccountIdentifier {
    *  writes the same range onto every internal service derived from that
    *  external name. Keyed by the external name. */
   leExternalServiceDates?: Record<string, { start: string; end: string }>;
+  /** Optional structured breakdown of the LE submission's per-service
+   *  data-category requests. EU eEvidence Form 1 (and similar free-text
+   *  envelopes) lets the IA write category names + data-type lists +
+   *  a per-category date range underneath each service. The structure
+   *  is intentionally loose: `groupName` and `items` are the LE's
+   *  verbatim text, NOT keys validated against the LENS catalog —
+   *  category-name validation happens at resolution time via
+   *  `validateIdentifier.ts`'s `le-category-unmapped` check.
+   *
+   *  Keyed by the external service name (matches the `leExternalServices`
+   *  entry). Empty / undefined when the LE submission only listed the
+   *  service without breaking out categories. */
+  leExternalCategoryRequests?: Record<
+    string,
+    Array<{
+      /** LE's verbatim category name (e.g., "Transmission Logs",
+       *  "Group Posts"). May not match any LENS category group key. */
+      groupName: string;
+      /** LE's verbatim data-type names under this category. */
+      items: string[];
+      /** Optional per-category date range. When absent, the per-service
+       *  range from `leExternalServiceDates` applies. */
+      dateRange?: { start: string; end: string };
+    }>
+  >;
   /** Audit trail of RS substitutions for unresolved external services
    *  (when the resolver returns wrong-account-type or unmapped-name and
    *  the RS picks an alternative internal service via the Replace flow).
@@ -1261,6 +1286,36 @@ export interface EnterpriseOrgContext {
   adminContact?: { name: string; email: string; phone: string };
   sharePointRegion?: string;
   defaultStorageRegion?: string;
+  /** When the tenant was provisioned in CLASS / Microsoft tenant lifecycle.
+   *  Sourced from CLASS Org Profile in production. Rendered in the OrgPanel
+   *  with timezone — e.g., "Aug 4, 2018 · 2:45 PM UTC". */
+  tenantCreatedAt?: Date;
+  /** Tenant's registered mailing address. Multi-line value in the OrgPanel.
+   *  Modeled loosely on `agencyAddress` (issuing-authority) + `country` since
+   *  tenant mailing addresses are international by default. */
+  tenantMailingAddress?: {
+    street?: string;
+    number?: string;
+    city?: string;
+    stateProvince?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  /** Tenant's primary business phone (E.164 format preferred). Distinct
+   *  from `adminContact.phone` which is the named-admin contact. */
+  tenantPhone?: string;
+  /** All registered domains for this tenant. The "primary" flag carries
+   *  the same value as `tenantPrimaryDomain` so the legacy field can be
+   *  derived from `domains` when both are present. `verified` reflects
+   *  Microsoft's domain-verification status; `domainType` distinguishes
+   *  the auto-provisioned `*.onmicrosoft.com` domain from custom
+   *  organization-registered domains. */
+  domains?: Array<{
+    name: string;
+    verified: boolean;
+    isPrimary: boolean;
+    domainType: "onmicrosoft" | "custom";
+  }>;
   /** Which external system each field came from (free-form audit hint). */
   provenance?: Partial<Record<keyof EnterpriseOrgContext, string>>;
 }

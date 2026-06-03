@@ -158,6 +158,38 @@ export function isMultiTenantCase(c: FormData): boolean {
   return getEnterpriseOrgs(c).length > 1;
 }
 
+/** Look up the parent-tenant `EnterpriseOrgContext` for a given TPID.
+ *
+ *  TPID rollups (e.g., TPID-CONTOSO) typically have a holding-company
+ *  tenant in CLASS Org Profile (e.g., "Contoso Holdings") with its own
+ *  domains, mailing address, and admin contact distinct from any child
+ *  tenant. The OrgPanel surfaces those domains alongside the child
+ *  tenant's so the attorney can see both registered domain sets when
+ *  scoping an action to "all under TPID-X".
+ *
+ *  Production wires this through `getOrgByTpid` on the CLASS / LERS
+ *  swap-out source (see priorTenantLookup.ts pattern). The prototype
+ *  reads from `MOCK_ORGS` directly, matching on `tenantId === parentTpid`
+ *  by convention — the holding-company tenant seeds itself with its
+ *  TPID as its `tenantId`.
+ *
+ *  Returns `undefined` when no parent record exists (single-tenant TPIDs
+ *  or seeds that haven't been backfilled with a holding-company entry). */
+export function getParentTenantOrg(
+  parentTpid: string | undefined,
+): EnterpriseOrgContext | undefined {
+  if (!parentTpid) return undefined;
+  // Import lazily to avoid pulling MOCK_ORGS into every consumer of
+  // caseEscalation.ts (the mock orgs map is moderately large; we only
+  // need it on the OrgPanel render path).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { MOCK_ORGS } = require("../data/mockOrgs") as typeof import("../data/mockOrgs");
+  for (const org of Object.values(MOCK_ORGS) as EnterpriseOrgContext[]) {
+    if (org.tenantId === parentTpid && !org.parentTpid) return org;
+  }
+  return undefined;
+}
+
 // ── Phase 1 write migration — unified-scope helpers ─────────────────
 //
 // Every authority / specialist write into FormData should flow through
