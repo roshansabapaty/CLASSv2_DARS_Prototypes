@@ -31,9 +31,11 @@ async function main() {
   await addFilterBtn.click({ force: true });
   await page.waitForTimeout(500);
 
+  // The popover renders buttons inside a panel — query everything
+  // inside the popover with text content.
   const allMenuItems = await page.evaluate(() => {
     const items = document.querySelectorAll(
-      '[role="menuitem"], [cmdk-item], [role="option"]',
+      '[data-radix-popper-content-wrapper] button, [data-radix-popper-content-wrapper] [role="menuitem"]',
     );
     return Array.from(items).map((i) => (i.textContent ?? "").trim());
   });
@@ -42,10 +44,12 @@ async function main() {
       allMenuItems.some((t) => /Jurisdiction/i.test(t)) ? "YES" : "NO"
     }`,
   );
+  log(`(menu items: ${allMenuItems.slice(0, 12).join(" · ")})`);
 
-  // Click the Jurisdiction option
+  // Click the Jurisdiction option — match any button containing the text
   const jurItem = page
-    .locator('[role="menuitem"]:has-text("Jurisdiction"), [cmdk-item]:has-text("Jurisdiction"), [role="option"]:has-text("Jurisdiction")')
+    .locator('[data-radix-popper-content-wrapper] button')
+    .filter({ hasText: /^Jurisdiction$/ })
     .first();
   await jurItem.click({ force: true });
   await page.waitForTimeout(800);
@@ -58,9 +62,30 @@ async function main() {
   log(`Jurisdiction chip rendered: YES`);
 
   // ── 3. The popover should list distinct jurisdiction values
+  // First, try to explicitly click the chip to force the popover open
+  // (in case defaultOpen didn't fire).
+  await chip.click({ force: true });
+  await page.waitForTimeout(600);
+
+  const popoverDebug = await page.evaluate(() => {
+    const wrappers = document.querySelectorAll(
+      '[data-radix-popper-content-wrapper]',
+    );
+    return Array.from(wrappers).map((w) => ({
+      visible: w.offsetHeight > 0,
+      labels: Array.from(w.querySelectorAll("label")).length,
+      textSnippet: (w.textContent ?? "").slice(0, 120).replace(/\s+/g, " "),
+    }));
+  });
+  log(`Popover wrappers debug: ${JSON.stringify(popoverDebug)}`);
+
   const popoverItems = await page.evaluate(() => {
-    const opts = document.querySelectorAll('[role="dialog"] label, [role="dialog"] [role="checkbox"]');
-    return Array.from(opts).map((o) => (o.textContent ?? "").trim()).filter(Boolean);
+    const opts = document.querySelectorAll(
+      '[data-radix-popper-content-wrapper] label',
+    );
+    return Array.from(opts)
+      .map((o) => (o.textContent ?? "").trim())
+      .filter(Boolean);
   });
   log(`Distinct jurisdictions visible in popover: ${popoverItems.length}`);
   log(`  → ${popoverItems.slice(0, 8).join(" · ")}`);
@@ -74,7 +99,7 @@ async function main() {
   if (popoverItems.length > 0) {
     // Click the first checkbox/label
     const firstOpt = page
-      .locator('[role="dialog"] label, [role="dialog"] [role="checkbox"]')
+      .locator('[data-radix-popper-content-wrapper] label')
       .first();
     await firstOpt.click({ force: true });
     await page.waitForTimeout(700);

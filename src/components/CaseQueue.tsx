@@ -52,10 +52,15 @@ import {
 import { CaseQueueListRow } from "./case-queue/CaseQueueListRow";
 import { CaseQueueListHeader } from "./case-queue/CaseQueueListHeader";
 import {
+  CASE_LIST_COLUMNS,
   defaultColumnWidths,
   sanitizeColumnWidths,
   buildSortComparator,
+  defaultColumnOrder,
+  sanitizeColumnOrder,
+  applyColumnOrder,
   type ColumnId,
+  type ColumnOrder,
   type ColumnWidths,
   type SortState,
 } from "./case-queue/caseListColumns";
@@ -91,6 +96,7 @@ import {
 } from "./case-queue/savedViews";
 import { PageContainer } from "./layout/PageContainer";
 import { CaseQueuePreviewPane } from "./case-queue/CaseQueuePreviewPane";
+import { useDragAutoScroll } from "../hooks/useDragAutoScroll";
 import { toast } from "sonner@2.0.3";
 import { useStatusAnnouncer } from "./StatusAnnouncer";
 
@@ -222,6 +228,10 @@ interface CaseQueueProps {
 // pane needs at least ~1024 px so the list + pane + LeftNavRail all fit.
 const VIEW_MODE_STORAGE_KEY = "dars.caseQueue.viewMode";
 const COLUMN_WIDTHS_STORAGE_KEY = "dars.caseQueue.columnWidths";
+// Per-surface column order — each hero page persists independently so
+// the Cases queue and Attorney Dashboard can drift. See the matching
+// constant in AttorneyDashboard.tsx.
+const COLUMN_ORDER_STORAGE_KEY = "dars.caseQueue.columnOrder";
 const PREVIEW_PANE_MIN_VIEWPORT = 1024;
 
 function readPersistedColumnWidths(): ColumnWidths {
@@ -231,6 +241,16 @@ function readPersistedColumnWidths(): ColumnWidths {
     return sanitizeColumnWidths(JSON.parse(raw));
   } catch {
     return defaultColumnWidths();
+  }
+}
+
+function readPersistedColumnOrder(): ColumnOrder {
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) return defaultColumnOrder(CASE_LIST_COLUMNS);
+    return sanitizeColumnOrder(JSON.parse(raw), CASE_LIST_COLUMNS);
+  } catch {
+    return defaultColumnOrder(CASE_LIST_COLUMNS);
   }
 }
 
@@ -291,6 +311,30 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
       return next;
     });
   };
+  // User-customised column order — drag-reorder + Fluent menu both write
+  // through `handleReorderColumns`. The order applies to both the
+  // Detailed-list (full density) and the Preview-pane (dense density)
+  // since the user expects one consistent column sequence per surface.
+  const [columnOrder, setColumnOrder] = useState<ColumnOrder>(() =>
+    readPersistedColumnOrder(),
+  );
+  const handleReorderColumns = (next: ColumnOrder) => {
+    setColumnOrder(next);
+    try {
+      localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* localStorage may be blocked */
+    }
+  };
+  const orderedColumns = useMemo(
+    () => applyColumnOrder(CASE_LIST_COLUMNS, columnOrder),
+    [columnOrder],
+  );
+  // Auto-scroll the table while dragging a column past the visible
+  // edge — the table is the only horizontally-scrollable element on
+  // these pages, so the ref points at the role="table" wrapper below.
+  const listTableRef = useRef<HTMLDivElement | null>(null);
+  useDragAutoScroll(listTableRef, { axis: "x" });
   // Multi-select for batch Pick / Release / Assign.
   const [bulkSelectedCaseIds, setBulkSelectedCaseIds] = useState<Set<string>>(
     () => new Set(),
@@ -939,6 +983,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
         </Card>
       ) : effectiveViewMode === "list" ? (
         <div
+          ref={listTableRef}
           role="table"
           aria-label="Case list — detailed"
           aria-rowcount={sortedCases.length + 1 /* +1 for the header row */}
@@ -967,6 +1012,8 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
             onColumnResize={setColumnWidth}
             sortState={sortState}
             onSort={handleColumnSort}
+            columns={orderedColumns}
+            onReorder={handleReorderColumns}
           />
           {sortedCases.map((caseItem, idx) => {
             const priorityConfig = getPriorityConfig(caseItem.casePriority);
@@ -982,6 +1029,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                 onOpen={(id) => handleOpenCase(id)}
                 ariaRowIndex={idx + 2 /* +1 for the header row offset */}
                 columnWidths={columnWidths}
+                columns={orderedColumns}
               />
             );
           })}
@@ -1022,6 +1070,8 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                 density="dense"
                 sortState={sortState}
                 onSort={handleColumnSort}
+                columns={orderedColumns}
+                onReorder={handleReorderColumns}
               />
               {sortedCases.map((caseItem, idx) => {
                 const priorityConfig = getPriorityConfig(caseItem.casePriority);
@@ -1038,6 +1088,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                     onSelect={(id) => setSelectedPreviewCaseId(id)}
                     onOpen={(id) => handleOpenCase(id)}
                     ariaRowIndex={idx + 2}
+                    columns={orderedColumns}
                   />
                 );
               })}

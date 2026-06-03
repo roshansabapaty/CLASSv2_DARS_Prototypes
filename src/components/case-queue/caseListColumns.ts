@@ -10,7 +10,13 @@
 import {
   escalationStatusWeight,
   getEscalationSummaryForCase,
+  gfrQueueChipForCase,
 } from "../../utils/escalationHelpers";
+import { getAllSnapshot as getAllCorrespondenceSnapshot } from "../../state/correspondenceStore";
+import {
+  heldForAttorneyOutbounds,
+  unreadInboxCount,
+} from "../correspondence/correspondenceEngine";
 
 export type ColumnId =
   | "case-id"
@@ -53,22 +59,23 @@ export interface ColumnDef {
 }
 
 export const CASE_LIST_COLUMNS: ColumnDef[] = [
-  { id: "case-id",              label: "Case ID",              defaultWidth: 160, minWidth: 120, maxWidth: 280 },
+  { id: "case-id",              label: "Case ID",              defaultWidth: 160, minWidth: 120, maxWidth: 280, sortable: true },
   // Atomic operational columns — replaced the bundled "Badges" cell.
   // Each surfaces a single operational signal so the table stays
-  // scannable per-column. Sortable when the signal carries a useful
-  // ordering (unread count, NDO reminder date).
-  { id: "unread",               label: "Unread",               defaultWidth: 90,  minWidth: 70,  maxWidth: 140 },
-  { id: "threat-to-life",       label: "Threat to Life",       defaultWidth: 110, minWidth: 90,  maxWidth: 160 },
-  { id: "enterprise",           label: "Enterprise",           defaultWidth: 110, minWidth: 90,  maxWidth: 160 },
-  { id: "gfr-hold",             label: "GFR Hold",             defaultWidth: 120, minWidth: 90,  maxWidth: 180 },
-  { id: "attorney-review",      label: "Attorney Review",      defaultWidth: 140, minWidth: 110, maxWidth: 200 },
+  // scannable per-column. All columns are sortable; the comparator
+  // ranks present-signal rows above em-dash rows for the operational
+  // chips (Unread / Threat / Enterprise / GFR / Attorney-Review / NDO).
+  { id: "unread",               label: "Unread",               defaultWidth: 90,  minWidth: 70,  maxWidth: 140, sortable: true },
+  { id: "threat-to-life",       label: "Threat to Life",       defaultWidth: 110, minWidth: 90,  maxWidth: 160, sortable: true },
+  { id: "enterprise",           label: "Enterprise",           defaultWidth: 110, minWidth: 90,  maxWidth: 160, sortable: true },
+  { id: "gfr-hold",             label: "GFR Hold",             defaultWidth: 120, minWidth: 90,  maxWidth: 180, sortable: true },
+  { id: "attorney-review",      label: "Attorney Review",      defaultWidth: 140, minWidth: 110, maxWidth: 200, sortable: true },
   { id: "ndo-reminder",         label: "NDO Reminder",         defaultWidth: 130, minWidth: 100, maxWidth: 200, sortable: true },
   { id: "priority",             label: "Priority",             defaultWidth: 140, minWidth: 110, maxWidth: 200, sortable: true },
   { id: "due-date",             label: "Due Date",             defaultWidth: 140, minWidth: 110, maxWidth: 220, sortable: true },
-  { id: "country",              label: "Country / Jurisdiction", defaultWidth: 180, minWidth: 120, maxWidth: 280 },
-  { id: "identifiers",          label: "Identifiers",          defaultWidth: 96,  minWidth: 72,  maxWidth: 160 },
-  { id: "services",             label: "Services",             defaultWidth: 240, minWidth: 140, maxWidth: 480 },
+  { id: "country",              label: "Country / Jurisdiction", defaultWidth: 180, minWidth: 120, maxWidth: 280, sortable: true },
+  { id: "identifiers",          label: "Identifiers",          defaultWidth: 96,  minWidth: 72,  maxWidth: 160, sortable: true },
+  { id: "services",             label: "Services",             defaultWidth: 240, minWidth: 140, maxWidth: 480, sortable: true },
   { id: "stage",                label: "Stage",                defaultWidth: 140, minWidth: 100, maxWidth: 240, sortable: true },
   // People + escalation columns — the RS who owns the case, the
   // active SP-side escalation role chip (Attorney / Peer / LENS Lead),
@@ -126,6 +133,44 @@ const STAGE_WEIGHT: Record<string, number> = {
   "Resolved": 9,
 };
 
+// ── Per-case lookups used by the operational-signal comparators ──────
+// Each helper reads from a module-level store so the comparator stays a
+// pure (a, b) -> number function. Identical to what the row components
+// pull at render time — sort by what the user is actually looking at.
+
+/** Unread inbox count for the case. Returns 0 when no correspondence
+ *  has been recorded for it. */
+function unreadCountForCase(caseId: string): number {
+  const items = getAllCorrespondenceSnapshot().get(caseId);
+  if (!items) return 0;
+  return unreadInboxCount(items);
+}
+
+/** Held-for-attorney outbound count for the case. Approximation of the
+ *  "Attorney Review" column (which also folds in unread inbound items
+ *  on an active escalation; that side requires registry materialisation
+ *  and is intentionally skipped here to keep sorting cheap). */
+function attorneyReviewCountForCase(caseId: string): number {
+  const items = getAllCorrespondenceSnapshot().get(caseId);
+  if (!items) return 0;
+  return heldForAttorneyOutbounds(items).length;
+}
+
+/** Tier weight for the GFR Hold chip — higher = more urgent. Cases
+ *  without a GFR chip return 0 (sort to the bottom on asc, top on
+ *  desc per the comparator's flip below). */
+function gfrTierWeightForCase(caseId: string): number {
+  const chip = gfrQueueChipForCase(caseId);
+  if (!chip) return 0;
+  switch (chip.tier) {
+    case "alertRed":     return 4;
+    case "warnAmber":    return 3;
+    case "successGreen": return 2;
+    case "brand":        return 1;
+    default:             return 0;
+  }
+}
+
 /** Build a `(a, b) => number` comparator for the given sort state.
  *  The `item` shape is `CaseQueueItem` — we use a structural subset so
  *  consumers don't have to import the full type. */
@@ -138,6 +183,13 @@ export function buildSortComparator(
   caseStage: string;
   assigneeName?: string;
   nextNdoReminderAt?: string;
+  country?: string;
+  jurisdiction?: string;
+  isThreatToLife?: boolean;
+  hasEnterpriseAccounts?: boolean;
+  accountExistenceChecked?: boolean;
+  identifierCount?: number;
+  servicesRequested?: string[];
 }>(a: T, b: T) => number {
   if (!sortState) {
     return () => 0;
@@ -227,6 +279,70 @@ export function buildSortComparator(
         else cmp = ra.localeCompare(rb);
         break;
       }
+      case "case-id": {
+        // Lexicographic on the LNS-YYYY-NNNN case id.
+        cmp = a.caseId.localeCompare(b.caseId);
+        break;
+      }
+      case "unread": {
+        // Numeric on unread inbox count. Em-dash (count = 0) rows go
+        // to the bottom on asc and the top on desc — matches the
+        // pattern: clicking asc surfaces the loudest cases first, the
+        // chevron flip below handles the rest.
+        cmp = unreadCountForCase(a.caseId) - unreadCountForCase(b.caseId);
+        break;
+      }
+      case "threat-to-life": {
+        // Boolean — flagged cases (true) sort below unflagged (false)
+        // on asc; the chevron flips for desc. Net effect of the first
+        // click is "show me the threats", same as Priority.
+        cmp = (a.isThreatToLife ? 1 : 0) - (b.isThreatToLife ? 1 : 0);
+        break;
+      }
+      case "enterprise": {
+        // Boolean — Enterprise resolved (via Check Accounts) ranks
+        // above N/A. Mirrors the threat-to-life pattern.
+        const aw = a.accountExistenceChecked && a.hasEnterpriseAccounts ? 1 : 0;
+        const bw = b.accountExistenceChecked && b.hasEnterpriseAccounts ? 1 : 0;
+        cmp = aw - bw;
+        break;
+      }
+      case "gfr-hold": {
+        // Tier weight (alertRed > warnAmber > successGreen > brand) so
+        // the loudest GFR signal floats to the top on desc. No-chip
+        // cases weight 0 and bucket to the bottom on asc.
+        cmp = gfrTierWeightForCase(a.caseId) - gfrTierWeightForCase(b.caseId);
+        break;
+      }
+      case "attorney-review": {
+        cmp =
+          attorneyReviewCountForCase(a.caseId) -
+          attorneyReviewCountForCase(b.caseId);
+        break;
+      }
+      case "country": {
+        // Country/Jurisdiction is rendered as `${country} · ${jurisdiction}`
+        // so sort by that concatenation alphabetically. Empty values
+        // bucket to the bottom.
+        const aLabel = `${a.country ?? ""}${a.jurisdiction ? " " + a.jurisdiction : ""}`.trim();
+        const bLabel = `${b.country ?? ""}${b.jurisdiction ? " " + b.jurisdiction : ""}`.trim();
+        if (!aLabel && !bLabel) cmp = 0;
+        else if (!aLabel) return 1;
+        else if (!bLabel) return -1;
+        else cmp = aLabel.localeCompare(bLabel);
+        break;
+      }
+      case "identifiers": {
+        cmp = (a.identifierCount ?? 0) - (b.identifierCount ?? 0);
+        break;
+      }
+      case "services": {
+        // Numeric on service count. The cell renders chips with
+        // overflow ("+N more"), so count is the most intuitive sort
+        // key. Cases with 0 services bucket to the bottom on asc.
+        cmp = (a.servicesRequested?.length ?? 0) - (b.servicesRequested?.length ?? 0);
+        break;
+      }
       default:
         cmp = 0;
     }
@@ -239,6 +355,103 @@ export function buildSortComparator(
 
 /** Per-column current widths. Persisted to localStorage. */
 export type ColumnWidths = Record<ColumnId, number>;
+
+// ── Column ordering ──────────────────────────────────────────────────
+// Users can reorder columns by dragging headers or via the Fluent
+// MenuButton at the right edge of the header row. Each surface (Cases,
+// Attorney Dashboard) owns its own order; they persist separately so
+// the two pages can drift independently.
+
+/** Ordered list of column ids. Persisted to localStorage. */
+export type ColumnOrder = ColumnId[];
+
+/** Default column order — matches the source order of `CASE_LIST_COLUMNS`
+ *  so a never-customised user sees the spec's intended ordering. */
+export function defaultColumnOrder(
+  columns: ColumnDef[] = CASE_LIST_COLUMNS,
+): ColumnOrder {
+  return columns.map((c) => c.id);
+}
+
+/** Validate + sanitize a deserialised order array so a hand-edited
+ *  localStorage value (or a stale value from an older build) can't crash
+ *  render. Unknown ids are dropped; missing ids are appended at the end
+ *  so newly-added columns are forward-compatible. */
+export function sanitizeColumnOrder(
+  raw: unknown,
+  knownColumns: ColumnDef[] = CASE_LIST_COLUMNS,
+): ColumnOrder {
+  const known = new Set(knownColumns.map((c) => c.id));
+  const seen = new Set<ColumnId>();
+  const out: ColumnOrder = [];
+  if (Array.isArray(raw)) {
+    for (const id of raw) {
+      if (typeof id === "string" && known.has(id as ColumnId) && !seen.has(id as ColumnId)) {
+        out.push(id as ColumnId);
+        seen.add(id as ColumnId);
+      }
+    }
+  }
+  // Forward-compat: append any known columns the persisted order missed
+  // (e.g. brand-new column shipped after the user last saved).
+  for (const col of knownColumns) {
+    if (!seen.has(col.id)) {
+      out.push(col.id);
+      seen.add(col.id);
+    }
+  }
+  return out;
+}
+
+/** Project a column-definitions list into the user's preferred order.
+ *  Unknown order entries are dropped (filtered through the known
+ *  columns set); known columns missing from the order are appended at
+ *  the end (forward-compat for newly-added columns). */
+export function applyColumnOrder(
+  columns: ColumnDef[],
+  order: ColumnOrder | undefined,
+): ColumnDef[] {
+  if (!order || order.length === 0) return columns;
+  const byId = new Map(columns.map((c) => [c.id, c]));
+  const out: ColumnDef[] = [];
+  const seen = new Set<ColumnId>();
+  for (const id of order) {
+    const col = byId.get(id);
+    if (col && !seen.has(id)) {
+      out.push(col);
+      seen.add(id);
+    }
+  }
+  for (const col of columns) {
+    if (!seen.has(col.id)) {
+      out.push(col);
+      seen.add(col.id);
+    }
+  }
+  return out;
+}
+
+/** Move a column id from one index to another. Returns a fresh array;
+ *  no-ops when from === to or either index is out of range. */
+export function reorderColumn(
+  order: ColumnOrder,
+  fromIndex: number,
+  toIndex: number,
+): ColumnOrder {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= order.length ||
+    toIndex < 0 ||
+    toIndex >= order.length ||
+    fromIndex === toIndex
+  ) {
+    return order;
+  }
+  const next = order.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
 
 /** Build the default `columnWidths` map. Defaults to the main Case
  *  Queue's column set; pass `ATTORNEY_DASHBOARD_COLUMNS` (or any

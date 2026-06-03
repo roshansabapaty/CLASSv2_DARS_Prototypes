@@ -35,7 +35,25 @@ import {
   type ColumnWidths,
   type SortState,
   buildGridTemplate,
+  reorderColumn,
 } from "./caseListColumns";
+// Fluent v9 components used for the column-reorder Settings menu — the
+// a11y-first non-mouse path. Drag-and-drop on the header cell is the
+// mouse-first path; both write through the same `onReorder` callback.
+import {
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  MenuPopover,
+  MenuTrigger,
+  tokens,
+} from "@fluentui/react-components";
+import {
+  TableColumnTopBottomEditRegular,
+  ArrowUpRegular,
+  ArrowDownRegular,
+} from "@fluentui/react-icons";
 
 interface CaseQueueListHeaderProps {
   /** Total visible (filtered) case count — drives the select-all
@@ -81,6 +99,15 @@ interface CaseQueueListHeaderProps {
    *  Reviewer alongside the standard set. MUST match the `columns`
    *  prop on the paired `<CaseQueueListRow>`. */
   columns?: ColumnDef[];
+  /** Fires when the user reorders columns — either by dragging a header
+   *  cell onto a new position, or by clicking Move Up / Move Down in the
+   *  Fluent "Edit columns" Menu. Receives the new order as an array of
+   *  ColumnIds matching the visible column count. Parents persist this
+   *  to localStorage and thread it back via `columns` (which the parent
+   *  should compute via `applyColumnOrder`). When omitted, the header
+   *  renders read-only (no drag handles, no Settings menu).
+   */
+  onReorder?: (nextOrder: ColumnId[]) => void;
 }
 
 // Columns that survive density="dense" — derived from inspecting
@@ -109,7 +136,46 @@ export function CaseQueueListHeader({
   sortState,
   onSort,
   columns = CASE_LIST_COLUMNS,
+  onReorder,
 }: CaseQueueListHeaderProps) {
+  // ── Column drag-and-drop state ────────────────────────────────────
+  // dragIndex: which visible column is being dragged (null when idle)
+  // dropTargetIndex: where the dragged column would land if released now
+  //   (used to paint the Fluent-brand vertical drop indicator)
+  const [dragIndex, setDragIndex] = React.useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = React.useState<number | null>(null);
+  const handleDragStart = (idx: number) => (e: React.DragEvent) => {
+    if (!onReorder) return;
+    setDragIndex(idx);
+    e.dataTransfer.effectAllowed = "move";
+    // Some browsers refuse to start a drag without dataTransfer data set.
+    try { e.dataTransfer.setData("text/plain", String(idx)); } catch { /* noop */ }
+  };
+  const handleDragOver = (idx: number) => (e: React.DragEvent) => {
+    if (dragIndex === null) return;
+    e.preventDefault(); // allow drop
+    e.dataTransfer.dropEffect = "move";
+    if (dropTargetIndex !== idx) setDropTargetIndex(idx);
+  };
+  const handleDrop = (idx: number) => (e: React.DragEvent) => {
+    if (dragIndex === null || !onReorder) return;
+    e.preventDefault();
+    const currentOrder = columns.map((c) => c.id);
+    const next = reorderColumn(currentOrder, dragIndex, idx);
+    if (next !== currentOrder) onReorder(next);
+    setDragIndex(null);
+    setDropTargetIndex(null);
+  };
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDropTargetIndex(null);
+  };
+  const moveColumn = (fromIndex: number, toIndex: number) => {
+    if (!onReorder) return;
+    const currentOrder = columns.map((c) => c.id);
+    const next = reorderColumn(currentOrder, fromIndex, toIndex);
+    if (next !== currentOrder) onReorder(next);
+  };
   // Tri-state checkbox: empty → indeterminate → checked. Radix's
   // Checkbox accepts `checked="indeterminate"` directly. Only computed
   // when the checkbox column is active.
@@ -220,12 +286,32 @@ export function CaseQueueListHeader({
             : direction === "desc"
               ? "descending"
               : "none";
+        const isDragging = dragIndex === idx;
+        const isDropTarget = dropTargetIndex === idx && dragIndex !== idx;
         return (
           <React.Fragment key={col.id}>
             <div
               role="columnheader"
               aria-sort={ariaSort}
-              className="truncate select-none"
+              className={cn(
+                "truncate select-none relative",
+                onReorder && "cursor-grab active:cursor-grabbing",
+                isDragging && "opacity-40",
+                // Drop indicator — a 2 px brand-blue vertical bar
+                // painted on whichever edge of the target column the
+                // drag would land. dragIndex < idx → bar on the right
+                // edge; dragIndex > idx → bar on the left edge.
+                isDropTarget &&
+                  (dragIndex! < idx
+                    ? "after:absolute after:right-0 after:top-0 after:bottom-0 after:w-[2px] after:bg-[#0078d4]"
+                    : "before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[2px] before:bg-[#0078d4]"),
+              )}
+              draggable={!!onReorder}
+              onDragStart={onReorder ? handleDragStart(idx) : undefined}
+              onDragOver={onReorder ? handleDragOver(idx) : undefined}
+              onDrop={onReorder ? handleDrop(idx) : undefined}
+              onDragEnd={onReorder ? handleDragEnd : undefined}
+              title={onReorder ? `${col.label} — drag to reorder` : undefined}
             >
               {canSort ? (
                 <button
@@ -285,6 +371,75 @@ export function CaseQueueListHeader({
           </React.Fragment>
         );
       })}
+
+      {/* Fluent Edit Columns menu — accessibility-first alternative to
+          drag-and-drop. Lives anchored to the rightmost column header
+          cell so it doesn't steal a grid slot. Each Move Up / Move Down
+          item fires the same `onReorder` callback the drag handlers do.
+          Self-hides when onReorder is omitted (matches read-only mode). */}
+      {onReorder && (
+        <div
+          role="columnheader"
+          aria-label="Edit column order"
+          className="absolute right-0 top-0 bottom-0 px-1 flex items-center bg-[#faf9f8]/95 backdrop-blur-[2px] border-l border-[#edebe9]"
+        >
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <MenuButton
+                appearance="subtle"
+                size="small"
+                icon={<TableColumnTopBottomEditRegular />}
+                aria-label="Edit column order"
+                title="Edit column order"
+                style={{ minWidth: 0, height: 28 }}
+              />
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                {visibleColumns.map((col, idx) => (
+                  <Menu key={col.id}>
+                    <MenuTrigger disableButtonEnhancement>
+                      <MenuItem>{col.label}</MenuItem>
+                    </MenuTrigger>
+                    <MenuPopover>
+                      <MenuList>
+                        <MenuItem
+                          icon={<ArrowUpRegular />}
+                          disabled={idx === 0}
+                          onClick={() => moveColumn(idx, idx - 1)}
+                        >
+                          Move up
+                        </MenuItem>
+                        <MenuItem
+                          icon={<ArrowDownRegular />}
+                          disabled={idx === visibleColumns.length - 1}
+                          onClick={() => moveColumn(idx, idx + 1)}
+                        >
+                          Move down
+                        </MenuItem>
+                        <MenuItem
+                          disabled={idx === 0}
+                          onClick={() => moveColumn(idx, 0)}
+                          style={{ color: tokens.colorNeutralForeground3 }}
+                        >
+                          Move to start
+                        </MenuItem>
+                        <MenuItem
+                          disabled={idx === visibleColumns.length - 1}
+                          onClick={() => moveColumn(idx, visibleColumns.length - 1)}
+                          style={{ color: tokens.colorNeutralForeground3 }}
+                        >
+                          Move to end
+                        </MenuItem>
+                      </MenuList>
+                    </MenuPopover>
+                  </Menu>
+                ))}
+              </MenuList>
+            </MenuPopover>
+          </Menu>
+        </div>
+      )}
     </div>
   );
 }

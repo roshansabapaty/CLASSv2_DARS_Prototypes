@@ -21,6 +21,7 @@
  * case. The whole row is `aria-selected={selected}`.
  */
 
+import * as React from "react";
 import { Badge } from "../ui/badge";
 import { Checkbox } from "../ui/checkbox";
 import {
@@ -242,6 +243,483 @@ export function CaseQueueListRow({
         ? "bg-orange-500"
         : "bg-blue-500";
 
+  // ── Per-column cell registry ─────────────────────────────────────
+  // Every content column renders one entry here keyed by its ColumnId.
+  // The return block below iterates `columns` in user-customised order
+  // and pulls each entry from this record, interleaving 4 px Spacer
+  // cells where the inline-grid template needs them. Conditional cells
+  // (dense-only / opt-in via `showCaseAssigneeColumn`) emit `null` so
+  // the iterator can skip them without disturbing the column sequence.
+  const cellByColumn: Partial<Record<string, React.ReactNode>> = {
+    "case-id": (
+      <div role="gridcell" className={cn("min-w-0 flex items-center gap-1.5", cellPadding)}>
+        <CopyableText text={caseItem.caseId} copyLabel="Copy case ID">
+          <TruncatedText
+            className="font-mono text-sm font-semibold text-slate-900 truncate min-w-0"
+            tooltipText={caseItem.caseId}
+          >
+            {caseItem.caseId}
+          </TruncatedText>
+        </CopyableText>
+      </div>
+    ),
+
+    "unread": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {unread > 0 ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="bg-[#deecf9] text-[#0078d4] border-[#0078d4] text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
+                style={{ fontWeight: 600 }}
+                aria-label={`${unread} unread inbound message${unread === 1 ? "" : "s"}`}
+              >
+                <Mail className="w-3 h-3 mr-0.5" aria-hidden="true" />
+                {unread}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs font-semibold">
+                {unread} unread inbound message{unread === 1 ? "" : "s"} from the issuing or enforcing authority
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "threat-to-life": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.isThreatToLife ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="bg-red-50 text-red-700 border-red-300 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
+                style={{ fontWeight: 600 }}
+                aria-label="Threat to life"
+              >
+                <Shield className="w-3 h-3 mr-0.5" aria-hidden="true" />
+                Threat
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs font-semibold">Threat to life — high-priority crime</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "enterprise": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.accountExistenceChecked && caseItem.hasEnterpriseAccounts ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="bg-purple-50 text-purple-700 border-purple-300 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
+                style={{ fontWeight: 600 }}
+                aria-label="Enterprise account"
+              >
+                <Building2 className="w-3 h-3 mr-0.5" aria-hidden="true" />
+                Enterprise
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs font-semibold">Enterprise account resolved via Check Accounts</p>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "gfr-hold": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {gfrChip ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] h-5 px-1.5 cursor-help inline-flex items-center max-w-full truncate",
+                  gfrChip.tier === "alertRed"
+                    ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
+                    : gfrChip.tier === "warnAmber"
+                      ? "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40"
+                      : gfrChip.tier === "successGreen"
+                        ? "bg-[#dff6dd] text-[#0b6a0b] border-[#107c10]/40"
+                        : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
+                )}
+                style={{ fontWeight: 600 }}
+                aria-label={gfrChip.label}
+              >
+                <Gavel className="w-3 h-3 mr-0.5 flex-shrink-0" aria-hidden="true" />
+                <span className="truncate">{gfrChip.label}</span>
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="text-xs space-y-0.5">
+                <p className="font-semibold">{gfrChip.label}</p>
+                <p>EU eEvidence — Grounds for Refusal (ETSI 5.5)</p>
+                <p>Open the case for the EA's reasons + next steps.</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "attorney-review": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {attorneyReviewTotal > 0 && escalationLabel ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center max-w-full truncate"
+                style={{ fontWeight: 600 }}
+                aria-label={`${attorneyReviewTotal} correspondence item${attorneyReviewTotal === 1 ? "" : "s"} awaiting attorney review`}
+              >
+                <MailWarning className="w-3 h-3 mr-0.5 flex-shrink-0" aria-hidden="true" />
+                <span className="truncate">{attorneyReviewTotal} for review</span>
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="text-xs space-y-0.5">
+                <p className="font-semibold">Correspondence awaiting attorney review</p>
+                {heldForAttorney > 0 && (
+                  <p>
+                    {heldForAttorney} outbound message{heldForAttorney === 1 ? "" : "s"} held in Draft
+                  </p>
+                )}
+                {inboundAwaitingAttorney > 0 && (
+                  <p>
+                    {inboundAwaitingAttorney} inbound item{inboundAwaitingAttorney === 1 ? "" : "s"} unread on the active escalation
+                  </p>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "ndo-reminder": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.nextNdoReminderAt ? (() => {
+          const dt = new Date(caseItem.nextNdoReminderAt);
+          const fmt = Number.isFinite(dt.getTime())
+            ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+            : caseItem.nextNdoReminderAt;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
+                  style={{ fontWeight: 600 }}
+                  aria-label={`NDO reminder ${fmt}`}
+                >
+                  <BellRing className="w-3 h-3 mr-0.5" aria-hidden="true" />
+                  {fmt}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs font-semibold">
+                  Temporary NDO re-check reminder
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          );
+        })() : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "priority": (
+      <div
+        role="gridcell"
+        className={cn(
+          useInlineGrid ? "flex flex-col justify-center gap-0.5" : "flex items-center",
+          cellPadding,
+        )}
+      >
+        {(() => {
+          const sla = getSlaConfig(caseItem.casePriority);
+          const priorityTextColor =
+            caseItem.casePriority === "Emergency"
+              ? "text-red-700"
+              : caseItem.casePriority === "Urgent"
+                ? "text-orange-700"
+                : "text-blue-700";
+          return (
+            <>
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 text-xs font-semibold",
+                  priorityTextColor,
+                )}
+                aria-label={`${sla.label} priority — ${sla.description}`}
+              >
+                {priorityConfig.icon && (
+                  <priorityConfig.icon className="w-3 h-3" aria-hidden="true" />
+                )}
+                {sla.label}
+              </span>
+              {useInlineGrid && (
+                <span className="text-[10px] text-[#605e5c] leading-tight">
+                  {sla.pLevel} · {sla.durationLabel}
+                </span>
+              )}
+            </>
+          );
+        })()}
+      </div>
+    ),
+
+    "due-date": (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        <SlaDeadlineChip
+          tier={caseItem.casePriority}
+          dueDate={caseItem.dueDate}
+          dateReceived={caseItem.createDate}
+          paused={isCaseSlaPausedById(caseItem.caseId)}
+          variant="plain"
+        />
+      </div>
+    ),
+
+    "country": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 text-xs text-[#605e5c] flex items-center", cellPadding)}>
+        <TruncatedText
+          className="truncate min-w-0"
+          tooltipText={
+            caseItem.jurisdiction
+              ? `${caseItem.country} · ${caseItem.jurisdiction}`
+              : caseItem.country
+          }
+        >
+          <span className="text-[#323130] font-medium">{caseItem.country}</span>
+          {caseItem.jurisdiction && (
+            <>
+              <span className="text-slate-300 mx-1">·</span>
+              <span>{caseItem.jurisdiction}</span>
+            </>
+          )}
+        </TruncatedText>
+      </div>
+    ),
+
+    "identifiers": isDense ? null : (
+      <div role="gridcell" className={cn("flex items-center", cellPadding)}>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs cursor-help"
+                style={{ fontWeight: 500 }}
+                aria-label={`${caseItem.identifierCount} identifier${caseItem.identifierCount === 1 ? "" : "s"}: ${identifierBreakdown || "no breakdown"}`}
+              >
+                <Users className="w-3 h-3 mr-1" aria-hidden="true" />
+                {caseItem.identifierCount}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="text-xs">
+                <div style={{ fontWeight: 600 }}>
+                  {caseItem.identifierCount} target identifier
+                  {caseItem.identifierCount === 1 ? "" : "s"}
+                </div>
+                {identifierBreakdown && (
+                  <div className="text-slate-300 mt-0.5">
+                    {identifierBreakdown}
+                  </div>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    ),
+
+    "services": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center gap-1 flex-wrap", cellPadding)}>
+        {visibleServices.map((service) => {
+          const Icon = resolveServiceIcon(service);
+          const isAzure = service === "Azure";
+          return (
+            <Badge
+              key={service}
+              variant="outline"
+              className={cn(
+                "text-[10px] py-0 px-1.5",
+                isAzure
+                  ? "bg-sky-50 text-sky-700 border-sky-300"
+                  : "bg-slate-50 text-slate-600 border-slate-200",
+              )}
+              style={{ fontWeight: isAzure ? 600 : 400 }}
+            >
+              <Icon className="w-3 h-3 mr-0.5" aria-hidden="true" />
+              {service}
+            </Badge>
+          );
+        })}
+        {overflowCount > 0 && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] py-0 px-1.5 bg-slate-50 text-slate-600 border-slate-200 cursor-help"
+                  aria-label={`${overflowCount} more services: ${sortedServices.slice(visibleServiceCount).join(", ")}`}
+                >
+                  +{overflowCount} more
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">
+                  <div style={{ fontWeight: 600 }}>Additional services</div>
+                  <div className="text-slate-300 mt-0.5">
+                    {sortedServices.slice(visibleServiceCount).join(", ")}
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
+    ),
+
+    "stage": (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        <TruncatedText
+          className="text-xs text-[#323130] truncate max-w-full"
+          aria-label={`Stage: ${caseItem.caseStage}`}
+          tooltipText={caseItem.caseStage}
+        >
+          {caseItem.caseStage}
+        </TruncatedText>
+      </div>
+    ),
+
+    "case-assignee": !showCaseAssigneeColumn ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        <TruncatedText
+          className={cn(
+            "text-xs truncate max-w-full",
+            caseItem.assigneeName ? "text-[#323130]" : "text-[#a19f9d] italic",
+          )}
+          aria-label={`Assigned to: ${caseItem.assigneeName || "Unassigned"}`}
+          tooltipText={`Assigned to ${caseItem.assigneeName || "Unassigned"}`}
+        >
+          {caseItem.assigneeName || "Unassigned"}
+        </TruncatedText>
+      </div>
+    ),
+
+    "internal-escalation": (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {escalationLabel ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px] h-5 px-1.5 cursor-help inline-flex items-center max-w-full truncate",
+                  escalationSummary?.status === "Pending" ||
+                    escalationSummary?.status === "Blocked"
+                    ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
+                    : escalationSummary?.status === "InformationRequested"
+                      ? "bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40"
+                      : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
+                )}
+                style={{ fontWeight: 600 }}
+                aria-label={escalationLabel}
+              >
+                <Scale className="w-3 h-3 mr-0.5 flex-shrink-0" aria-hidden="true" />
+                <span className="truncate">{escalationLabel}</span>
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="text-xs space-y-0.5">
+                <p className="font-semibold">{escalationLabel}</p>
+                {escalationSummary && (
+                  <>
+                    <p>Status: {escalationSummary.status}</p>
+                    <p>Assignee: {escalationSummary.assigneeLabel}</p>
+                    <p>Escalated by {escalationSummary.escalatedBy}</p>
+                  </>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "escalation-reviewer": !showEscalationReviewerColumn ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {(() => {
+          if (!escalationSummary) {
+            return (
+              <span className="text-[11px] text-[#a19f9d]">—</span>
+            );
+          }
+          const isUnassigned =
+            escalationSummary.assigneeLabel.startsWith("Any ");
+          const reviewerName = isUnassigned
+            ? "Unassigned"
+            : escalationSummary.assigneeLabel;
+          return (
+            <TruncatedText
+              className={cn(
+                "text-xs truncate max-w-full",
+                isUnassigned
+                  ? "text-[#a19f9d] italic"
+                  : "text-[#323130]",
+              )}
+              aria-label={`Escalated to: ${reviewerName}`}
+              tooltipText={`Escalated to ${reviewerName}`}
+            >
+              {reviewerName}
+            </TruncatedText>
+          );
+        })()}
+      </div>
+    ),
+  };
+
+  // Iterate the parent-supplied columns in user-customised order, drop
+  // null entries (skipped columns), and interleave 4 px Spacer cells
+  // between consecutive rendered entries when the inline grid is active.
+  const contentCells: React.ReactNode[] = [];
+  for (const col of columns) {
+    const cell = cellByColumn[col.id];
+    if (cell == null) continue;
+    if (contentCells.length > 0 && useInlineGrid) {
+      contentCells.push(<Spacer key={`spacer-${col.id}`} />);
+    }
+    contentCells.push(
+      <React.Fragment key={`cell-${col.id}`}>{cell}</React.Fragment>,
+    );
+  }
+
   return (
     <div
       role="row"
@@ -293,506 +771,15 @@ export function CaseQueueListRow({
         </div>
       )}
 
-      {/* 1. Case ID — now just the copyable identifier. Unread / GFR /
-          attorney-review chips moved out to the dedicated Badges cell
-          (rendered next) so they have room to breathe.
-          TruncatedText wraps the inner span so narrow column widths
-          (preview-pane mode, resized browser) surface a hover tooltip
-          with the full case-id instead of clipping invisibly. */}
-      <div role="gridcell" className={cn("min-w-0 flex items-center gap-1.5", cellPadding)}>
-        <CopyableText text={caseItem.caseId} copyLabel="Copy case ID">
-          <TruncatedText
-            className="font-mono text-sm font-semibold text-slate-900 truncate min-w-0"
-            tooltipText={caseItem.caseId}
-          >
-            {caseItem.caseId}
-          </TruncatedText>
-        </CopyableText>
-      </div>
-      {useInlineGrid && <Spacer />}
+      {/* Content cells — rendered in the user-customised column order via
+          the `cellByColumn` registry above. Each entry is either a
+          gridcell <div> or null (for cells gated by density / opt-in
+          props like showCaseAssigneeColumn). The iterator skips null
+          entries and interleaves 4 px Spacer cells between consecutive
+          rendered entries when the inline grid is active so the row
+          aligns with the header's resize-handle columns. */}
+      {contentCells}
 
-      {/* Per-signal operational columns — replaced the bundled "Badges"
-          cell. Each renders an em-dash when its signal is absent so the
-          column reads as a clean status grid down the page. Dense
-          (preview-pane) mode skips these columns; the preview pane stays
-          narrow and the signals surface elsewhere on that view. */}
-      {!isDense && (
-        <>
-          {/* Unread — inbound correspondence count. */}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {unread > 0 ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="bg-[#deecf9] text-[#0078d4] border-[#0078d4] text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
-                    style={{ fontWeight: 600 }}
-                    aria-label={`${unread} unread inbound message${unread === 1 ? "" : "s"}`}
-                  >
-                    <Mail className="w-3 h-3 mr-0.5" aria-hidden="true" />
-                    {unread}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs font-semibold">
-                    {unread} unread inbound message{unread === 1 ? "" : "s"} from the issuing or enforcing authority
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-[11px] text-[#a19f9d]">—</span>
-            )}
-          </div>
-          {useInlineGrid && <Spacer />}
-
-          {/* Threat to Life — high-priority crime flag. */}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {caseItem.isThreatToLife ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="bg-red-50 text-red-700 border-red-300 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
-                    style={{ fontWeight: 600 }}
-                    aria-label="Threat to life"
-                  >
-                    <Shield className="w-3 h-3 mr-0.5" aria-hidden="true" />
-                    Threat
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs font-semibold">Threat to life — high-priority crime</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-[11px] text-[#a19f9d]">—</span>
-            )}
-          </div>
-          {useInlineGrid && <Spacer />}
-
-          {/* Enterprise — account-existence resolved to Enterprise. */}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {caseItem.accountExistenceChecked && caseItem.hasEnterpriseAccounts ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="bg-purple-50 text-purple-700 border-purple-300 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
-                    style={{ fontWeight: 600 }}
-                    aria-label="Enterprise account"
-                  >
-                    <Building2 className="w-3 h-3 mr-0.5" aria-hidden="true" />
-                    Enterprise
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="text-xs font-semibold">Enterprise account resolved via Check Accounts</p>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-[11px] text-[#a19f9d]">—</span>
-            )}
-          </div>
-          {useInlineGrid && <Spacer />}
-
-          {/* GFR Hold — EU eEvidence Grounds for Refusal state. */}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {gfrChip ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] h-5 px-1.5 cursor-help inline-flex items-center max-w-full truncate",
-                      gfrChip.tier === "alertRed"
-                        ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
-                        : gfrChip.tier === "warnAmber"
-                          ? "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40"
-                          : gfrChip.tier === "successGreen"
-                            ? "bg-[#dff6dd] text-[#0b6a0b] border-[#107c10]/40"
-                            : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
-                    )}
-                    style={{ fontWeight: 600 }}
-                    aria-label={gfrChip.label}
-                  >
-                    <Gavel className="w-3 h-3 mr-0.5 flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate">{gfrChip.label}</span>
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="text-xs space-y-0.5">
-                    <p className="font-semibold">{gfrChip.label}</p>
-                    <p>EU eEvidence — Grounds for Refusal (ETSI 5.5)</p>
-                    <p>Open the case for the EA's reasons + next steps.</p>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-[11px] text-[#a19f9d]">—</span>
-            )}
-          </div>
-          {useInlineGrid && <Spacer />}
-
-          {/* Attorney Review — correspondence items awaiting attorney action. */}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {attorneyReviewTotal > 0 && escalationLabel ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center max-w-full truncate"
-                    style={{ fontWeight: 600 }}
-                    aria-label={`${attorneyReviewTotal} correspondence item${attorneyReviewTotal === 1 ? "" : "s"} awaiting attorney review`}
-                  >
-                    <MailWarning className="w-3 h-3 mr-0.5 flex-shrink-0" aria-hidden="true" />
-                    <span className="truncate">{attorneyReviewTotal} for review</span>
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="text-xs space-y-0.5">
-                    <p className="font-semibold">Correspondence awaiting attorney review</p>
-                    {heldForAttorney > 0 && (
-                      <p>
-                        {heldForAttorney} outbound message{heldForAttorney === 1 ? "" : "s"} held in Draft
-                      </p>
-                    )}
-                    {inboundAwaitingAttorney > 0 && (
-                      <p>
-                        {inboundAwaitingAttorney} inbound item{inboundAwaitingAttorney === 1 ? "" : "s"} unread on the active escalation
-                      </p>
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <span className="text-[11px] text-[#a19f9d]">—</span>
-            )}
-          </div>
-          {useInlineGrid && <Spacer />}
-
-          {/* NDO Reminder — temporary NDO re-check date. */}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {caseItem.nextNdoReminderAt ? (() => {
-              const dt = new Date(caseItem.nextNdoReminderAt);
-              const fmt = Number.isFinite(dt.getTime())
-                ? dt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                : caseItem.nextNdoReminderAt;
-              return (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className="bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40 text-[10px] h-5 px-1.5 cursor-help inline-flex items-center"
-                      style={{ fontWeight: 600 }}
-                      aria-label={`NDO reminder ${fmt}`}
-                    >
-                      <BellRing className="w-3 h-3 mr-0.5" aria-hidden="true" />
-                      {fmt}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className="text-xs font-semibold">
-                      Temporary NDO re-check reminder
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            })() : (
-              <span className="text-[11px] text-[#a19f9d]">—</span>
-            )}
-          </div>
-          {useInlineGrid && <Spacer />}
-        </>
-      )}
-
-      {/* 2. Priority — label + SLA helper. Plain text (no chip chrome)
-          so the row reads lighter; urgency is conveyed via the icon +
-          text colour, not a filled box. */}
-      <div
-        role="gridcell"
-        className={cn(
-          useInlineGrid ? "flex flex-col justify-center gap-0.5" : "flex items-center",
-          cellPadding,
-        )}
-      >
-        {(() => {
-          const sla = getSlaConfig(caseItem.casePriority);
-          const priorityTextColor =
-            caseItem.casePriority === "Emergency"
-              ? "text-red-700"
-              : caseItem.casePriority === "Urgent"
-                ? "text-orange-700"
-                : "text-blue-700";
-          return (
-            <>
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 text-xs font-semibold",
-                  priorityTextColor,
-                )}
-                aria-label={`${sla.label} priority — ${sla.description}`}
-              >
-                {priorityConfig.icon && (
-                  <priorityConfig.icon className="w-3 h-3" aria-hidden="true" />
-                )}
-                {sla.label}
-              </span>
-              {useInlineGrid && (
-                <span className="text-[10px] text-[#605e5c] leading-tight">
-                  {sla.pLevel} · {sla.durationLabel}
-                </span>
-              )}
-            </>
-          );
-        })()}
-      </div>
-      {useInlineGrid && <Spacer />}
-
-      {/* 3. Due date — `variant="plain"` drops the chip chrome so the
-          list row reads as text instead of a pile of pills. The icon +
-          colour still convey OnTrack / Approaching / Overdue state. */}
-      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-        <SlaDeadlineChip
-          tier={caseItem.casePriority}
-          dueDate={caseItem.dueDate}
-          dateReceived={caseItem.createDate}
-          paused={isCaseSlaPausedById(caseItem.caseId)}
-          variant="plain"
-        />
-      </div>
-      {useInlineGrid && <Spacer />}
-
-      {/* 4. Country (dropped in dense mode) */}
-      {!isDense && (
-        <div role="gridcell" className={cn("min-w-0 text-xs text-[#605e5c] flex items-center", cellPadding)}>
-          <TruncatedText
-            className="truncate min-w-0"
-            tooltipText={
-              caseItem.jurisdiction
-                ? `${caseItem.country} · ${caseItem.jurisdiction}`
-                : caseItem.country
-            }
-          >
-            <span className="text-[#323130] font-medium">{caseItem.country}</span>
-            {caseItem.jurisdiction && (
-              <>
-                <span className="text-slate-300 mx-1">·</span>
-                <span>{caseItem.jurisdiction}</span>
-              </>
-            )}
-          </TruncatedText>
-        </div>
-      )}
-      {useInlineGrid && <Spacer />}
-
-      {/* 5. Identifiers (dropped in dense mode) */}
-      {!isDense && (
-        <div role="gridcell" className={cn("flex items-center", cellPadding)}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge
-                  variant="outline"
-                  className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs cursor-help"
-                  style={{ fontWeight: 500 }}
-                  aria-label={`${caseItem.identifierCount} identifier${caseItem.identifierCount === 1 ? "" : "s"}: ${identifierBreakdown || "no breakdown"}`}
-                >
-                  <Users className="w-3 h-3 mr-1" aria-hidden="true" />
-                  {caseItem.identifierCount}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <div className="text-xs">
-                  <div style={{ fontWeight: 600 }}>
-                    {caseItem.identifierCount} target identifier
-                    {caseItem.identifierCount === 1 ? "" : "s"}
-                  </div>
-                  {identifierBreakdown && (
-                    <div className="text-slate-300 mt-0.5">
-                      {identifierBreakdown}
-                    </div>
-                  )}
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      )}
-      {useInlineGrid && <Spacer />}
-
-      {/* 6. LE-requested services (dropped in dense mode) */}
-      {!isDense && (
-        <div role="gridcell" className={cn("min-w-0 flex items-center gap-1 flex-wrap", cellPadding)}>
-          {visibleServices.map((service) => {
-            const Icon = resolveServiceIcon(service);
-            const isAzure = service === "Azure";
-            return (
-              <Badge
-                key={service}
-                variant="outline"
-                className={cn(
-                  "text-[10px] py-0 px-1.5",
-                  isAzure
-                    ? "bg-sky-50 text-sky-700 border-sky-300"
-                    : "bg-slate-50 text-slate-600 border-slate-200",
-                )}
-                style={{ fontWeight: isAzure ? 600 : 400 }}
-              >
-                <Icon className="w-3 h-3 mr-0.5" aria-hidden="true" />
-                {service}
-              </Badge>
-            );
-          })}
-          {overflowCount > 0 && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] py-0 px-1.5 bg-slate-50 text-slate-600 border-slate-200 cursor-help"
-                    aria-label={`${overflowCount} more services: ${sortedServices.slice(visibleServiceCount).join(", ")}`}
-                  >
-                    +{overflowCount} more
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <div className="text-xs">
-                    <div style={{ fontWeight: 600 }}>Additional services</div>
-                    <div className="text-slate-300 mt-0.5">
-                      {sortedServices.slice(visibleServiceCount).join(", ")}
-                    </div>
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
-        </div>
-      )}
-      {useInlineGrid && <Spacer />}
-
-      {/* Stage — plain text (no chip chrome) so the row reads
-          lighter. The stage label colour stays muted because Stage is
-          informational, not urgency-bearing. Internal Escalation moved
-          to sit beside Escalated To below — see comment there. */}
-      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-        <TruncatedText
-          className="text-xs text-[#323130] truncate max-w-full"
-          aria-label={`Stage: ${caseItem.caseStage}`}
-          tooltipText={caseItem.caseStage}
-        >
-          {caseItem.caseStage}
-        </TruncatedText>
-      </div>
-
-      {/* Assigned To — the RS who owns the case (distinct from the
-          attorney working the escalation, which renders two columns
-          over). Falls back to italic "Unassigned" when no RS is on the
-          case. */}
-      {showCaseAssigneeColumn && (
-        <>
-          {useInlineGrid && <Spacer />}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            <TruncatedText
-              className={cn(
-                "text-xs truncate max-w-full",
-                caseItem.assigneeName ? "text-[#323130]" : "text-[#a19f9d] italic",
-              )}
-              aria-label={`Assigned to: ${caseItem.assigneeName || "Unassigned"}`}
-              tooltipText={`Assigned to ${caseItem.assigneeName || "Unassigned"}`}
-            >
-              {caseItem.assigneeName || "Unassigned"}
-            </TruncatedText>
-          </div>
-        </>
-      )}
-
-      {/* Internal Escalation — Attorney / Peer / LENS Lead role chip,
-          sortable by status weight + role. Carries the *role context*
-          for the Escalated To column rendered next, so the reviewer
-          cell no longer repeats the role prefix. External-driven
-          signals (GFR, LE Cancellation, AuthorizationDesiredStatus
-          updates) stay on the Badges column — those aren't "internal"
-          by definition. */}
-      {useInlineGrid && <Spacer />}
-      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-        {escalationLabel ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-[10px] h-5 px-1.5 cursor-help inline-flex items-center max-w-full truncate",
-                  escalationSummary?.status === "Pending" ||
-                    escalationSummary?.status === "Blocked"
-                    ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
-                    : escalationSummary?.status === "InformationRequested"
-                      ? "bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40"
-                      : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
-                )}
-                style={{ fontWeight: 600 }}
-                aria-label={escalationLabel}
-              >
-                <Scale className="w-3 h-3 mr-0.5 flex-shrink-0" aria-hidden="true" />
-                <span className="truncate">{escalationLabel}</span>
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="text-xs space-y-0.5">
-                <p className="font-semibold">{escalationLabel}</p>
-                {escalationSummary && (
-                  <>
-                    <p>Status: {escalationSummary.status}</p>
-                    <p>Assignee: {escalationSummary.assigneeLabel}</p>
-                    <p>Escalated by {escalationSummary.escalatedBy}</p>
-                  </>
-                )}
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <span className="text-[11px] text-[#a19f9d]">—</span>
-        )}
-      </div>
-
-      {/* Escalated To — named reviewer assigned to the escalation
-          (e.g. "Sarah Johnson") or italic "Unassigned" when the
-          escalation is open to any holder of the targeted role. The
-          role prefix (Attorney / Peer / LENS Lead) was removed — the
-          adjacent Internal Escalation column already carries it. Em-
-          dash when the case has no active escalation. */}
-      {showEscalationReviewerColumn && (
-        <>
-          {useInlineGrid && <Spacer />}
-          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
-            {(() => {
-              if (!escalationSummary) {
-                return (
-                  <span className="text-[11px] text-[#a19f9d]">—</span>
-                );
-              }
-              const isUnassigned =
-                escalationSummary.assigneeLabel.startsWith("Any ");
-              const reviewerName = isUnassigned
-                ? "Unassigned"
-                : escalationSummary.assigneeLabel;
-              return (
-                <TruncatedText
-                  className={cn(
-                    "text-xs truncate max-w-full",
-                    isUnassigned
-                      ? "text-[#a19f9d] italic"
-                      : "text-[#323130]",
-                  )}
-                  aria-label={`Escalated to: ${reviewerName}`}
-                  tooltipText={`Escalated to ${reviewerName}`}
-                >
-                  {reviewerName}
-                </TruncatedText>
-              );
-            })()}
-          </div>
-        </>
-      )}
     </div>
   );
 }

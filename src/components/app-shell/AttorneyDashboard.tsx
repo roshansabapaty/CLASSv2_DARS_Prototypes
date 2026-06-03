@@ -53,9 +53,29 @@ import {
   ATTORNEY_DASHBOARD_COLUMNS,
   defaultColumnWidths,
   buildSortComparator,
+  defaultColumnOrder,
+  sanitizeColumnOrder,
+  applyColumnOrder,
   type ColumnId,
+  type ColumnOrder,
   type SortState,
 } from "../case-queue/caseListColumns";
+
+import { useDragAutoScroll } from "../../hooks/useDragAutoScroll";
+
+// Per-surface column order storage. The Attorney Dashboard maintains
+// its own order independent of the main Case Queue (see CaseQueue.tsx).
+const COLUMN_ORDER_STORAGE_KEY = "dars.attorneyDashboard.columnOrder";
+
+function readPersistedColumnOrder(): ColumnOrder {
+  try {
+    const raw = localStorage.getItem(COLUMN_ORDER_STORAGE_KEY);
+    if (!raw) return defaultColumnOrder(ATTORNEY_DASHBOARD_COLUMNS);
+    return sanitizeColumnOrder(JSON.parse(raw), ATTORNEY_DASHBOARD_COLUMNS);
+  } catch {
+    return defaultColumnOrder(ATTORNEY_DASHBOARD_COLUMNS);
+  }
+}
 import { useStatusAnnouncer } from "../StatusAnnouncer";
 import {
   getEscalationSummaryForCase,
@@ -333,6 +353,28 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   // `baseCases.sort` above — when a column sort is active, it takes
   // precedence; the escalation order falls back as the tiebreaker.
   const [sortState, setSortState] = React.useState<SortState | null>(null);
+  // User-customised column order — persisted per-surface so this
+  // dashboard's layout doesn't bleed into the main Case Queue.
+  const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>(() =>
+    readPersistedColumnOrder(),
+  );
+  const handleReorderColumns = (next: ColumnOrder) => {
+    setColumnOrder(next);
+    try {
+      localStorage.setItem(COLUMN_ORDER_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* localStorage may be blocked */
+    }
+  };
+  const orderedColumns = React.useMemo(
+    () => applyColumnOrder(ATTORNEY_DASHBOARD_COLUMNS, columnOrder),
+    [columnOrder],
+  );
+  // Auto-scroll the dashboard's detailed-list table while dragging a
+  // column past the visible edge. The dense preview-pane mode uses a
+  // fr-based grid that doesn't overflow, so no scroll wiring there.
+  const listTableRef = React.useRef<HTMLDivElement | null>(null);
+  useDragAutoScroll(listTableRef, { axis: "x" });
   const handleColumnSort = (columnId: ColumnId) => {
     setSortState((prev) => {
       if (!prev || prev.columnId !== columnId) {
@@ -848,6 +890,8 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
               density="dense"
               sortState={sortState}
               onSort={handleColumnSort}
+              columns={orderedColumns}
+              onReorder={handleReorderColumns}
             />
             {filteredCases.map((c, idx) => (
               <CaseQueueListRow
@@ -862,6 +906,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                 onSelect={(caseId) => setSelectedPreviewCaseId(caseId)}
                 selected={selectedPreviewCaseId === c.caseId}
                 ariaRowIndex={idx + 2 /* +1 for the header offset */}
+                columns={orderedColumns}
               />
             ))}
           </div>
@@ -876,6 +921,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
         </div>
       ) : viewMode === "list" ? (
         <div
+          ref={listTableRef}
           role="table"
           aria-label="Attorney dashboard — detailed list"
           aria-rowcount={filteredCases.length + 1 /* +1 for the header row */}
@@ -910,7 +956,8 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                   columnWidths={cols}
                   sortState={sortState}
                   onSort={handleColumnSort}
-                  columns={ATTORNEY_DASHBOARD_COLUMNS}
+                  columns={orderedColumns}
+                  onReorder={handleReorderColumns}
                 />
                 {filteredCases.map((c, idx) => (
                   <CaseQueueListRow
@@ -919,7 +966,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                     priorityConfig={getPriorityConfig(c.casePriority)}
                     density="full"
                     columnWidths={cols}
-                    columns={ATTORNEY_DASHBOARD_COLUMNS}
+                    columns={orderedColumns}
                     bulkSelectable
                     bulkSelected={bulkSelectedCaseIds.has(c.caseId)}
                     onBulkToggle={toggleBulkSelected}

@@ -27,7 +27,11 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { cn } from "../ui/utils";
-import type { ColumnId, SortState } from "./caseListColumns";
+import {
+  CASE_LIST_COLUMNS,
+  type ColumnId,
+  type SortState,
+} from "./caseListColumns";
 
 interface SortOption {
   columnId: ColumnId;
@@ -35,61 +39,58 @@ interface SortOption {
   label: string;
 }
 
-// Curated list — matches the sortable columns in caseListColumns.ts.
-// Each field gets the two most useful orderings (e.g., Priority surfaces
-// "Most urgent first" and "Least urgent first" rather than raw asc/desc).
-const SORT_GROUPS: Array<{ heading: string; options: SortOption[] }> = [
-  {
-    heading: "Priority",
-    options: [
-      { columnId: "priority", direction: "desc", label: "Most urgent first" },
-      { columnId: "priority", direction: "asc", label: "Least urgent first" },
-    ],
-  },
-  {
-    heading: "Due Date",
-    options: [
-      { columnId: "due-date", direction: "asc", label: "Soonest first" },
-      { columnId: "due-date", direction: "desc", label: "Latest first" },
-    ],
-  },
-  {
-    heading: "Stage",
-    options: [
-      { columnId: "stage", direction: "asc", label: "Workflow order" },
-      { columnId: "stage", direction: "desc", label: "Reverse workflow order" },
-    ],
-  },
-  {
-    heading: "Assignee",
-    options: [
-      { columnId: "case-assignee", direction: "asc", label: "A to Z" },
-      { columnId: "case-assignee", direction: "desc", label: "Z to A" },
-    ],
-  },
-  {
-    heading: "NDO Reminder",
-    options: [
-      { columnId: "ndo-reminder", direction: "asc", label: "Soonest first" },
-      { columnId: "ndo-reminder", direction: "desc", label: "Latest first" },
-    ],
-  },
-  {
-    heading: "Internal Escalation",
-    options: [
-      {
-        columnId: "internal-escalation",
-        direction: "asc",
-        label: "Most urgent first",
-      },
-      {
-        columnId: "internal-escalation",
-        direction: "desc",
-        label: "Least urgent first",
-      },
-    ],
-  },
-];
+// Per-column direction labels — each entry maps `asc` / `desc` to a
+// human-friendly phrase that reflects what the column actually orders
+// by (e.g., Priority is a weight, so "Most urgent first" reads more
+// naturally than "Z to A"). Columns without an entry fall back to
+// `DEFAULT_LABELS` which assume alphabetical ordering.
+const DIRECTION_LABELS: Partial<Record<ColumnId, { asc: string; desc: string }>> = {
+  // People / text columns
+  "case-id":             { asc: "A to Z", desc: "Z to A" },
+  "case-assignee":       { asc: "A to Z", desc: "Z to A" },
+  "escalation-reviewer": { asc: "A to Z", desc: "Z to A" },
+  "country":             { asc: "A to Z", desc: "Z to A" },
+  // Date / chronological columns
+  "due-date":     { asc: "Soonest first", desc: "Latest first" },
+  "ndo-reminder": { asc: "Soonest first", desc: "Latest first" },
+  // Weighted / urgency columns
+  "priority":            { asc: "Least urgent first", desc: "Most urgent first" },
+  "internal-escalation": { asc: "Least urgent first", desc: "Most urgent first" },
+  "gfr-hold":            { asc: "Lowest tier first",  desc: "Highest tier first" },
+  // Workflow ordering
+  "stage": { asc: "Workflow order", desc: "Reverse workflow order" },
+  // Boolean flag columns — flagged rows treated as "on"
+  "threat-to-life": { asc: "Unflagged first",     desc: "Flagged first" },
+  "enterprise":     { asc: "Non-Enterprise first", desc: "Enterprise first" },
+  // Numeric count columns
+  "unread":          { asc: "Fewest first", desc: "Most first" },
+  "attorney-review": { asc: "Fewest first", desc: "Most first" },
+  "identifiers":     { asc: "Fewest first", desc: "Most first" },
+  "services":        { asc: "Fewest first", desc: "Most first" },
+};
+
+const DEFAULT_LABELS = { asc: "Ascending", desc: "Descending" };
+
+// Derive the dropdown's groups dynamically from CASE_LIST_COLUMNS so
+// every column that's clickable-to-sort in the header also shows up in
+// the menu — and any future column added to caseListColumns.ts with
+// `sortable: true` lands here automatically. No drift between the two
+// sort surfaces.
+const SORT_GROUPS: Array<{ heading: string; options: SortOption[] }> =
+  CASE_LIST_COLUMNS.filter((c) => c.sortable).map((col) => {
+    const labels = DIRECTION_LABELS[col.id] ?? DEFAULT_LABELS;
+    return {
+      heading: col.label,
+      options: [
+        // For weighted / numeric / boolean / urgency columns the
+        // user almost always wants the "high end" first (most urgent,
+        // most threats, most identifiers) — surface that ordering at
+        // the top of each group so it reads naturally.
+        { columnId: col.id, direction: "desc", label: labels.desc },
+        { columnId: col.id, direction: "asc",  label: labels.asc },
+      ],
+    };
+  });
 
 function findActiveOption(state: SortState | null): SortOption | null {
   if (!state) return null;
