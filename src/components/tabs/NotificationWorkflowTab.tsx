@@ -217,7 +217,7 @@ export function NotificationWorkflowTab({
                       className={cn(
                         "text-xs",
                         formData.leResponseReceived === "Proceed with notification" && "bg-[#dff6dd] text-[#107c10] border-[#107c10]",
-                        formData.leResponseReceived === "Non-Disclosure Order" && "bg-[#fff4ce] text-[#8a6d3b] border-[#8a6d3b]",
+                        formData.leResponseReceived === "Non-Disclosure Tracking" && "bg-[#fff4ce] text-[#8a6d3b] border-[#8a6d3b]",
                         formData.leResponseReceived === "Withdrawn" && "bg-[#f3f2f1] text-[#605e5c] border-[#8a8886]",
                         formData.leResponseReceived === "None" && "bg-[#fde7e9] text-[#d13438] border-[#d13438]"
                       )}
@@ -435,7 +435,7 @@ export function NotificationWorkflowTab({
                     className="bg-[#ca5010] text-white hover:bg-[#a44208] gap-2 h-9"
                   >
                     <Plus className="w-4 h-4" />
-                    Add Non-Disclosure Order
+                    Add Non-Disclosure Tracking
                   </Button>
                 </div>
               )}
@@ -447,7 +447,7 @@ export function NotificationWorkflowTab({
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-white" />
                       <h4 className="text-white text-sm font-semibold">
-                        {formData.nonDisclosureOrders.length > 0 ? 'Add Another NDO' : 'Non-Disclosure Order Details'}
+                        {formData.nonDisclosureOrders.length > 0 ? 'Add Another NDO' : 'Non-Disclosure Tracking Details'}
                       </h4>
                     </div>
                     <Button
@@ -465,13 +465,14 @@ export function NotificationWorkflowTab({
                   </div>
                   <div className="p-3">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-3">
-                    {/* NDO Name — TaskID picker linked to a target identifier.
-                        Replaces the previous free-text input. The dropdown
-                        shows "{TaskID} — {target identifier value}" so the
-                        RS picks the scoped target rather than typing a label. */}
+                    {/* Non-Disclosure Type — TaskID picker linked to a target
+                        identifier. Replaces the previous free-text input. The
+                        dropdown shows "{TaskID} — {target identifier value}"
+                        so the RS picks the scoped target rather than typing
+                        a label. */}
                     <div className="space-y-1">
                       <Label htmlFor="ndoName" className="text-sm font-semibold">
-                        NDO Name<span className="text-[#a4262c] ml-1">*</span>
+                        Non-Disclosure Type<span className="text-[#a4262c] ml-1">*</span>
                       </Label>
                       <Select
                         value={currentNDO.linkedTaskId ?? ""}
@@ -577,7 +578,7 @@ export function NotificationWorkflowTab({
                           <SelectValue placeholder="Select exclusion reason" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="NDO Order">NDO Order</SelectItem>
+                          <SelectItem value="NDO Tracking">NDO Tracking</SelectItem>
                           <SelectItem value="Statutory">Statutory</SelectItem>
                           <SelectItem value="Exemption">Exemption</SelectItem>
                           <SelectItem value="Exempt case/identifier type">Exempt case/identifier type</SelectItem>
@@ -586,9 +587,9 @@ export function NotificationWorkflowTab({
                       </Select>
                     </div>
 
-                    {/* Temporary Order */}
+                    {/* Temporary Tracking */}
                     <div className="space-y-1">
-                      <Label htmlFor="ndoTemporary" className="text-sm font-semibold">Temporary Order</Label>
+                      <Label htmlFor="ndoTemporary" className="text-sm font-semibold">Temporary Tracking</Label>
                       <div className="flex items-center gap-2 h-9">
                         <Switch
                           id="ndoTemporary"
@@ -1298,7 +1299,7 @@ export function NotificationWorkflowTab({
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="Proceed with notification">Proceed with notification</SelectItem>
-                          <SelectItem value="Non-Disclosure Order">Non-Disclosure Order</SelectItem>
+                          <SelectItem value="Non-Disclosure Tracking">Non-Disclosure Tracking</SelectItem>
                           <SelectItem value="None">None</SelectItem>
                           <SelectItem value="Withdrawn">Withdrawn</SelectItem>
                         </SelectContent>
@@ -1643,8 +1644,8 @@ function UserNotificationCards({
                         <SelectItem value="Proceed with notification">
                           Proceed with notification
                         </SelectItem>
-                        <SelectItem value="Non-Disclosure Order">
-                          Non-Disclosure Order
+                        <SelectItem value="Non-Disclosure Tracking">
+                          Non-Disclosure Tracking
                         </SelectItem>
                         <SelectItem value="None">None</SelectItem>
                         <SelectItem value="Withdrawn">Withdrawn</SelectItem>
