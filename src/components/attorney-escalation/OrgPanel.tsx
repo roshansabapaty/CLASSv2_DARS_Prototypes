@@ -226,6 +226,23 @@ export function OrgPanel({
     return null;
   })();
 
+  // Audit P1 #8: derive provenance copy for the S500 / V100 badges
+  // from the case's recorded tenantTierCheck (when present). Surfaced
+  // via badge tooltip — the canonical place for "who recorded this,
+  // when, in which role" now that the duplicate badges in the section
+  // header are gone.
+  const tierCheck = c?.enterpriseContext?.tenantTierCheck;
+  const tierCheckProvenance = tierCheck
+    ? {
+        isS500: tierCheck.isS500
+          ? `On S500 list — recorded by ${tierCheck.checkedBy} (${tierCheck.checkedRole}) on ${new Date(tierCheck.checkedAt).toLocaleString()}`
+          : undefined,
+        isV100: tierCheck.isV100
+          ? `On V100 list — recorded by ${tierCheck.checkedBy} (${tierCheck.checkedRole}) on ${new Date(tierCheck.checkedAt).toLocaleString()}`
+          : undefined,
+      }
+    : null;
+
   // Phase 3 cross-border merge — the Enterprise cross-border signal is
   // a direct comparison of the Tenant Registered Home Location (Org
   // Home Location) against the issuing authority's country. Only
@@ -425,8 +442,38 @@ export function OrgPanel({
 
       <div className={styles.badgeRow}>
         {org.isS500 && (
-          <Badge color="important" appearance="filled" icon={<StarFilled />}>
+          // Audit P1 #8: S500/V100 badges live ONLY in the OrgPanel
+          // (tenant-scoped) — the duplicate that lived in the
+          // EnterpriseContextSection header was removed. Provenance
+          // (who recorded the check, when, in which role) surfaces
+          // via the tooltip when the case has a recorded tier check;
+          // when the flag came from CLASS org seed (no recorded
+          // check), the tooltip notes the source so users can tell.
+          <Badge
+            color="important"
+            appearance="filled"
+            icon={<StarFilled />}
+            title={
+              tierCheckProvenance?.isS500
+                ? tierCheckProvenance.isS500
+                : "S500 — strategic top-500 list (from CLASS org profile)"
+            }
+          >
             S500
+          </Badge>
+        )}
+        {org.isV100 && (
+          <Badge
+            color="important"
+            appearance="filled"
+            icon={<StarFilled />}
+            title={
+              tierCheckProvenance?.isV100
+                ? tierCheckProvenance.isV100
+                : "V100 — high-value top-100 list (from CLASS org profile)"
+            }
+          >
+            V100
           </Badge>
         )}
         {org.hasDerogation && (

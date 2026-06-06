@@ -596,6 +596,94 @@ export const MOCK_ORGS: Record<string, EnterpriseOrgContext> = {
     },
   },
 
+  // Italian Parliament — LNS-2026-00240 (Full GFR / immunities path).
+  // Subject is an MP carrying parliamentary immunity; the Enterprise
+  // surface lets the attorney see the org-level posture (sovereign
+  // institution, single-country) alongside the GFR ruling.
+  "parlamento-it": {
+    tenantId: "9d18c7e2-5f63-4cb0-a4e3-12a8d0739f56",
+    tenantPrimaryDomain: "parlamento.it",
+    tenantDisplayName: "Parlamento Italiano",
+    hqCountry: "Italy",
+    exchangeSeatCount: 1200,
+    isS500: false,
+    hasDerogation: true,
+    customContractLanguage: true,
+    accountManager: {
+      name: "Marco Romano",
+      email: "mromano@microsoft.com",
+    },
+    adminContact: {
+      name: "Dott.ssa Sofia Russo",
+      email: "ict.admin@parlamento.it",
+      phone: "+39 06 6760 6000",
+    },
+    sharePointRegion: "EU West",
+    defaultStorageRegion: "EU",
+    provenance: {
+      hqCountry: "CLASS Org Profile",
+      hasDerogation: "Concession Tracker",
+      customContractLanguage: "Concession Tracker",
+    },
+  },
+  // Polish newspaper — LNS-2026-00250 (Partial GFR / press-freedom path).
+  // Journalist's enterprise mailbox hosted by the paper's tenant. The
+  // Enterprise surface lets the attorney see the press-org context
+  // alongside the EA's Partial-GFR block on this LDTask.
+  "dziennik-pl": {
+    tenantId: "3a91b502-7c14-4b86-9e25-d04f56a8c719",
+    tenantPrimaryDomain: "dziennik.example",
+    tenantDisplayName: "Dziennik Press Sp. z o.o.",
+    hqCountry: "Poland",
+    exchangeSeatCount: 480,
+    isS500: false,
+    hasDerogation: false,
+    customContractLanguage: false,
+    accountManager: {
+      name: "Aleksandra Nowak",
+      email: "anowak@microsoft.com",
+    },
+    adminContact: {
+      name: "Tomasz Wójcik",
+      email: "tenant.admin@dziennik.example",
+      phone: "+48 22 555 80 00",
+    },
+    sharePointRegion: "EU West",
+    defaultStorageRegion: "EU",
+    provenance: {
+      hqCountry: "CLASS Org Profile",
+      sharePointRegion: "SharePoint Admin",
+    },
+  },
+  // Kontoso International — LNS-2026-00310 (LE service-mapping failure
+  // demo). Generic mid-market enterprise tenant — the demo focus is the
+  // service-name resolver pipeline, not org-specific UX, but the
+  // Enterprise UX still wants a real org seed for the OrgPanel render.
+  "kontoso-intl": {
+    tenantId: "6a4e29c1-8f70-4d35-b612-c08f3a0e975b",
+    tenantPrimaryDomain: "kontoso.example",
+    tenantDisplayName: "Kontoso International Ltd.",
+    hqCountry: "Ireland",
+    exchangeSeatCount: 3200,
+    isS500: false,
+    hasDerogation: false,
+    customContractLanguage: false,
+    accountManager: {
+      name: "Aoife Murphy",
+      email: "amurphy@microsoft.com",
+    },
+    adminContact: {
+      name: "Cillian O'Connor",
+      email: "tenant.admin@kontoso.example",
+      phone: "+353 1 706 4000",
+    },
+    sharePointRegion: "EU West",
+    defaultStorageRegion: "EU",
+    provenance: {
+      hqCountry: "CLASS Org Profile",
+      sharePointRegion: "SharePoint Admin",
+    },
+  },
   "contoso-fr": {
     tenantId: "tenant-contoso-fr",
     // Same TPID as Contoso Corp (US) — sibling tenants under the
