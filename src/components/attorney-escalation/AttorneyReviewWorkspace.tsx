@@ -41,7 +41,11 @@ import { PriorCaseDetailPanel } from "../enterprise-context/PriorCaseDetailPanel
 import type { EnterpriseCtaAction } from "../enterprise-context/enterpriseCtaTypes";
 import { AuthoritySignalSimulator } from "./AuthoritySignalSimulator";
 import { getPriorCasesForTenant } from "../../utils/priorTenantLookup";
-import { applyAttorneyAction } from "../../utils/caseEscalation";
+import {
+  applyAttorneyAction,
+  getPrimaryOrg,
+} from "../../utils/caseEscalation";
+import { MOCK_ORGS } from "../../data/mockOrgs";
 import type { SignalScope } from "../../types/caseTypes";
 import type {
   AttorneyAction,
@@ -400,6 +404,48 @@ export function AttorneyReviewWorkspace({
           case "clearExecReview":
             if (ec) nextEc = { ...ec, execReviewRequired: false };
             break;
+          case "setTenantTier": {
+            // Recorded S500 / V100 list-lookup result. Independent
+            // booleans. Stamps `tenantTierCheck` on the EC for the
+            // case-scoped audit record, auto-sets
+            // `execReviewRequired` when either flag is true, and
+            // writes through to MOCK_ORGS so future cases on this
+            // tenant inherit the recorded tier (matches the "Both —
+            // case + org" persistence decision).
+            if (ec) {
+              const primary = getPrimaryOrg(prev);
+              const tierCheck = {
+                isS500: a.isS500,
+                isV100: a.isV100,
+                checkedAt: a.audit.performedAt,
+                checkedBy: a.audit.actor,
+                checkedRole: a.audit.actorRole ?? "Attorney",
+              } as const;
+              const patchOrg = <T extends { tenantId: string }>(o: T): T => {
+                if (primary && o.tenantId === primary.tenantId) {
+                  return { ...o, isS500: a.isS500, isV100: a.isV100 } as T;
+                }
+                return o;
+              };
+              nextEc = {
+                ...ec,
+                tenantTierCheck: tierCheck,
+                execReviewRequired:
+                  a.isS500 || a.isV100 ? true : ec.execReviewRequired,
+                org: patchOrg(ec.org),
+                orgs: ec.orgs ? ec.orgs.map(patchOrg) : undefined,
+              };
+              // Write-through to the shared mock-org catalogue so the
+              // next case opened on this tenant starts with the
+              // recorded tier already set. Mutates in place since the
+              // catalogue is a module-scope record.
+              if (primary && MOCK_ORGS[primary.tenantId]) {
+                MOCK_ORGS[primary.tenantId].isS500 = a.isS500;
+                MOCK_ORGS[primary.tenantId].isV100 = a.isV100;
+              }
+            }
+            break;
+          }
           case "viewPriorTenantHistory":
             // Pure side-effect — opens the drawer. No FormData
             // mutation beyond the audit event. When the payload carries

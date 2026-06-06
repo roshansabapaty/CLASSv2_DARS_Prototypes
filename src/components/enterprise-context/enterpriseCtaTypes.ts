@@ -42,6 +42,21 @@ export type EnterpriseCtaAction =
       audit: EscalationAuditEvent;
     }
   | {
+      /** Recorded tenant-tier list lookup (S500 / V100). Independent
+       *  booleans — the dialog lets the user toggle each on or off
+       *  based on what they found on the strategic-account lists.
+       *  When the new state has either flag true, the workspace
+       *  handler auto-stamps `execReviewRequired = true` because
+       *  tenants on either list always route through executive
+       *  review. The handler also writes the tier through to the
+       *  org's MOCK_ORGS entry so future cases on the same tenant
+       *  inherit the recorded result. */
+      kind: "setTenantTier";
+      isS500: boolean;
+      isV100: boolean;
+      audit: EscalationAuditEvent;
+    }
+  | {
       kind: "viewPriorTenantHistory";
       tenantId: string;
       /** Optional parent-TPID identifier — when set, the workspace

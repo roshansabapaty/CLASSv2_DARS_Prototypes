@@ -28,9 +28,10 @@ import {
   BuildingMultipleRegular,
   ArrowForwardRegular,
   ShieldCheckmarkRegular,
+  StarFilled,
 } from "@fluentui/react-icons";
 import { useState } from "react";
-import type { FormData } from "../../types/caseTypes";
+import type { EscalationRole, FormData } from "../../types/caseTypes";
 import {
   getEnterpriseOrgs,
   isMultiTenantCase,
@@ -40,9 +41,10 @@ import { UserPanel } from "./UserPanel";
 import { RedirectToEnterpriseDialog } from "../enterprise-context/enterprise-ctas/RedirectToEnterpriseDialog";
 import { CheckConcessionTrackerDialog } from "../enterprise-context/enterprise-ctas/CheckConcessionTrackerDialog";
 import { FlagPolicyReviewButton } from "../enterprise-context/enterprise-ctas/FlagPolicyReviewButton";
-import { FlagExecReviewButton } from "../enterprise-context/enterprise-ctas/FlagExecReviewButton";
+import { TenantTierCheckDialog } from "../enterprise-context/enterprise-ctas/TenantTierCheckDialog";
 import { ViewPriorHistoryButton } from "../enterprise-context/enterprise-ctas/ViewPriorHistoryButton";
 import type { EnterpriseCtaAction } from "../enterprise-context/enterpriseCtaTypes";
+import { RelatedDARSCaseSearch } from "../case-related/RelatedDARSCaseSearch";
 
 const useStyles = makeStyles({
   card: {
@@ -70,6 +72,25 @@ const useStyles = makeStyles({
     borderTopColor: tokens.colorNeutralStroke2,
     marginTop: tokens.spacingVerticalM,
   },
+  // Related-cases search lives inside the Enterprise Context panel so
+  // the RS / TS can hunt for other DARS cases that touch this tenant
+  // (domains, admin contact, target identifiers, LE references) without
+  // leaving the surface. Reuses the same picker as Case Identification.
+  relatedSearchSection: {
+    display: "flex",
+    flexDirection: "column",
+    rowGap: tokens.spacingVerticalXS,
+    paddingTop: tokens.spacingVerticalM,
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+    borderTopColor: tokens.colorNeutralStroke2,
+    marginTop: tokens.spacingVerticalM,
+  },
+  relatedSearchHeading: {
+    display: "flex",
+    alignItems: "center",
+    columnGap: tokens.spacingHorizontalS,
+  },
 });
 
 interface Props {
@@ -81,6 +102,26 @@ interface Props {
    *  omitted, the CTA row is hidden (the section reverts to its Phase 2
    *  read-only shape). */
   onCtaAction?: (a: EnterpriseCtaAction) => void;
+  /** Phase 5 — Related DARS case search scoped to this tenant. Same
+   *  picker the Case Identification card uses (`RelatedDARSCaseSearch`)
+   *  so picks land on `formData.relatedCaseNumbers` and round-trip
+   *  through both surfaces. Section renders only when the parent wires
+   *  both the value and the onChange handler. */
+  relatedCasesValue?: string;
+  onRelatedCasesChange?: (next: string) => void;
+  /** Which CTA buttons render. "attorney" shows the full set
+   *  (Redirect, Concession, Policy Review, Tenant Tier check).
+   *  "specialist" (RS / TS via Case Details) shows Redirect,
+   *  Concession, and Tenant Tier check — Policy Review is hidden
+   *  because flagging policy review is an attorney-scoped decision.
+   *  Defaults to "attorney". */
+  ctaScope?: "attorney" | "specialist";
+  /** Role of the actor performing CTAs in this surface. Stamped onto
+   *  every audit event + `tenantTierCheck.checkedRole`. Defaults to
+   *  "Attorney" (the merge target's original behavior). The case form
+   *  passes "ResponseSpecialist" so RS / TS recorded checks are
+   *  distinguishable in the audit trail. */
+  actorRole?: EscalationRole;
 }
 
 /** Per-identifier account-type lookup. Returns "Enterprise" / "Consumer"
@@ -112,12 +153,27 @@ export function EnterpriseContextSection({
   case: c,
   onSeeLogins,
   onCtaAction,
+  relatedCasesValue,
+  onRelatedCasesChange,
+  ctaScope = "attorney",
+  actorRole = "Attorney",
 }: Props) {
   const styles = useStyles();
   const ec = c.enterpriseContext;
   const [redirectOpen, setRedirectOpen] = useState(false);
   const [concessionOpen, setConcessionOpen] = useState(false);
+  const [tenantTierOpen, setTenantTierOpen] = useState(false);
   if (!ec) return null;
+
+  const tierCheck = ec.tenantTierCheck;
+  const tierButtonLabel = (() => {
+    if (!tierCheck) return "Tenant tier check (S500 / V100)";
+    const flags: string[] = [];
+    if (tierCheck.isS500) flags.push("S500");
+    if (tierCheck.isV100) flags.push("V100");
+    if (flags.length === 0) return "Tenant tier: Not on lists";
+    return `Tenant tier: ${flags.join(" + ")}`;
+  })();
 
   return (
     <Card className={styles.card}>
@@ -148,6 +204,12 @@ export function EnterpriseContextSection({
                 Exec review required
               </Badge>
             )}
+            {/* Audit P1 #8: S500 / V100 badges removed from the section
+                header to avoid duplicating the badges that render
+                inside OrgPanel below. The OrgPanel is the canonical
+                surface (tenant-scoped + within the org card itself).
+                Provenance — who recorded the check + when — is shown
+                inline on the OrgPanel badges via tooltip. */}
             {ec.derogationCheck && (
               <Badge
                 color="success"
@@ -191,7 +253,12 @@ export function EnterpriseContextSection({
                       // Only the primary org renders the inline
                       // ViewPriorHistoryButton; otherwise the row
                       // appears multiple times with duplicated buttons.
-                      idx === 0 && onCtaAction ? (
+                      // Specialist scope hides the button — the
+                      // RelatedDARSCaseSearch element rendered below
+                      // covers the same need (tenant-scoped prior-case
+                      // lookup) with a richer UX, so doubling up isn't
+                      // useful.
+                      idx === 0 && onCtaAction && ctaScope === "attorney" ? (
                         <ViewPriorHistoryButton
                           case={c}
                           onAction={onCtaAction}
@@ -212,6 +279,34 @@ export function EnterpriseContextSection({
                 />
               ))}
 
+              {/* Phase 5 — Related DARS case search scoped to this tenant.
+                  Replaces the prior "View other cases on this tenant" link
+                  that lived on Enterprise identifier rows. Reuses the same
+                  RelatedDARSCaseSearch the Case Identification card uses so
+                  picks land on `formData.relatedCaseNumbers` and the two
+                  surfaces stay in sync. */}
+              {onRelatedCasesChange && relatedCasesValue !== undefined && (
+                <div className={styles.relatedSearchSection}>
+                  <div className={styles.relatedSearchHeading}>
+                    <Text as="h3" weight="semibold" size={300}>
+                      Related DARS cases on this tenant
+                    </Text>
+                  </div>
+                  <Text size={200} style={{ color: tokens.colorNeutralForeground3 }}>
+                    Search the DARS catalogue for cases that touch this
+                    tenant's domains, admin contact, target identifiers, or
+                    LE reference numbers. Picks are added to the case's
+                    Related DARS Cases list.
+                  </Text>
+                  <RelatedDARSCaseSearch
+                    value={relatedCasesValue}
+                    onChange={onRelatedCasesChange}
+                    currentCaseId={c.caseId}
+                    hint="Try the tenant primary domain, admin contact email, a target identifier value, or an LE reference number."
+                  />
+                </div>
+              )}
+
               {onCtaAction && (
                 <div className={styles.ctaRow}>
                   <Button
@@ -228,8 +323,16 @@ export function EnterpriseContextSection({
                   >
                     Check Concession Tracker
                   </Button>
-                  <FlagPolicyReviewButton case={c} onAction={onCtaAction} />
-                  <FlagExecReviewButton case={c} onAction={onCtaAction} />
+                  {ctaScope === "attorney" && (
+                    <FlagPolicyReviewButton case={c} onAction={onCtaAction} />
+                  )}
+                  <Button
+                    appearance="outline"
+                    icon={<StarFilled />}
+                    onClick={() => setTenantTierOpen(true)}
+                  >
+                    {tierButtonLabel}
+                  </Button>
                 </div>
               )}
             </div>
@@ -250,6 +353,13 @@ export function EnterpriseContextSection({
             open={concessionOpen}
             onOpenChange={setConcessionOpen}
             onAction={onCtaAction}
+          />
+          <TenantTierCheckDialog
+            case={c}
+            open={tenantTierOpen}
+            onOpenChange={setTenantTierOpen}
+            onAction={onCtaAction}
+            actorRole={actorRole}
           />
         </>
       )}
