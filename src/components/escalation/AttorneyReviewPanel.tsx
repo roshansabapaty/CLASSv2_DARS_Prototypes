@@ -27,13 +27,22 @@ import {
   Badge,
   Button,
   Card,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList,
+  MenuPopover,
+  MenuTrigger,
   Text,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
 import {
+  ArrowHookUpLeftRegular,
+  ArrowReplyRegular,
   CheckmarkCircleRegular,
   CircleHalfFillRegular,
+  ClipboardTextEditRegular,
   ClockRegular,
   ProhibitedRegular,
   QuestionCircleRegular,
@@ -215,6 +224,38 @@ const useStyles = makeStyles({
     columnGap: tokens.spacingHorizontalS,
     rowGap: tokens.spacingVerticalXS,
   },
+  // Audit P1 #5 — three-tier action layout. Primary decisions
+  // (Release / Block) sit in their own row at full visual weight.
+  // Conditional + Handoff actions sit in a secondary row, visually
+  // separated. The handoff actions collapse into a single Menu so the
+  // CTA row stops reading as a "wall of options."
+  actionsPrimaryRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    columnGap: tokens.spacingHorizontalM,
+    rowGap: tokens.spacingVerticalS,
+    marginBottom: tokens.spacingVerticalS,
+  },
+  actionsSecondaryRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    columnGap: tokens.spacingHorizontalS,
+    rowGap: tokens.spacingVerticalXS,
+    paddingTop: tokens.spacingVerticalS,
+    borderTopStyle: "solid",
+    borderTopWidth: "1px",
+    borderTopColor: tokens.colorNeutralStroke2,
+  },
+  actionsSecondaryLabel: {
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground3,
+    marginRight: tokens.spacingHorizontalXS,
+  },
+  blockButton: {
+    color: tokens.colorPaletteRedForeground1,
+    borderColor: tokens.colorPaletteRedBorder2,
+  },
 });
 
 export interface AttorneyReviewPanelProps {
@@ -380,6 +421,56 @@ export function AttorneyReviewPanel({
     }),
   };
 
+  const requestRedirectConfig: ActionDialogConfig = {
+    title: "Request Redirect to Data Controller",
+    description:
+      "Send the case back to the Specialist with instructions to redirect the request to the data controller (the customer / employer). The escalation stays open until the Specialist closes the redirect loop.",
+    notePromptLabel: "Redirect rationale + RS guidance",
+    notePlaceholder:
+      "Explain why the case should be redirected to the data controller, and any guidance for the redirect letter (template, addressed party, etc.)…",
+    confirmLabel: "Request Redirect",
+    tier: "warn",
+    build: (note) => ({
+      action: {
+        id: genId("act"),
+        action: "RequestRedirect",
+        attorneyName,
+        performedAt: new Date(),
+        note,
+      },
+      statusPatch: {
+        status: "RedirectRequested",
+        redirectRequest: note,
+      },
+      auditKind: "RedirectRequested",
+    }),
+  };
+
+  const markReviewedConfig: ActionDialogConfig = {
+    title: "Mark Reviewed (decision drafted)",
+    description:
+      "You've reviewed the case and drafted a decision but want the Specialist to pick it up before delivery / Form 3 commits. The badge updates to \"Reviewed\" so the RS / TS knows the case is waiting on them.",
+    notePromptLabel: "Decision summary for the Specialist",
+    notePlaceholder:
+      "Summarise the decision you reached and what the Specialist should do next…",
+    confirmLabel: "Mark Reviewed",
+    tier: "primary",
+    build: (note) => ({
+      action: {
+        id: genId("act"),
+        action: "MarkReviewed",
+        attorneyName,
+        performedAt: new Date(),
+        note,
+      },
+      statusPatch: {
+        status: "Reviewed",
+        reviewNote: note,
+      },
+      auditKind: "Reviewed",
+    }),
+  };
+
   const blockConfig: ActionDialogConfig = {
     title: "Block Delivery / Form 3",
     description:
@@ -448,6 +539,16 @@ export function AttorneyReviewPanel({
             Info Requested
           </Badge>
         )}
+        {esc.status === "RedirectRequested" && (
+          <Badge color="warning" appearance="tint">
+            Redirect Requested
+          </Badge>
+        )}
+        {esc.status === "Reviewed" && (
+          <Badge color="brand" appearance="tint">
+            Reviewed
+          </Badge>
+        )}
         {esc.status === "Blocked" && (
           <Badge color="danger" appearance="tint">
             Blocked
@@ -482,6 +583,30 @@ export function AttorneyReviewPanel({
         </div>
       )}
 
+      {/* Redirect-requested note — attorney wants the case sent back to
+          the data controller. Same warn-tier styling as InfoRequested
+          since both put the ball back in RS / TS's court. */}
+      {esc.status === "RedirectRequested" && esc.redirectRequest && (
+        <div className={`${styles.noteBox} ${styles.noteBoxInfo}`}>
+          <span className={`${styles.noteBoxLabel} ${styles.noteBoxLabelInfo}`}>
+            Redirect rationale + RS guidance
+          </span>
+          <Text className={styles.reasonText}>{esc.redirectRequest}</Text>
+        </div>
+      )}
+
+      {/* Reviewed note — attorney has drafted a decision and is asking
+          the Specialist to pick it up. Neutral / info styling — this
+          isn't a problem, just a handoff. */}
+      {esc.status === "Reviewed" && esc.reviewNote && (
+        <div className={`${styles.noteBox} ${styles.noteBoxInfo}`}>
+          <span className={`${styles.noteBoxLabel} ${styles.noteBoxLabelInfo}`}>
+            Attorney decision summary
+          </span>
+          <Text className={styles.reasonText}>{esc.reviewNote}</Text>
+        </div>
+      )}
+
       {/* Blocking note */}
       {esc.status === "Blocked" && esc.blockingNote && (
         <div className={`${styles.noteBox} ${styles.noteBoxDanger}`}>
@@ -492,10 +617,17 @@ export function AttorneyReviewPanel({
         </div>
       )}
 
-      {/* Actions */}
+      {/* Audit P1 #5 — three-tier action layout. Primary decisions
+          (Release / Block) get the top row at full visual weight so
+          the attorney's main path forward reads first. Conditional
+          approval keeps its own outline button on the secondary row.
+          The three handoff actions (Request More Info, Request
+          Redirect, Mark Reviewed) collapse into a single "Send back
+          to Specialist" menu so the row stops reading as a wall of
+          six identical-weight outline buttons. */}
       <div>
         <span className={styles.actionsLabel}>Take action</span>
-        <div className={styles.actionsRow}>
+        <div className={styles.actionsPrimaryRow}>
           <Button
             appearance="primary"
             icon={<CheckmarkCircleRegular />}
@@ -505,25 +637,53 @@ export function AttorneyReviewPanel({
           </Button>
           <Button
             appearance="outline"
+            icon={<ProhibitedRegular />}
+            className={styles.blockButton}
+            onClick={() => setOpenDialog(blockConfig)}
+          >
+            Block Delivery / Form 3…
+          </Button>
+        </div>
+        <div className={styles.actionsSecondaryRow}>
+          <Button
+            appearance="outline"
             icon={<CircleHalfFillRegular />}
             onClick={() => setOpenDialog(conditionsConfig)}
           >
             Approve with Conditions…
           </Button>
-          <Button
-            appearance="outline"
-            icon={<QuestionCircleRegular />}
-            onClick={() => setOpenDialog(requestInfoConfig)}
-          >
-            Request More Information…
-          </Button>
-          <Button
-            appearance="outline"
-            icon={<ProhibitedRegular />}
-            onClick={() => setOpenDialog(blockConfig)}
-          >
-            Block Delivery / Form 3…
-          </Button>
+          <Menu>
+            <MenuTrigger disableButtonEnhancement>
+              <MenuButton
+                appearance="outline"
+                icon={<ArrowReplyRegular />}
+              >
+                Send back to Specialist…
+              </MenuButton>
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                <MenuItem
+                  icon={<QuestionCircleRegular />}
+                  onClick={() => setOpenDialog(requestInfoConfig)}
+                >
+                  Request More Information…
+                </MenuItem>
+                <MenuItem
+                  icon={<ArrowHookUpLeftRegular />}
+                  onClick={() => setOpenDialog(requestRedirectConfig)}
+                >
+                  Request Redirect to data controller…
+                </MenuItem>
+                <MenuItem
+                  icon={<ClipboardTextEditRegular />}
+                  onClick={() => setOpenDialog(markReviewedConfig)}
+                >
+                  Mark Reviewed (decision drafted)…
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>
         </div>
       </div>
 

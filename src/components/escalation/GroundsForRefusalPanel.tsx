@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   ShieldCheck,
   Send,
+  ShieldBan,
 } from "lucide-react";
 import { Card } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -83,12 +84,26 @@ export interface GroundsForRefusalPanelProps {
    *  Parent flips `manualDeliveryResumed` + appends
    *  `GfrDeliveryResumedManually`. When omitted, the CTA self-hides. */
   onResumeDelivery?: () => void;
+  /** Handler fired when the RS clicks "Block Delivery" on a Full or
+   *  Partial GFR. Parent calls `applyGfrEnforcement(formData)` to
+   *  persist the choice and append the `GfrEnforced` audit event.
+   *  The button self-hides once enforcement is in effect. */
+  onBlockDelivery?: () => void;
+  /** Handler fired when the RS clicks "Undo" on the enforced
+   *  confirmation state — covers accidental clicks AND deliberate
+   *  release after re-evaluation. Parent calls
+   *  `releaseGfrEnforcement(formData)` to clear the enforcement
+   *  stamps + append a `GfrEnforcementReleased` audit event. The
+   *  button self-hides while enforcement is not in effect. */
+  onUndoBlockDelivery?: () => void;
 }
 
 export function GroundsForRefusalPanel({
   formData,
   onRetractForm3,
   onResumeDelivery,
+  onBlockDelivery,
+  onUndoBlockDelivery,
 }: GroundsForRefusalPanelProps) {
   // Render gate: workflow type + request type + not-withdrawn.
   if (!gfrApplies(formData)) return null;
@@ -254,8 +269,15 @@ export function GroundsForRefusalPanel({
     );
   }
 
-  // ── Branch 2: Full GFR (entire case blocked) ────────────────────────
+  // ── Branch 2: Full GFR (case-wide refusal — RS decides) ─────────────
+  // The EA's Full refusal is INFORMATIONAL until the RS acts on it. The
+  // panel shows the EA's reasons + a "Block Delivery (case-wide)" CTA;
+  // once the RS clicks, `enforcementApplied` flips and the panel swaps
+  // to a confirmation state. Until then, delivery actions remain
+  // available — the RS retains discretion to dispute the refusal and
+  // proceed (rare, but legally possible).
   if (decision.kind === "Full") {
+    const enforced = block.enforcementApplied === true;
     return (
       <Card className="p-4 border border-[#c50f1f]/40 bg-[#fef0f0] shadow-sm">
         <div className="flex items-start gap-3">
@@ -271,16 +293,19 @@ export function GroundsForRefusalPanel({
                 className="text-sm text-[#c50f1f]"
                 style={{ fontWeight: 700 }}
               >
-                Full Grounds for Refusal — delivery blocked
+                {enforced
+                  ? "Full Grounds for Refusal — delivery blocked"
+                  : "Full Grounds for Refusal — review the EA's decision"}
               </h3>
               {triggerBadge}
             </div>
             {eaLine}
             <p className="text-xs text-[#605e5c] mt-1.5">
               Decision received {formatDate(decision.decidedAt)}
-              {decision.decidedBy && ` by ${decision.decidedBy}`}.
-              Case SLA paused; collection jobs continue but nothing
-              may be delivered to the IA.
+              {decision.decidedBy && ` by ${decision.decidedBy}`}.{" "}
+              {enforced
+                ? "Case SLA paused; collection jobs continue but nothing may be delivered to the IA."
+                : "Receipt does NOT automatically gate delivery — review the reasons below and click Block Delivery to enforce."}
             </p>
             {decision.reasons.length > 0 && (
               <div className="mt-2.5 flex flex-wrap gap-1.5">
@@ -300,6 +325,48 @@ export function GroundsForRefusalPanel({
               <p className="text-xs text-[#323130] mt-2 whitespace-pre-wrap bg-white border border-[#c50f1f]/20 rounded p-2">
                 {decision.reasonSummary}
               </p>
+            )}
+            {/* RS / TS action — only shown until the block is in effect. */}
+            {!enforced && onBlockDelivery && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={onBlockDelivery}
+                  className="h-8 text-xs bg-[#c50f1f] hover:bg-[#a00a18] text-white"
+                >
+                  <ShieldBan className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+                  Block Delivery (case-wide)
+                </Button>
+                <span className="text-[11px] text-[#605e5c]">
+                  Enforces the EA's GFR. The block is auditable and reversible from the Block Delivery banner.
+                </span>
+              </div>
+            )}
+            {enforced && (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <div className="text-[11px] text-[#7a3a00] bg-white border border-[#c50f1f]/30 rounded px-2 py-1 inline-flex items-center gap-1.5">
+                  <ShieldBan className="w-3.5 h-3.5" aria-hidden="true" />
+                  Delivery blocked
+                  {block.enforcementAppliedAt && (
+                    <> {formatDate(block.enforcementAppliedAt)}</>
+                  )}
+                  {block.enforcementAppliedBy && <> by {block.enforcementAppliedBy}</>}
+                  .
+                </div>
+                {onUndoBlockDelivery && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={onUndoBlockDelivery}
+                    className="h-7 text-xs border-[#c50f1f]/40 text-[#c50f1f] hover:bg-[#fef0f0]"
+                  >
+                    <Undo2 className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+                    Undo
+                  </Button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -455,6 +522,62 @@ export function GroundsForRefusalPanel({
                 </ul>
               </div>
             )}
+
+            {/* RS / TS action — block the listed identifiers' data-type
+                jobs. Until the RS acts, the Partial GFR is purely
+                informational and the listed identifiers proceed normally
+                through delivery. */}
+            {(() => {
+              const enforced = block.enforcementApplied === true;
+              if (enforced) {
+                return (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <div className="text-[11px] text-[#7a3a00] bg-white border border-[#ca5010]/40 rounded px-2 py-1 inline-flex items-center gap-1.5">
+                      <ShieldBan className="w-3.5 h-3.5" aria-hidden="true" />
+                      Delivery blocked for the {decision.blockedTaskObjectIds.length}{" "}
+                      listed target identifier
+                      {decision.blockedTaskObjectIds.length === 1 ? "" : "s"}
+                      {block.enforcementAppliedAt && (
+                        <> on {formatDate(block.enforcementAppliedAt)}</>
+                      )}
+                      {block.enforcementAppliedBy && <> by {block.enforcementAppliedBy}</>}
+                      .
+                    </div>
+                    {onUndoBlockDelivery && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={onUndoBlockDelivery}
+                        className="h-7 text-xs border-[#ca5010]/40 text-[#ca5010] hover:bg-[#fff4e6]"
+                      >
+                        <Undo2 className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+                        Undo
+                      </Button>
+                    )}
+                  </div>
+                );
+              }
+              if (!onBlockDelivery) return null;
+              return (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={onBlockDelivery}
+                    className="h-8 text-xs bg-[#ca5010] hover:bg-[#a34108] text-white"
+                  >
+                    <ShieldBan className="w-3.5 h-3.5 mr-1.5" aria-hidden="true" />
+                    Block Delivery for these{" "}
+                    {decision.blockedTaskObjectIds.length} identifier
+                    {decision.blockedTaskObjectIds.length === 1 ? "" : "s"}
+                  </Button>
+                  <span className="text-[11px] text-[#605e5c]">
+                    Enforces the EA's Partial GFR; non-listed identifiers continue to deliver normally.
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </Card>

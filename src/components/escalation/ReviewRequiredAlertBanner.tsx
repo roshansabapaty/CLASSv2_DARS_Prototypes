@@ -26,6 +26,8 @@ import type { AttorneyEscalationStatus } from "../../types/caseTypes";
 const STATUS_LABEL: Record<AttorneyEscalationStatus, string> = {
   Pending: "Pending review",
   InformationRequested: "Info requested",
+  RedirectRequested: "Redirect requested",
+  Reviewed: "Reviewed",
   Blocked: "Blocked",
   ApprovedWithConditions: "Approved with conditions",
   ApprovedForDelivery: "Approved",
@@ -77,25 +79,32 @@ export function ReviewRequiredAlertBanner({
 
   const isUnassigned = assigneeLabel.startsWith("Any ");
 
+  // Audit P1 #6: slimmed to one line. Removed the inline status chip
+  // (e.g. "Pending review") because the StickyCaseHeader already
+  // surfaces the escalation status chip and the AttorneyReviewPanel
+  // body shows it again. The banner's job here is to flag the
+  // ESCALATION EXISTS + give a quick jump-to-panel CTA — the chip
+  // was a duplicate signal. `status` is kept on the prop signature
+  // (callers still pass it) so we can surface it in the
+  // aria-label / tooltip without rendering a separate visual pill.
+  const statusLabel = STATUS_LABEL[status];
+
   return (
     <div
       role="status"
       aria-live="polite"
-      className={`rounded-md border ${accentClasses.container} px-4 py-2.5 flex items-center gap-3`}
+      className={`rounded-md border ${accentClasses.container} px-4 py-2 flex items-center gap-3`}
     >
       <Icon
         className={`w-5 h-5 ${accentClasses.icon} flex-shrink-0`}
         aria-hidden="true"
       />
       <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-        <span className="font-semibold text-[#323130] text-sm">
-          {headline}
-        </span>
         <span
-          className={`inline-flex items-center text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded border ${accentClasses.chip}`}
-          style={{ fontWeight: 600 }}
+          className="font-semibold text-[#323130] text-sm"
+          title={`Status: ${statusLabel}`}
         >
-          {STATUS_LABEL[status]}
+          {headline}
         </span>
         <span className="text-xs text-[#605e5c]">
           <span className="text-[#605e5c]">Assigned to: </span>
@@ -110,7 +119,7 @@ export function ReviewRequiredAlertBanner({
         type="button"
         onClick={onReview}
         className={`gap-1.5 h-8 px-3 text-xs ${accentClasses.cta}`}
-        aria-label={`Open the ${headline.toLowerCase()} panel`}
+        aria-label={`Open the ${headline.toLowerCase()} panel — status: ${statusLabel}`}
       >
         Review now
         <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />

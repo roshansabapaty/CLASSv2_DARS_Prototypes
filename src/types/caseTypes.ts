@@ -204,12 +204,27 @@ export type EscalationRole =
   | "ResponseSpecialist"
   | "TriageSpecialist";
 
-/** Current state of an attorney escalation. */
+/** Current state of an attorney escalation. The sub-states between
+ *  Pending and the terminal Approved* / Blocked / RedirectRequested
+ *  let the RS / TS see at a glance what the attorney has done since
+ *  the case was escalated — the "pull model" for finding cases where
+ *  the recipient acted and an RS / TS follow-up is needed.
+ *
+ *  Lifecycle:
+ *    Pending → InformationRequested (attorney needs more info)
+ *           → RedirectRequested (attorney wants RS to redirect back
+ *                                to the data controller)
+ *           → Reviewed (attorney has decided, RS pickup needed)
+ *           → ApprovedForDelivery / ApprovedWithConditions / Blocked
+ *             (terminal — badge shows "Complete" until the RS
+ *              acknowledges via `rsAcknowledgedAt`). */
 export type AttorneyEscalationStatus =
   | "Pending"
   | "ApprovedForDelivery"
   | "ApprovedWithConditions"
   | "InformationRequested"
+  | "RedirectRequested"
+  | "Reviewed"
   | "Blocked";
 
 /** Scope a Specialist / authority signal carries — applies to attorney
@@ -276,10 +291,12 @@ export interface AttorneyAction {
     | "Release"
     | "ApproveWithConditions"
     | "RequestMoreInformation"
+    | "RequestRedirect"
+    | "MarkReviewed"
     | "Block";
   /** Free-text note authored by the attorney. Required for
-   *  Approve-with-Conditions / Request-Info / Block; optional for
-   *  Release. */
+   *  Approve-with-Conditions / Request-Info / RequestRedirect /
+   *  MarkReviewed / Block; optional for Release. */
   note?: string;
   attorneyName: string;
   performedAt: Date;
@@ -315,9 +332,26 @@ export interface AttorneyEscalation {
   /** Required when status === "InformationRequested". Inline note from
    *  the attorney to the Specialist. */
   informationRequest?: string;
+  /** Required when status === "RedirectRequested". Attorney's note
+   *  explaining why the case should be sent back to the data
+   *  controller (and any guidance for the redirect letter). Rendered
+   *  in the RS / TS pickup banner. */
+  redirectRequest?: string;
+  /** Required when status === "Reviewed". Attorney's summary of the
+   *  decision they reached during review, surfaced to the RS / TS
+   *  when they pick the case back up. */
+  reviewNote?: string;
   /** Required when status === "Blocked". Reason rendered in the block
    *  warning banner + audit thread. */
   blockingNote?: string;
+  /** Set when the RS / TS clicks Acknowledge on the "Attorney
+   *  escalation complete" badge / banner — clears the badge from the
+   *  queue's pull-model views without losing the audit entry. Distinct
+   *  from `conditionsAcknowledgedAt` (which is specific to the
+   *  Approved-with-Conditions banner); this field tracks acknowledgement
+   *  of the escalation lifecycle as a whole. */
+  rsAcknowledgedAt?: Date;
+  rsAcknowledgedBy?: string;
   /** Append-only history of attorney actions. */
   actions: AttorneyAction[];
   /** When the escalation was triggered by an outbound's "Attorney
@@ -339,6 +373,9 @@ export interface EscalationAuditEvent {
     | "Released"
     | "ApprovedWithConditions"
     | "InformationRequested"
+    | "RedirectRequested"
+    | "Reviewed"
+    | "EscalationAcknowledged"
     | "Blocked"
     | "Resumed"
     | "Acknowledged"
@@ -351,9 +388,21 @@ export interface EscalationAuditEvent {
     | "PaiPromptDismissed"
     | "GfrReceived"
     | "EaWindowExpired"
+    | "EaWindowLapseAcknowledged"
     | "GfrCleared"
     | "GfrDeliveryResumedManually"
     | "Form3Retracted"
+    // RS / TS explicitly chose to enforce a Full or Partial GFR by
+    // blocking delivery. The flip side (RS proceeds despite the EA's
+    // decision) currently leaves no audit footprint — only the action
+    // of enforcement is captured.
+    | "GfrEnforced"
+    // RS / TS released a prior `GfrEnforced` block — used by the Undo
+    // CTA when the original click was accidental, or when the RS
+    // re-evaluates and chooses to proceed despite the EA's decision.
+    // The release fires its own audit so the trail captures both the
+    // enforce + release events with their actors and timestamps.
+    | "GfrEnforcementReleased"
     // Form 3 (Non-Execution Response) — Microsoft's outbound to the IA
     // when the case cannot be executed. The send event is captured here
     // (the SLAStopped audit captures the SLA effect; Form3Submitted is
@@ -382,6 +431,8 @@ export interface EscalationAuditEvent {
     | "PolicyReviewCleared"
     | "ExecReviewFlagged"
     | "ExecReviewCleared"
+    | "TenantTierChecked"
+    | "TenantTierCleared"
     | "PriorTenantHistoryViewed";
   /** Performer's display name. CURRENT_USER for the prototype. */
   actor: string;
@@ -530,10 +581,42 @@ export interface EEvidenceGroundsForRefusal {
   /** Auto-set when the 10-day window passes without a final decision. */
   windowLapsed?: boolean;
   windowLapsedAt?: Date;
+  /** Pull-model acknowledgement of the auto-derived lapse. While
+   *  `windowLapsed === true` and these fields are unset, the case
+   *  surfaces in the queue's "Needs my action" filter and a banner
+   *  appears at the top of the case form so the Specialist can see
+   *  the system state change and explicitly ack it. Distinct from
+   *  `manualDeliveryResumed*` (which records the affirmative
+   *  Resume Delivery decision); ack just records "I've seen the
+   *  auto-event," even if the Specialist hasn't yet chosen to resume. */
+  windowLapseAcknowledgedAt?: Date;
+  windowLapseAcknowledgedBy?: string;
   /** Set when the RS explicitly resumes delivery after the lapse. */
   manualDeliveryResumed?: boolean;
   manualDeliveryResumedAt?: Date;
   manualDeliveryResumedBy?: string;
+
+  // ── User enforcement decision (Workflow 6 — Phase F) ──────────────
+  // After receiving a Full or Partial GFR, the RS / TS decides whether
+  // to act on the EA's veto. Receipt of the GFR is informational —
+  // the system does NOT auto-block delivery. The RS makes the call:
+  //   - Full GFR    → "Block Delivery (case-wide)" CTA on the GFR Panel
+  //   - Partial GFR → "Block Delivery for these N target identifiers" CTA
+  // The flag below is set true when the CTA fires; `canDeliver()` and
+  // `identifierBlockedByPartialGfr()` consult it before enforcing. The
+  // RS retains discretion to proceed with delivery despite the EA's
+  // decision (e.g. they have grounds to dispute the refusal); that
+  // path leaves `enforcementApplied` undefined and the case proceeds
+  // normally.
+  /** True once the RS / TS has explicitly chosen to enforce the EA's
+   *  GFR by blocking delivery. Default (undefined) = case proceeds. */
+  enforcementApplied?: boolean;
+  enforcementAppliedAt?: Date;
+  enforcementAppliedBy?: string;
+  /** Free-text rationale captured from the RS when they enforced the
+   *  block — e.g. "EA Full GFR cites Art. 12(c) fundamental-rights
+   *  concern; agree with the assessment." */
+  enforcementNote?: string;
 }
 
 /** DARS Phase 2 Appendix F — the 8 SP-relevant EPOC workflows. Drives
@@ -1280,6 +1363,13 @@ export interface EnterpriseOrgContext {
   hqCountry?: string;
   exchangeSeatCount?: number;
   isS500?: boolean;
+  /** V100 — high-value 100 strategic account. Independent of `isS500`:
+   *  a tenant can be S500 only, V100 only, both, or neither. Production
+   *  reads this from CLASS / strategic-customer registry; the prototype
+   *  seeds it on MOCK_ORGS and lets RS / TS / Attorney record the
+   *  result via the Enterprise Context "Tenant tier check (S500 /
+   *  V100)" CTA, which writes through to this field. */
+  isV100?: boolean;
   hasDerogation?: boolean;
   customContractLanguage?: boolean;
   accountManager?: { name: string; email: string; raveLink?: string };
@@ -1330,6 +1420,27 @@ export interface EnterpriseUserContext {
   mailboxRegion?: string;
   oneDriveRegion?: string;
   conflictOfLawJurisdictions: string[];
+}
+
+/** Recorded result of looking the tenant up on the S500 / V100
+ *  strategic-account lists. Written by the Enterprise Context
+ *  "Tenant tier check" CTA. Not a personal attestation — the lists
+ *  are maintained by partner teams (strategic-accounts / concession
+ *  tracker), and this record captures what the user found when they
+ *  looked the tenant up.
+ *
+ *  Independent booleans — a tenant can be on the S500 list only, the
+ *  V100 list only, both, or neither. When either is true, the case
+ *  is treated as requiring executive review (the check auto-sets
+ *  `execReviewRequired = true` on the EnterpriseContext). Mirrors
+ *  through to the org's `isS500` / `isV100` fields on MOCK_ORGS so
+ *  future cases on the same tenant inherit the recorded result. */
+export interface TenantTierCheckResult {
+  isS500: boolean;
+  isV100: boolean;
+  checkedAt: Date;
+  checkedBy: string;
+  checkedRole: EscalationRole;
 }
 
 /** Result of the attorney clicking "Check Concession Tracker". */
@@ -1398,6 +1509,14 @@ export interface EnterpriseContext {
   users: EnterpriseUserContext[];
   policyReviewRequired: boolean;
   execReviewRequired: boolean;
+  /** Recorded result of the S500 / V100 list lookup. Written by the
+   *  "Tenant tier check" CTA in the Enterprise Context card from
+   *  either the Attorney Review workspace or the Case Details case
+   *  form. When set with isS500 or isV100 true, execReviewRequired is
+   *  auto-stamped true. Round-trips between attorney + specialist
+   *  surfaces so RS / TS recorded checks appear in the attorney view
+   *  and vice versa. */
+  tenantTierCheck?: TenantTierCheckResult;
   derogationCheck?: DerogationCheckResult;
   redirectedToEnterprise?: { at: Date; by: string; correspondenceId: string };
 }

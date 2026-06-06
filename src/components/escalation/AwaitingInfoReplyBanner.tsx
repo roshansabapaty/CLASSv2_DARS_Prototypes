@@ -50,7 +50,7 @@ export interface AwaitingInfoReplyBannerProps {
   onDismiss?: (replyCount: number, newestSubject: string) => void;
 }
 
-function findFreshPaiInbounds(
+export function findFreshPaiInbounds(
   correspondence: CorrespondenceItem[] | undefined,
   informationRequestedAt: Date | undefined,
 ): InboundCorrespondenceItem[] {

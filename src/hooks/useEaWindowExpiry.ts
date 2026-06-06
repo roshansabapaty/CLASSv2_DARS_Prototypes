@@ -97,6 +97,14 @@ export function useEaWindowExpiry({
           ...block,
           windowLapsed: true,
           windowLapsedAt: lapsedAt,
+          // Pull-model surface (audit P0 #2): the auto-derived lapse
+          // raises an "unacknowledged auto state change" signal that
+          // the Specialist clears via the AutoStateChangeBanner on
+          // case open. Cases with unacknowledged lapses surface in the
+          // "Needs my action" filter on the queue, so the
+          // RS / TS pulls the case rather than waiting on a push.
+          windowLapseAcknowledgedAt: undefined,
+          windowLapseAcknowledgedBy: undefined,
         },
         escalationAuditEvents: [...auditEvents, lapseAudit],
       };

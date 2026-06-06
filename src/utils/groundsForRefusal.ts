@@ -130,10 +130,18 @@ export function isCaseOnFullGfrHold(
 }
 
 /** True when delivery is gated for the whole case. Composite of:
- *   - Full GFR active
+ *   - Full GFR AND RS has explicitly enforced it (user-action gated)
  *   - Window lapsed AND no manual resume yet
- *  For Partial GFR, returns false (case-level delivery allowed; use
- *  the per-identifier helper to gate individual rows). */
+ *  For Partial GFR, returns false at the case level (delivery allowed
+ *  for non-listed identifiers); use the per-identifier helper to gate
+ *  individual rows.
+ *
+ *  Receipt of a Full GFR no longer auto-blocks delivery — the EA's
+ *  decision is informational until the RS / TS acts on it via the
+ *  "Block Delivery" CTA on the GFR Panel. This matches the regulatory
+ *  posture: the SP retains discretion to dispute the refusal and
+ *  proceed. The `enforcementApplied` flag on the GFR block is the
+ *  user's choice; absent that, delivery proceeds. */
 export function canDeliver(
   formData: FormData | undefined | null,
 ): boolean {
@@ -141,9 +149,18 @@ export function canDeliver(
   if (!gfrApplies(formData)) return true;
   const block = gfrBlock(formData);
   if (!block) return true;
-  if (isCaseOnFullGfrHold(formData)) return false;
+  if (isCaseOnFullGfrHold(formData) && block.enforcementApplied) return false;
   if (isWindowLapsed(formData) && !block.manualDeliveryResumed) return false;
   return true;
+}
+
+/** True when the RS / TS has chosen to enforce a Full or Partial GFR
+ *  by blocking delivery. Cheap predicate used by UI gates that need to
+ *  know the user has acted on the EA's decision. */
+export function isGfrEnforced(
+  formData: FormData | undefined | null,
+): boolean {
+  return !!gfrBlock(formData)?.enforcementApplied;
 }
 
 // ─── Form 3 (Workflow 7) ↔ GFR (Workflow 6) interaction ─────────────────
@@ -210,8 +227,11 @@ export function retractGateReason(
   }
 }
 
-/** Returns the LDTask IDs blocked by an active Partial GFR. Empty
- *  array when the decision isn't Partial. */
+/** Returns the LDTask IDs the EA named in an active Partial GFR. Empty
+ *  array when the decision isn't Partial. This is the EA's RECOMMENDED
+ *  block list — purely informational until the RS / TS enforces it
+ *  via `applyGfrEnforcement`. Use `identifierBlockedByPartialGfr` to
+ *  ask whether the block is actually being enforced for an identifier. */
 export function blockedIdentifierIds(
   formData: FormData | undefined | null,
 ): string[] {
@@ -221,12 +241,16 @@ export function blockedIdentifierIds(
 }
 
 /** True when the supplied `AccountIdentifier.taskId` is one of the
- *  LDTask IDs blocked by a Partial GFR. Used by CollectionTracker to
- *  cascade row-level greying. */
+ *  LDTask IDs the EA listed in a Partial GFR AND the RS has elected
+ *  to enforce the block (`enforcementApplied === true`). Used by
+ *  CollectionTracker to cascade row-level greying. Without enforcement,
+ *  the Partial GFR is informational and identifiers proceed normally. */
 export function identifierBlockedByPartialGfr(
   formData: FormData | undefined | null,
   taskId: string,
 ): boolean {
+  const block = gfrBlock(formData);
+  if (!block?.enforcementApplied) return false;
   return blockedIdentifierIds(formData).includes(taskId);
 }
 

@@ -33,7 +33,7 @@ export interface RfiReplyOverdueBannerProps {
   onOpenEscalateDialog: () => void;
 }
 
-function findBreachedRfi(
+export function findBreachedRfi(
   correspondence: CorrespondenceItem[] | undefined,
   caseCountry: string | undefined,
 ): InboundCorrespondenceItem | undefined {

@@ -186,6 +186,8 @@ export function currentEscalationChip(
     ApprovedForDelivery: undefined, // chip cleared on Release
     ApprovedWithConditions: undefined, // chip cleared; conditions banner shows
     InformationRequested: { label: "Info Requested", tier: "warnAmber" },
+    RedirectRequested: { label: "Redirect Requested", tier: "warnAmber" },
+    Reviewed: { label: "Attorney Reviewed", tier: "infoSlateBlue" },
     Blocked: { label: "Awaiting Attorney Review Before Delivery", tier: "alertRed" },
   };
 
@@ -194,6 +196,8 @@ export function currentEscalationChip(
     ApprovedForDelivery: undefined,
     ApprovedWithConditions: undefined,
     InformationRequested: { label: "Info Requested", tier: "warnAmber" },
+    RedirectRequested: { label: "Redirect Requested", tier: "warnAmber" },
+    Reviewed: { label: "Reviewer Reviewed", tier: "infoSlateBlue" },
     Blocked: { label: "Reviewer Hold", tier: "alertRed" },
   };
 
@@ -220,6 +224,11 @@ export interface EscalationDashboardSummary {
   /** Specialist who initiated the escalation. */
   escalatedBy: string;
   escalatedAt: Date;
+  /** When the RS / TS clicked Acknowledge on the "Attorney escalation
+   *  complete" badge. Drives the pull-model surfaces — a terminal
+   *  status with no rsAcknowledgedAt still surfaces in the "Needs my
+   *  action" filter as a Complete-unacknowledged case. */
+  rsAcknowledgedAt?: Date;
 }
 
 const ROLE_LABEL: Record<EscalationRole, string> = {
@@ -250,6 +259,7 @@ export function getEscalationSummaryForCase(
       assigneeLabel: resolveAssigneeLabel(esc),
       escalatedBy: esc.escalatedBy,
       escalatedAt: esc.escalatedAt,
+      rsAcknowledgedAt: esc.rsAcknowledgedAt,
     };
   } catch (err) {
     // eslint-disable-next-line no-console
@@ -316,24 +326,47 @@ export const ESCALATION_ROLE_BADGE_LABEL: Record<EscalationRole, string> = {
   TriageSpecialist: "Triage Specialist",
 };
 
-/** "Attorney Escalated" / "LENS Lead/Manager Escalated" etc. — the
- *  literal copy the RS asked for. Returns undefined when the case has
- *  no escalation or the escalation is in a terminal state (the badge
- *  hides when the case no longer needs attention). */
+/** Per-state badge label — communicates WHAT the attorney has done
+ *  since the case was escalated, so the RS / TS can scan the queue
+ *  and find the cases that need them. Pull-model surface.
+ *
+ *  States:
+ *    Pending              → "<Role> Escalated"            (waiting on reviewer)
+ *    InformationRequested → "<Role> Requests More Information"
+ *    RedirectRequested    → "<Role> Requests Redirect"
+ *    Reviewed             → "<Role> Reviewed"             (decision drafted, RS pickup)
+ *    ApprovedForDelivery
+ *      / ApprovedWithConditions
+ *      / Blocked          → "<Role> Escalation Complete"  (until rsAcknowledged)
+ *    (any terminal + acknowledged → undefined, badge hides) */
 export function escalationBadgeLabelForCase(
   caseId: string,
 ): string | undefined {
   try {
     const summary = getEscalationSummaryForCase(caseId);
     if (!summary) return undefined;
-    // Terminal statuses don't show a badge — the case is cleared.
-    if (
-      summary.status === "ApprovedForDelivery" ||
-      summary.status === "ApprovedWithConditions"
-    ) {
-      return undefined;
+    const roleLabel = ESCALATION_ROLE_BADGE_LABEL[summary.role];
+    switch (summary.status) {
+      case "Pending":
+        return `${roleLabel} Escalated`;
+      case "InformationRequested":
+        return `${roleLabel} Requests More Information`;
+      case "RedirectRequested":
+        return `${roleLabel} Requests Redirect`;
+      case "Reviewed":
+        return `${roleLabel} Reviewed`;
+      case "ApprovedForDelivery":
+      case "ApprovedWithConditions":
+      case "Blocked":
+        // Terminal — show "Complete" until RS / TS acknowledges so the
+        // pull-model surfaces flag the case for pickup. Once
+        // acknowledged the badge disappears (the case has been picked
+        // up; no longer pending RS / TS action).
+        if (summary.rsAcknowledgedAt) return undefined;
+        return `${roleLabel} Escalation Complete`;
+      default:
+        return undefined;
     }
-    return `${ESCALATION_ROLE_BADGE_LABEL[summary.role]} Escalated`;
   } catch (err) {
     // eslint-disable-next-line no-console
     console.warn(
@@ -342,6 +375,156 @@ export function escalationBadgeLabelForCase(
       err,
     );
     return undefined;
+  }
+}
+
+/** Colour tier for the badge — communicates urgency / call-to-action
+ *  weight at a glance. Pull-model surfaces use this to draw the eye
+ *  to cases where the attorney has done something RS / TS needs to
+ *  act on. */
+export type EscalationBadgeTier =
+  | "pending"          // neutral — attorney has the case
+  | "info-requested"   // amber — attorney needs RS / TS to provide info
+  | "redirect"         // orange — attorney wants the case redirected
+  | "reviewed"         // saturated amber — decision drafted, RS / TS pickup
+  | "complete"         // green — terminal, RS / TS acknowledge to clear
+  | "blocked";         // red — attorney blocked, RS / TS must address
+
+export function escalationBadgeTierForCase(
+  caseId: string,
+): EscalationBadgeTier | undefined {
+  const summary = getEscalationSummaryForCase(caseId);
+  if (!summary) return undefined;
+  switch (summary.status) {
+    case "Pending":
+      return "pending";
+    case "InformationRequested":
+      return "info-requested";
+    case "RedirectRequested":
+      return "redirect";
+    case "Reviewed":
+      return "reviewed";
+    case "ApprovedForDelivery":
+    case "ApprovedWithConditions":
+      if (summary.rsAcknowledgedAt) return undefined;
+      return "complete";
+    case "Blocked":
+      if (summary.rsAcknowledgedAt) return undefined;
+      return "blocked";
+    default:
+      return undefined;
+  }
+}
+
+/** Auto-derived state changes the Specialist hasn't acknowledged yet.
+ *  Pull-model surface — when the system mutates case state without an
+ *  explicit user click (e.g. the EA review window lapses on the
+ *  10-day clock, GFR clears via inbound Form 1 Review), the case
+ *  surfaces in "Needs my action" until the Specialist opens it and
+ *  acknowledges the auto-event via the page-top banner. Keeps the
+ *  audit trail consistent — every system-side state change has a
+ *  human acknowledgement timestamp.
+ *
+ *  Currently watches:
+ *    - EA review window lapsed (windowLapsed && !windowLapseAcknowledgedAt) */
+export function caseHasUnacknowledgedAutoStateChange(
+  caseId: string,
+): boolean {
+  try {
+    const formData = getCaseFormDataById(caseId);
+    const block = formData?.eevidenceGroundsForRefusal;
+    if (!block) return false;
+    if (block.windowLapsed && !block.windowLapseAcknowledgedAt) return true;
+    return false;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[caseHasUnacknowledgedAutoStateChange] failed for",
+      caseId,
+      err,
+    );
+    return false;
+  }
+}
+
+/** Unread inbound correspondence from an external authority (IA / EA)
+ *  on this case. Drives the composite "Needs my action" filter alongside
+ *  escalation sub-state. Reads correspondence from the case's FormData
+ *  in the registry; returns false if the case isn't in the registry. */
+export function caseHasUnreadInboundFromAuthority(caseId: string): boolean {
+  try {
+    const formData = getCaseFormDataById(caseId);
+    const corr = formData?.correspondence;
+    if (!corr || corr.length === 0) return false;
+    for (const item of corr) {
+      // Inbound items have a `direction === "Inbound"` and a `readAt`
+      // timestamp once the user opens them. We only care about unread
+      // inbounds from external authorities (IA / EA) — internal
+      // correspondence doesn't drive a pull signal.
+      if ((item as { direction?: string }).direction !== "Inbound") continue;
+      if ((item as { readAt?: Date }).readAt) continue;
+      const counterparty = (item as { counterparty?: string }).counterparty;
+      if (
+        counterparty === "IssuingAuthority" ||
+        counterparty === "EnforcingAuthority"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[caseHasUnreadInboundFromAuthority] failed for",
+      caseId,
+      err,
+    );
+    return false;
+  }
+}
+
+/** Composite "Needs my action" predicate — drives the "Needs my action"
+ *  quick-filter tab + the operational-badge filter of the same name.
+ *  Pull-model surface: any condition that requires the Specialist to
+ *  open the case and take a visible action surfaces here.
+ *
+ *  Conditions:
+ *    - Escalation is in a state requiring Specialist follow-up
+ *      (InfoRequested / RedirectRequested / Reviewed / Complete-unacked)
+ *    - Unread inbound correspondence from IA / EA
+ *    - System auto-derived a state change the Specialist hasn't ack'd
+ *      (e.g. EA review window lapsed) */
+export function caseNeedsSpecialistAttention(caseId: string): boolean {
+  if (escalationNeedsSpecialistAction(caseId)) return true;
+  if (caseHasUnreadInboundFromAuthority(caseId)) return true;
+  if (caseHasUnacknowledgedAutoStateChange(caseId)) return true;
+  return false;
+}
+
+/** "Needs RS / TS action" predicate — the composite pull-model filter.
+ *  True when the active escalation is in any state requiring a
+ *  Specialist follow-up:
+ *    - InformationRequested / RedirectRequested  (attorney is waiting)
+ *    - Reviewed                                  (decision drafted)
+ *    - ApprovedForDelivery / ApprovedWithConditions / Blocked, and
+ *      the RS has not yet acknowledged
+ *  Composite condition: OR with unread inbound correspondence (from
+ *  IA / EA) is applied at the call site since that read requires the
+ *  correspondence notification hook. */
+export function escalationNeedsSpecialistAction(caseId: string): boolean {
+  const summary = getEscalationSummaryForCase(caseId);
+  if (!summary) return false;
+  switch (summary.status) {
+    case "InformationRequested":
+    case "RedirectRequested":
+    case "Reviewed":
+      return true;
+    case "ApprovedForDelivery":
+    case "ApprovedWithConditions":
+    case "Blocked":
+      return !summary.rsAcknowledgedAt;
+    default:
+      return false;
   }
 }
 

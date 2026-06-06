@@ -9,6 +9,7 @@
 // See escalationHelpers.ts for the case-level (legacy) variants
 // and the higher-level Dashboard / queue derivations.
 
+import { MOCK_ORGS } from "../data/mockOrgs";
 import type {
   AccountIdentifier,
   AttorneyAction,
@@ -179,11 +180,10 @@ export function getParentTenantOrg(
   parentTpid: string | undefined,
 ): EnterpriseOrgContext | undefined {
   if (!parentTpid) return undefined;
-  // Import lazily to avoid pulling MOCK_ORGS into every consumer of
-  // caseEscalation.ts (the mock orgs map is moderately large; we only
-  // need it on the OrgPanel render path).
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { MOCK_ORGS } = require("../data/mockOrgs") as typeof import("../data/mockOrgs");
+  // Statically imported at the module head — Vite serves ES modules and
+  // CommonJS `require(...)` is a ReferenceError in the browser. (The
+  // original "lazy require" was an attempt to keep MOCK_ORGS out of
+  // unrelated consumers, but Vite tree-shaking already handles that.)
   for (const org of Object.values(MOCK_ORGS) as EnterpriseOrgContext[]) {
     if (org.tenantId === parentTpid && !org.parentTpid) return org;
   }
@@ -420,6 +420,56 @@ export function applyAttorneyAction(
       ...(c.escalationAuditEvents ?? []),
       payload.auditEvent,
     ],
+  };
+}
+
+/** Stamp `rsAcknowledgedAt` + `rsAcknowledgedBy` on each escalation
+ *  in scope. RS / TS click "Acknowledge" on the "Attorney escalation
+ *  complete" badge / banner; this clears the badge from the pull-model
+ *  surfaces (queue badge, "Needs my action" tab) without losing the
+ *  audit entry. Distinct from `acknowledgeConditions` which is
+ *  specific to the Approved-with-Conditions banner; this acknowledges
+ *  the escalation lifecycle as a whole. */
+export function acknowledgeAttorneyDecision(
+  c: FormData,
+  scope: SignalScope,
+  payload: {
+    at: Date;
+    by: string;
+    auditEvent?: EscalationAuditEvent;
+  },
+): FormData {
+  if (scope.kind === "none") {
+    return payload.auditEvent ? withAuditEvent(c, payload.auditEvent) : c;
+  }
+
+  const targetIds = new Set(resolveTargetIdentifiers(c, scope));
+  const stamp = {
+    rsAcknowledgedAt: payload.at,
+    rsAcknowledgedBy: payload.by,
+  };
+
+  const nextIdentifiers = (c.identifiers ?? []).map((id) => {
+    if (!targetIds.has(id.id)) return id;
+    if (!id.attorneyEscalation) return id;
+    return {
+      ...id,
+      attorneyEscalation: { ...id.attorneyEscalation, ...stamp },
+    };
+  });
+
+  const caseLevel =
+    c.attorneyEscalation && scope.kind === "all"
+      ? { ...c.attorneyEscalation, ...stamp }
+      : c.attorneyEscalation;
+
+  return {
+    ...c,
+    identifiers: nextIdentifiers,
+    attorneyEscalation: caseLevel,
+    escalationAuditEvents: payload.auditEvent
+      ? [...(c.escalationAuditEvents ?? []), payload.auditEvent]
+      : c.escalationAuditEvents,
   };
 }
 
