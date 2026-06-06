@@ -32,6 +32,7 @@ import type { CaseQueueItem, PriorityConfig } from "./case-queue-types";
 import { SERVICE_ICONS } from "./case-queue-types";
 import {
   escalationBadgeLabelForCase,
+  escalationBadgeTierForCase,
   getEscalationSummaryForCase,
   gfrQueueChipForCase,
 } from "../../utils/escalationHelpers";
@@ -64,6 +65,7 @@ export function CaseCardOperationalBadges({
   // the Escalated quick filter without opening the case.
   const escalationLabel = escalationBadgeLabelForCase(caseItem.caseId);
   const escalationSummary = getEscalationSummaryForCase(caseItem.caseId);
+  const escalationTier = escalationBadgeTierForCase(caseItem.caseId);
   // GFR chip — derived from the case's EEvidenceGroundsForRefusal block
   // via the registry. Self-suppresses for non-applicable workflows + for
   // `None` decisions on Form1Review (panel-only signal).
@@ -76,6 +78,26 @@ export function CaseCardOperationalBadges({
   const heldForAttorney = corr?.heldForAttorney ?? 0;
   const inboundAwaitingAttorney = corr?.inboundAwaitingAttorney ?? 0;
   const attorneyReviewTotal = heldForAttorney + inboundAwaitingAttorney;
+
+  // Audit P0 #3 — hierarchy between Alert badges (legal-veto + urgency
+  // signals the user must act on) and Property badges (case metadata
+  // like identifier count + services). When any Alert is present on a
+  // card, Property badges dim to opacity-60 so the eye lands on the
+  // alerts first. Property badges remain readable for context, just
+  // visually demoted. Alert badges also gain font-bold + slightly
+  // heavier saturation than the previous outline treatment so they
+  // read as the primary focal point at a glance.
+  const isUrgentPriority =
+    caseItem.casePriority === "Emergency" ||
+    caseItem.casePriority === "Urgent";
+  const hasAnyAlert =
+    isUrgentPriority ||
+    highPriorityCrimes.length > 0 ||
+    isEmergencyType ||
+    !!gfrChip ||
+    !!escalationLabel ||
+    attorneyReviewTotal > 0;
+  const propertyDimClass = hasAnyAlert ? "opacity-60" : "";
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-2 px-3 bg-slate-50/80 rounded-md border border-slate-100">
@@ -120,8 +142,7 @@ export function CaseCardOperationalBadges({
           <Badge
             key={crime}
             variant="outline"
-            className="bg-red-50 text-red-700 border-red-300 text-xs shadow-sm cursor-default"
-            style={{ fontWeight: 600 }}
+            className="bg-red-100 text-red-800 border-red-400 border-[1.5px] text-xs shadow-sm cursor-default font-bold"
           >
             <Shield className="w-3 h-3 mr-1" />
             {crime}
@@ -131,8 +152,7 @@ export function CaseCardOperationalBadges({
         {isEmergencyType && (
           <Badge
             variant="outline"
-            className="bg-amber-50 text-amber-700 border-amber-300 text-xs cursor-default"
-            style={{ fontWeight: 600 }}
+            className="bg-amber-100 text-amber-800 border-amber-400 border-[1.5px] text-xs cursor-default font-bold"
           >
             <AlertCircle className="w-3 h-3 mr-1" />
             {caseItem.requestType}
@@ -143,13 +163,16 @@ export function CaseCardOperationalBadges({
       {/* Divider */}
       <span className="text-slate-200 text-sm select-none">|</span>
 
-      {/* Cat 2: Identifier Count */}
+      {/* Cat 2: Identifier Count (property — dims when alerts present) */}
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
             <Badge
               variant="outline"
-              className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs cursor-help"
+              className={cn(
+                "bg-indigo-50 text-indigo-700 border-indigo-200 text-xs cursor-help",
+                propertyDimClass,
+              )}
               style={{ fontWeight: 500 }}
             >
               <Users className="w-3 h-3 mr-1" />
@@ -192,7 +215,7 @@ export function CaseCardOperationalBadges({
       {/* Divider */}
       <span className="text-slate-200 text-sm select-none">|</span>
 
-      {/* Cat 3: Services Requested (Azure prioritized) */}
+      {/* Cat 3: Services Requested (Azure prioritized) — property, dims */}
       <div className="flex items-center gap-1">
         {sortedServices.map((service) => {
           const Icon = SERVICE_ICONS[service] || Cloud;
@@ -207,7 +230,8 @@ export function CaseCardOperationalBadges({
                       "text-xs cursor-help",
                       isAzure
                         ? "bg-sky-50 text-sky-700 border-sky-300 ring-1 ring-sky-200"
-                        : "bg-slate-50 text-slate-600 border-slate-200"
+                        : "bg-slate-50 text-slate-600 border-slate-200",
+                      propertyDimClass,
                     )}
                     style={{ fontWeight: isAzure ? 600 : 400 }}
                   >
@@ -235,7 +259,7 @@ export function CaseCardOperationalBadges({
         })}
       </div>
 
-      {/* Cat 4: Account Type — Enterprise only (post Check Accounts) */}
+      {/* Cat 4: Account Type — Enterprise only (post Check Accounts) — property, dims */}
       {caseItem.accountExistenceChecked && caseItem.hasEnterpriseAccounts && (
         <>
           <span className="text-slate-200 text-sm select-none">|</span>
@@ -244,7 +268,10 @@ export function CaseCardOperationalBadges({
               <TooltipTrigger asChild>
                 <Badge
                   variant="outline"
-                  className="bg-purple-50 text-purple-700 border-purple-300 text-xs cursor-help"
+                  className={cn(
+                    "bg-purple-50 text-purple-700 border-purple-300 text-xs cursor-help",
+                    propertyDimClass,
+                  )}
                   style={{ fontWeight: 600 }}
                 >
                   <Building2 className="w-3 h-3 mr-1" />
@@ -326,12 +353,27 @@ export function CaseCardOperationalBadges({
                   variant="outline"
                   className={cn(
                     "text-xs cursor-help",
-                    escalationSummary?.status === "Pending" ||
-                      escalationSummary?.status === "Blocked"
+                    // Per-tier styling drives the visual urgency of the
+                    // escalation badge. Pull-model surfaces use this so
+                    // RS / TS can scan the queue and find cases where
+                    // the attorney has done something requiring them.
+                    escalationTier === "blocked"
                       ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
-                      : escalationSummary?.status === "InformationRequested"
+                      : escalationTier === "info-requested"
                         ? "bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40"
-                        : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
+                        : escalationTier === "redirect"
+                          ? "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40"
+                          : escalationTier === "reviewed"
+                            // Audit P1 #7: was infoSlateBlue, which read
+                            // as "FYI" rather than "needs your action."
+                            // Saturated amber/orange signals the
+                            // pickup-required state distinctly from
+                            // info-requested (lighter amber) and
+                            // redirect (lighter peach).
+                            ? "bg-[#fcd5b5] text-[#7a3a00] border-[#ca5010]/60"
+                            : escalationTier === "complete"
+                              ? "bg-[#dff6dd] text-[#0b6a0b] border-[#107c10]/40"
+                              : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
                   )}
                   style={{ fontWeight: 600 }}
                 >

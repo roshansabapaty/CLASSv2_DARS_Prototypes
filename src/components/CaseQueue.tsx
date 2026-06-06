@@ -13,7 +13,7 @@
  * Option C applied: uniform border-l-4, P-badge as primary accessible signal.
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -25,10 +25,10 @@ import {
   Shield,
   Building2,
   Globe,
+  HandHelping,
   UserCheck,
   UserX,
   Clock,
-  Scale,
   Search,
 } from "lucide-react";
 import { cn } from "./ui/utils";
@@ -38,6 +38,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
+
+import { caseNeedsSpecialistAttention } from "../utils/escalationHelpers";
 
 // Sub-components
 import { CaseCardHeader } from "./case-queue/CaseCardHeader";
@@ -120,13 +122,19 @@ export { getAccountExistenceFlags };
 // Mutually exclusive saved views above the search row. Exactly one tab is
 // active at any time. The leftmost tab ("All") is the no-filter default;
 // picking another tab replaces the active view.
+// Audit P1 #4 — two visual groups: Navigation (left, neutral) for scope
+// selection + Attention (right, red/amber) for cases that need user
+// follow-up. "Escalated" dropped: it duplicated "Needs my action"
+// semantically (the new composite tab subsumes its intent), and the
+// LE-side resubmission case it surfaced is still reachable via filters.
 type QuickFilter =
   | "all"
   | "myCases"
   | "unassigned"
+  | "needsAction"
   | "emergency"
-  | "overdue"
-  | "escalated";
+  | "overdue";
+type QuickFilterGroup = "navigation" | "attention";
 
 /** Urgency tier drives the count chip + leading icon colour:
  *  - "alert" → red (Emergency, Overdue) — operational red-flag attention
@@ -141,28 +149,51 @@ interface QuickFilterTab {
    *  For the "all" tab the predicate always returns true. */
   predicate: (c: CaseQueueItem) => boolean;
   urgency: QuickFilterUrgency;
-  /** Optional leading icon — present on the three needs-attention tabs. */
+  /** Visual grouping — drives the left/right split + spacer between
+   *  the two clusters. Navigation = scope selectors; attention =
+   *  cases needing user follow-up. */
+  group: QuickFilterGroup;
+  /** Optional leading icon — present on the needs-attention tabs. */
   icon?: typeof AlertTriangle;
 }
 
 const QUICK_FILTERS: QuickFilterTab[] = [
+  // ── Navigation group — scope selectors ────────────────────────────────
   {
     key: "all",
     label: "All",
     predicate: () => true,
     urgency: "info",
+    group: "navigation",
   },
   {
     key: "myCases",
     label: "My Cases",
     predicate: (c) => c.assigneeName === CURRENT_USER,
     urgency: "info",
+    group: "navigation",
   },
   {
     key: "unassigned",
     label: "Unassigned",
     predicate: (c) => !c.assigneeName,
     urgency: "info",
+    group: "navigation",
+  },
+  // ── Attention group — cases needing user follow-up ───────────────────
+  {
+    // Pull-model surface — surfaces cases where the attorney has done
+    // something requiring an RS / TS follow-up (sub-state changes on
+    // the internal escalation) OR where there's unread inbound
+    // correspondence from an IA / EA on the case. Composite predicate
+    // sits in `caseNeedsSpecialistAttention`. Subsumes the prior
+    // "Escalated" tab.
+    key: "needsAction",
+    label: "Needs my action",
+    predicate: (c) => caseNeedsSpecialistAttention(c.caseId),
+    urgency: "warn",
+    group: "attention",
+    icon: HandHelping,
   },
   {
     key: "emergency",
@@ -173,6 +204,7 @@ const QUICK_FILTERS: QuickFilterTab[] = [
     predicate: (c) =>
       c.casePriority === "Emergency" || c.casePriority === "Urgent",
     urgency: "alert",
+    group: "attention",
     icon: AlertTriangle,
   },
   {
@@ -183,18 +215,16 @@ const QUICK_FILTERS: QuickFilterTab[] = [
       return Number.isFinite(due) && due < Date.now();
     },
     urgency: "alert",
+    group: "attention",
     icon: Clock,
-  },
-  {
-    key: "escalated",
-    label: "Escalated",
-    predicate: (c) => Boolean(c.assignedToLawyer || c.escalatedToLE),
-    urgency: "warn",
-    icon: Scale,
   },
   // "On GFR Hold" quick-filter removed — the same filter is now
   // available via the operational-badges Badges filter, which composes
   // with the rest of the toolbar instead of forcing a tab selection.
+  //
+  // "Escalated" quick-filter removed (audit P1 #4) — duplicated
+  // "Needs my action" semantically. LE-side resubmission (escalatedToLE)
+  // is still reachable via the extra-filter catalog.
 ];
 
 /** Per-tier chip + icon styles. When count is 0 we override to muted slate
@@ -808,61 +838,101 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           looking at" up top, "tools for narrowing" in the middle, and
           "what filters are currently active" at the bottom. */}
 
-      {/* Row 1 — Quick filter tabs + View toggle */}
+      {/* Audit P1 #4 — scope-strip. When extra filters are active, show
+          a small strip above the tab row that names "what's narrowing
+          this view." Makes the tab-count scoping explicit instead of
+          relying on the chips below the toolbar. */}
+      {Object.keys(extraFilters).length > 0 && (
+        <div className="flex items-center gap-2 text-xs text-slate-600 -mb-1">
+          <span className="font-medium">
+            Counts and list below scoped to {Object.keys(extraFilters).length}{" "}
+            active filter
+            {Object.keys(extraFilters).length === 1 ? "" : "s"} —
+          </span>
+          <button
+            type="button"
+            onClick={() => setExtraFilters({})}
+            className="text-[#0078d4] hover:underline focus-visible:outline-none focus-visible:underline"
+          >
+            Clear all filters
+          </button>
+        </div>
+      )}
+
+      {/* Row 1 — Quick filter tabs + View toggle. Tabs split into two
+          visual groups: Navigation (left, neutral) for scope selectors
+          + Attention (right, red/amber) for cases needing user
+          follow-up. A spacer between groups creates the visual
+          hierarchy the audit asked for. */}
       <div className="flex items-center gap-3 flex-wrap">
         <div
           role="tablist"
           aria-label="Quick filters"
           className="flex items-center gap-1 flex-wrap flex-1"
         >
-          {QUICK_FILTERS.map((tab) => {
+          {QUICK_FILTERS.map((tab, idx) => {
             const active = quickFilter === tab.key;
             const count = filterCounts[tab.key];
             const Icon = tab.icon;
+            // Visual spacer between Navigation and Attention groups —
+            // rendered before the first Attention tab so the two
+            // clusters read as distinct purposes.
+            const prevTab = idx > 0 ? QUICK_FILTERS[idx - 1] : null;
+            const showSeparator =
+              prevTab !== null &&
+              prevTab.group === "navigation" &&
+              tab.group === "attention";
             return (
-              <button
-                key={tab.key}
-                role="tab"
-                aria-selected={active}
-                aria-label={`${tab.label}, ${count} ${count === 1 ? "case" : "cases"}`}
-                type="button"
-                onClick={() => setQuickFilter(tab.key)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
-                  active
-                    ? "bg-[#0078d4] text-white border-[#0078d4]"
-                    : "bg-white text-[#323130] border-[#e1dfdd] hover:bg-[#f3f2f1]",
-                )}
-              >
-                {Icon && (
-                  <Icon
-                    className={cn(
-                      "w-3.5 h-3.5",
-                      active ? "text-white" : iconClassFor(tab.urgency, count),
-                    )}
+              <React.Fragment key={tab.key}>
+                {showSeparator && (
+                  <span
                     aria-hidden="true"
+                    className="inline-block w-px h-5 bg-slate-300 mx-1"
                   />
                 )}
-                <span>{tab.label}</span>
-                <span
+                <button
+                  role="tab"
+                  aria-selected={active}
+                  aria-label={`${tab.label}, ${count} ${count === 1 ? "case" : "cases"}`}
+                  type="button"
+                  onClick={() => setQuickFilter(tab.key)}
                   className={cn(
-                    "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px]",
+                    "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
                     active
-                      ? "bg-white/20 text-white"
-                      : count === 0
-                        ? "bg-[#f3f2f1] text-[#a19f9d]"
-                        : tab.urgency === "alert"
-                          ? "bg-[#fde7e9] text-[#a4262c]"
-                          : tab.urgency === "warn"
-                            ? "bg-[#fff4ce] text-[#7a4f00]"
-                            : "bg-[#deecf9] text-[#0078d4]",
+                      ? "bg-[#0078d4] text-white border-[#0078d4]"
+                      : "bg-white text-[#323130] border-[#e1dfdd] hover:bg-[#f3f2f1]",
                   )}
-                  aria-hidden="true"
                 >
-                  {count}
-                </span>
-              </button>
+                  {Icon && (
+                    <Icon
+                      className={cn(
+                        "w-3.5 h-3.5",
+                        active ? "text-white" : iconClassFor(tab.urgency, count),
+                      )}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px]",
+                      active
+                        ? "bg-white/20 text-white"
+                        : count === 0
+                          ? "bg-[#f3f2f1] text-[#a19f9d]"
+                          : tab.urgency === "alert"
+                            ? "bg-[#fde7e9] text-[#a4262c]"
+                            : tab.urgency === "warn"
+                              ? "bg-[#fff4ce] text-[#7a4f00]"
+                              : "bg-[#deecf9] text-[#0078d4]",
+                    )}
+                    aria-hidden="true"
+                  >
+                    {count}
+                  </span>
+                </button>
+              </React.Fragment>
             );
           })}
         </div>

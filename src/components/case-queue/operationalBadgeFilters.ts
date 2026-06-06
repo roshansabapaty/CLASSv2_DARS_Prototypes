@@ -20,12 +20,14 @@ import {
   Scale,
   Gavel,
   BellRing,
+  HandHelping,
   type LucideIcon,
 } from "lucide-react";
 import type { CaseQueueItem } from "./case-queue-types";
 import { isHighPriorityCrime } from "./case-queue-types";
 import {
   caseHasActiveGfrHold,
+  caseNeedsSpecialistAttention,
   escalationBadgeLabelForCase,
 } from "../../utils/escalationHelpers";
 
@@ -36,6 +38,7 @@ export type OperationalBadgeId =
   | "azure"
   | "gfr-hold"
   | "internal-escalation"
+  | "needs-my-action"
   | "ndo-reminder";
 
 export interface OperationalBadgeDef {
@@ -111,6 +114,15 @@ export const OPERATIONAL_BADGES: OperationalBadgeDef[] = [
     icon: Scale,
     chipClasses: "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
     predicate: (c) => Boolean(escalationBadgeLabelForCase(c.caseId)),
+  },
+  {
+    id: "needs-my-action",
+    label: "Needs my action",
+    description:
+      "Pull-model filter — the attorney has done something on this case that needs an RS / TS follow-up: requested more info, requested redirect, marked the case reviewed, completed the escalation (pending acknowledgement), OR there's unread inbound correspondence from the IA / EA waiting to be triaged.",
+    icon: HandHelping,
+    chipClasses: "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40",
+    predicate: (c) => caseNeedsSpecialistAttention(c.caseId),
   },
   {
     id: "ndo-reminder",
