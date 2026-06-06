@@ -58,10 +58,12 @@
 import type {
   AccountIdentifier,
   CaseLegalContext,
+  EnterpriseContext,
   FormData,
 } from "../types/caseTypes";
 import { createDefaultIdentifierServices } from "../config/lensServicesConfig";
 import { computeSlaDueDate } from "../constants/slaConstants";
+import { MOCK_ORGS } from "../data/mockOrgs";
 
 const genId = () =>
   `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -394,7 +396,14 @@ export function buildLENS202600310FormData(): FormData {
     geoLocation: "Europe - West Europe",
     createdBy: "LE Agency",
     services: createDefaultIdentifierServices("eEvidence"),
-    checkAccounts: { accountType: "Enterprise" },
+    checkAccounts: {
+      accountType: "Enterprise",
+      tenantId: "6a4e29c1-8f70-4d35-b612-c08f3a0e975b",
+      tenantPrimaryDomain: "kontoso.onmicrosoft.com",
+      tenantAdminName: "Cillian O'Connor",
+      tenantAdminEmail: "tenant.admin@kontoso.example",
+      tenantAdminPhone: "+353 1 706 4000",
+    },
     leExternalServices: ["XBOX/Minecraft", "Email"],
     leExternalServiceDates: {
       "XBOX/Minecraft": leDateRange,
@@ -480,6 +489,29 @@ export function buildLENS202600310FormData(): FormData {
       "Consumer-only, so the resolver should refuse the mapping while " +
       "Email continues to resolve (→ exchangeEnterprise).",
   } as any;
+
+  // Kontoso International enterprise context — service-mapping failure
+  // demo. Only id3 (the Enterprise mailbox) drives the OrgPanel / User
+  // Panel; id1 + id2 stay Consumer to exercise the wrong-account-type
+  // resolver branch on those rows. Single tenant, Ireland HQ.
+  const enterpriseContext: EnterpriseContext = {
+    triggers: ["class_account_check"],
+    manifestErrorPresent: false,
+    org: MOCK_ORGS["kontoso-intl"],
+    users: [
+      {
+        identifierId: id3.id,
+        identifierValue: id3.value,
+        lastLogonLocation: "Dublin, IE",
+        geoResolutions30d: ["IE"],
+        mailboxRegion: "EU West",
+        oneDriveRegion: "EU West",
+        conflictOfLawJurisdictions: ["IE"],
+      },
+    ],
+    policyReviewRequired: false,
+    execReviewRequired: false,
+  };
 
   return {
     caseId: "LNS-2026-00310",
@@ -576,6 +608,7 @@ export function buildLENS202600310FormData(): FormData {
     userResponseReceived: "",
     dateOfUserResponse: undefined,
     identifiers: [id1, id2, id3],
+    enterpriseContext,
     nonDisclosureOrders: [],
     startDate,
     endDate,

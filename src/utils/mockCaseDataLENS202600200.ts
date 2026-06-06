@@ -205,9 +205,27 @@ export function buildLENS202600200FormData(): FormData {
         "Art. 9.",
       escalatedAt: new Date("2026-05-14T08:42:00"),
       escalatedBy: "Nicole Garcia",
-      status: "Pending",
+      // Pull-model demo seed — attorney has reviewed and concluded
+      // that the case should be redirected to the data controller
+      // (Contoso France) rather than proceeding via Form 3. The badge
+      // reads "Attorney Requests Redirect" so the RS can find this
+      // case in the "Needs my action" filter.
+      status: "RedirectRequested",
+      redirectRequest:
+        "Recommend redirect to Contoso France's named DPO. The Gendarmerie's " +
+        "request is on a corporate employee account; controller-direct flow is " +
+        "the lower-risk path under Reg 2023/1543 Art. 5. Use the standard " +
+        "redirect letter template, addressed to: dpo@contoso.fr.",
       scope: "all",
-      actions: [],
+      actions: [
+        {
+          id: "act-200-redirect-1",
+          action: "RequestRedirect",
+          attorneyName: "Michael Chen",
+          performedAt: new Date("2026-05-15T11:08:00"),
+          note: "Recommend redirect to controller (Contoso France DPO). See note.",
+        },
+      ],
       relatedOutboundIds: ["corr-fr-form3-out-001"],
     },
   } as any;
@@ -505,6 +523,11 @@ export function buildLENS202600200FormData(): FormData {
     ],
 
     // ── Seeded Attorney Escalation tied to the held outbound ──────────
+    // Pull-model demo seed — attorney has reviewed and concluded that
+    // the case should be redirected to the data controller (Contoso
+    // France) rather than proceeding via Form 3. The badge reads
+    // "Attorney Requests Redirect" so the RS can find this case in
+    // the "Needs my action" filter.
     attorneyEscalation: {
       role: "Attorney",
       assignedAttorneyId: "ATT-001",
@@ -517,8 +540,21 @@ export function buildLENS202600200FormData(): FormData {
         "Microsoft.",
       escalatedAt: new Date("2026-05-14T08:42:00"),
       escalatedBy: "Nicole Garcia",
-      status: "Pending",
-      actions: [],
+      status: "RedirectRequested",
+      redirectRequest:
+        "Recommend redirect to Contoso France's named DPO. The Gendarmerie's " +
+        "request is on a corporate employee account; controller-direct flow is " +
+        "the lower-risk path under Reg 2023/1543 Art. 5. Use the standard " +
+        "redirect letter template, addressed to: dpo@contoso.fr.",
+      actions: [
+        {
+          id: "act-200-redirect-1",
+          action: "RequestRedirect",
+          attorneyName: "Michael Chen",
+          performedAt: new Date("2026-05-15T11:08:00"),
+          note: "Recommend redirect to controller (Contoso France DPO). See note.",
+        },
+      ],
       relatedOutboundIds: ["corr-fr-form3-out-001"],
     },
     escalationAuditEvents: [

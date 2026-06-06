@@ -25,9 +25,11 @@ import type {
   AccountIdentifier,
   CaseLegalContext,
   EEvidenceGroundsForRefusal,
+  EnterpriseContext,
   EscalationAuditEvent,
   FormData,
 } from "../types/caseTypes";
+import { MOCK_ORGS } from "../data/mockOrgs";
 import { createDefaultIdentifierServices } from "../config/lensServicesConfig";
 import { computeSlaDueDate } from "../constants/slaConstants";
 
@@ -160,7 +162,14 @@ export function buildLENS202600240FormData(): FormData {
     geoLocation: "Europe - West Europe",
     createdBy: "LE Agency",
     services,
-    checkAccounts: { accountType: "Enterprise" },
+    checkAccounts: {
+      accountType: "Enterprise",
+      tenantId: "9d18c7e2-5f63-4cb0-a4e3-12a8d0739f56",
+      tenantPrimaryDomain: "parlamento.onmicrosoft.com",
+      tenantAdminName: "Dott.ssa Sofia Russo",
+      tenantAdminEmail: "ict.admin@parlamento.it",
+      tenantAdminPhone: "+39 06 6760 6000",
+    },
     leExternalServices: ["Email", "Microsoft Account Profile"],
     leExternalServiceDates: {
       Email: leDateRange,
@@ -170,6 +179,30 @@ export function buildLENS202600240FormData(): FormData {
       "Subject under investigation for OtherFinancialCrimeOrFraud. " +
       "Request subscriber + content data within the order's date window.",
   } as any;
+
+  // Parlamento Italiano enterprise context — Full-GFR / immunities case.
+  // Single tenant, Italian-only narrative. Org seat count + derogation
+  // flags drive the policy/exec review hints in the OrgPanel; the user
+  // panel surfaces the parliamentary mailbox geo for the attorney's
+  // sovereign-institution scope check.
+  const enterpriseContext: EnterpriseContext = {
+    triggers: ["class_account_check"],
+    manifestErrorPresent: false,
+    org: MOCK_ORGS["parlamento-it"],
+    users: [
+      {
+        identifierId: id1.id,
+        identifierValue: id1.value,
+        lastLogonLocation: "Rome, IT",
+        geoResolutions30d: ["IT"],
+        mailboxRegion: "EU West",
+        oneDriveRegion: "EU West",
+        conflictOfLawJurisdictions: ["IT"],
+      },
+    ],
+    policyReviewRequired: true,
+    execReviewRequired: false,
+  };
 
   // ── GFR block — Full refusal, Form1Review trigger ──────────────────
   const eevidenceGroundsForRefusal: EEvidenceGroundsForRefusal = {
@@ -298,6 +331,7 @@ export function buildLENS202600240FormData(): FormData {
     userResponseReceived: "",
     dateOfUserResponse: undefined,
     identifiers: [id1],
+    enterpriseContext,
     nonDisclosureOrders: [],
     startDate,
     endDate,

@@ -205,9 +205,22 @@ export function buildLENS202600265FormData(): FormData {
         "and resuming production.",
       escalatedAt: autoEscalatedAt,
       escalatedBy: "System (auto-escalation on EA rejection of Form 3)",
-      status: "Pending",
+      // Pull-model demo seed — attorney has approved the case for
+      // delivery (escalation lifecycle complete) but the RS has not
+      // yet acknowledged. The badge reads "Attorney Escalation
+      // Complete" and the RS sees an Acknowledge banner inside the
+      // case form. Acknowledging clears the badge.
+      status: "ApprovedForDelivery",
       scope: "all",
-      actions: [],
+      actions: [
+        {
+          id: "act-265-release-1",
+          action: "Release",
+          attorneyName: "Michael Chen",
+          performedAt: new Date(autoEscalatedAt.getTime() + 2 * 60 * 60 * 1000),
+          note: "Confirmed retract of Form 3 is the correct path. Approve for delivery.",
+        },
+      ],
       relatedOutboundIds: [form3Id],
     },
   } as any;
@@ -283,6 +296,10 @@ export function buildLENS202600265FormData(): FormData {
   // RS can retract. The escalation references the original Form 3
   // outbound via relatedOutboundIds so the Attorney Review panel
   // surfaces it as the artifact under review.
+  // Pull-model demo seed — attorney has Released the case (escalation
+  // lifecycle terminal-Approved) but the RS hasn't yet acknowledged.
+  // The badge reads "Attorney Escalation Complete"; opening the case
+  // surfaces the EscalationCompleteBanner with an Acknowledge button.
   const attorneyEscalation: AttorneyEscalation = {
     role: "Attorney",
     reason:
@@ -293,8 +310,16 @@ export function buildLENS202600265FormData(): FormData {
       "review required before retracting + resuming production.",
     escalatedAt: autoEscalatedAt,
     escalatedBy: "System (auto-escalation on EA rejection of Form 3)",
-    status: "Pending",
-    actions: [],
+    status: "ApprovedForDelivery",
+    actions: [
+      {
+        id: "act-265-release-1",
+        action: "Release",
+        attorneyName: "Michael Chen",
+        performedAt: new Date(autoEscalatedAt.getTime() + 2 * 60 * 60 * 1000),
+        note: "Confirmed retract of Form 3 is the correct path. Approve for delivery.",
+      },
+    ],
     relatedOutboundIds: [form3Id],
   };
 

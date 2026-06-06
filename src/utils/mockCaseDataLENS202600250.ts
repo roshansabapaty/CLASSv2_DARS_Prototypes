@@ -27,11 +27,13 @@ import type {
   AccountIdentifier,
   CaseLegalContext,
   EEvidenceGroundsForRefusal,
+  EnterpriseContext,
   EscalationAuditEvent,
   FormData,
 } from "../types/caseTypes";
 import { createDefaultIdentifierServices } from "../config/lensServicesConfig";
 import { computeSlaDueDate } from "../constants/slaConstants";
+import { MOCK_ORGS } from "../data/mockOrgs";
 
 const genId = () =>
   `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -193,7 +195,14 @@ export function buildLENS202600250FormData(): FormData {
     geoLocation: "Europe - West Europe",
     createdBy: "LE Agency",
     services: createDefaultIdentifierServices(),
-    checkAccounts: { accountType: "Enterprise" },
+    checkAccounts: {
+      accountType: "Enterprise",
+      tenantId: "3a91b502-7c14-4b86-9e25-d04f56a8c719",
+      tenantPrimaryDomain: "dziennik.onmicrosoft.com",
+      tenantAdminName: "Tomasz Wójcik",
+      tenantAdminEmail: "tenant.admin@dziennik.example",
+      tenantAdminPhone: "+48 22 555 80 00",
+    },
     leExternalServices: ["Email", "Microsoft Account Profile", "OneDrive"],
     leExternalServiceDates: {
       Email: leDateRange,
@@ -215,9 +224,27 @@ export function buildLENS202600250FormData(): FormData {
         "proceeds independently.",
       escalatedAt: eaDecidedAt,
       escalatedBy: "Nicole Garcia",
-      status: "Pending",
+      // Pull-model demo seed — attorney has reviewed the EA's partial
+      // GFR + the press-freedom argument and drafted a decision but
+      // wants the RS to pick up the case before delivery commits. The
+      // badge reads "Attorney Reviewed" so the RS knows the decision
+      // is waiting on them in the "Needs my action" filter.
+      status: "Reviewed",
+      reviewNote:
+        "Concur with the EA's partial GFR — release on the other two " +
+        "identifiers and hold this one pending escalation to the press-freedom " +
+        "review board. Draft the Form 3 response carefully so we don't waive " +
+        "the press-freedom argument upstream.",
       scope: "some",
-      actions: [],
+      actions: [
+        {
+          id: "act-250-review-1",
+          action: "MarkReviewed",
+          attorneyName: "Michael Chen",
+          performedAt: new Date(eaDecidedAt.getTime() + 60 * 60 * 1000),
+          note: "Reviewed press-freedom argument. RS picks up draft Form 3.",
+        },
+      ],
     },
   } as any;
 
@@ -252,6 +279,30 @@ export function buildLENS202600250FormData(): FormData {
     issuingAuthorityNotes:
       "Suspect phone number — not subject to the Partial GFR.",
   } as any;
+
+  // Dziennik Press enterprise context — Partial-GFR / press-freedom
+  // case. Only id2 (the journalist's mailbox) resolves to Enterprise;
+  // id1 (witness) and id3 (phone) remain Consumer / unconfigured. The
+  // OrgPanel surfaces the press org so the attorney can read the
+  // press-freedom posture alongside the EA's Partial-GFR ruling.
+  const enterpriseContext: EnterpriseContext = {
+    triggers: ["class_account_check"],
+    manifestErrorPresent: false,
+    org: MOCK_ORGS["dziennik-pl"],
+    users: [
+      {
+        identifierId: id2.id,
+        identifierValue: id2.value,
+        lastLogonLocation: "Warsaw, PL",
+        geoResolutions30d: ["PL"],
+        mailboxRegion: "EU West",
+        oneDriveRegion: "EU West",
+        conflictOfLawJurisdictions: ["PL"],
+      },
+    ],
+    policyReviewRequired: true,
+    execReviewRequired: false,
+  };
 
   // ── Partial GFR block ──────────────────────────────────────────────
   const eevidenceGroundsForRefusal: EEvidenceGroundsForRefusal = {
@@ -372,6 +423,39 @@ export function buildLENS202600250FormData(): FormData {
     userResponseReceived: "",
     dateOfUserResponse: undefined,
     identifiers: [id1, id2, id3],
+    // Pull-model demo seed — case-level escalation mirrors the
+    // identifier-level Reviewed status on id2 (the journalist account)
+    // so the badge generator (which reads case-level) surfaces
+    // "Attorney Reviewed" on the queue card. Scope=some keeps the
+    // per-identifier targeting intact.
+    attorneyEscalation: {
+      role: "Attorney",
+      assignedAttorneyId: "ATT-001",
+      reason:
+        "Partial GFR cites Art. 12(1)(c) — manifest breach of fundamental " +
+        "rights — against the journalist's identifier. Attorney must confirm " +
+        "the EA's blocking decision before the LDTask is closed; release on " +
+        "the other two identifiers proceeds independently.",
+      escalatedAt: eaDecidedAt,
+      escalatedBy: "Nicole Garcia",
+      status: "Reviewed",
+      reviewNote:
+        "Concur with the EA's partial GFR — release on the other two " +
+        "identifiers and hold this one pending escalation to the press-freedom " +
+        "review board. Draft the Form 3 response carefully so we don't waive " +
+        "the press-freedom argument upstream.",
+      scope: "some",
+      actions: [
+        {
+          id: "act-250-review-1",
+          action: "MarkReviewed",
+          attorneyName: "Michael Chen",
+          performedAt: new Date(eaDecidedAt.getTime() + 60 * 60 * 1000),
+          note: "Reviewed press-freedom argument. RS picks up draft Form 3.",
+        },
+      ],
+    },
+    enterpriseContext,
     nonDisclosureOrders: [],
     startDate,
     endDate,

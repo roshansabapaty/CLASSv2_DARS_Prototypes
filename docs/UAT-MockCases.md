@@ -1,9 +1,9 @@
 # DARS — Mock Case User Acceptance Test (UAT) Document
 
 **Document owner**: DARS Product Team
-**Last updated**: 2026-05-27
+**Last updated**: 2026-06-04
 **Source environment**: DARS eEvidence prototype (`http://localhost:3001`)
-**Scope**: All mock cases shipped with the prototype as of this date — 27 cases covering Triage, Review Case, Collection, and Terminal workflow stages, plus dedicated demos for EU eEvidence Workflows 1 / 2 / 3 / 4 / 6 / 7 / 8
+**Scope**: All mock cases shipped with the prototype as of this date — 27 cases covering Triage, Review Case, Collection, and Terminal workflow stages, plus dedicated demos for EU eEvidence Workflows 1 / 2 / 3 / 4 / 6 / 7 / 8 and the GFR-enforcement (informational vs RS-blocked) state distinction (UAT-DARS-028 + 029 reuse LNS-2026-00240 / 00250)
 
 ---
 
@@ -75,24 +75,27 @@ This document gives Business stakeholders a structured, repeatable way to verify
 | UAT-DARS-007 | LNS-2026-00160 | UK COPO — LE-name service mapping, CSE-exempt | Triage | TS, ATT |
 | UAT-DARS-008 | LNS-2026-00170 | UK COPO — clean walkthrough (rehearsal case) | Triage | TS, RS |
 | UAT-DARS-009 | LNS-2026-00180 | Spanish eEvidence — Validating Authority path | Triage | TS, ATT |
-| UAT-DARS-010 | LNS-2026-00190 | German eEvidence — Consumer/Enterprise manifest error | Review Case | RS |
-| UAT-DARS-011 | LNS-2026-00200 | French eEvidence — Inform-Controller notification | Review Case | RS, ATT |
+| UAT-DARS-010 | LNS-2026-00190 | German eEvidence — Consumer/Enterprise manifest error | Collection | RS |
+| UAT-DARS-011 | LNS-2026-00200 | French eEvidence — Inform-Controller notification | Collection | RS, ATT |
 | UAT-DARS-012 | LNS-2026-00210 | Italian eEvidence — inverse manifest error | Triage | TS |
 | UAT-DARS-013 | LNS-2026-00220 | Dutch EPOC-PR — preservation-only pipeline | Collection | RS |
 | UAT-DARS-014 | LNS-2026-00230 | Dutch EPOC-ER — linkage to prior EPOC-PR | Triage | TS |
-| UAT-DARS-015 | LNS-2026-00240 | Italian eEvidence — Full GFR (EA Hold) | Collection | RS, ATT |
-| UAT-DARS-016 | LNS-2026-00250 | Polish eEvidence — Partial GFR + journalist immunity | Collection | RS, ATT |
+| UAT-DARS-015 | LNS-2026-00240 | Italian eEvidence — Full GFR informational state (pre-enforcement) | Collection | RS, ATT |
+| UAT-DARS-016 | LNS-2026-00250 | Polish eEvidence — Partial GFR informational state (pre-enforcement) | Collection | RS, ATT |
+| UAT-DARS-028 | LNS-2026-00240 | Italian eEvidence — RS enforces Full GFR via Block Delivery CTA | Collection | RS |
+| UAT-DARS-029 | LNS-2026-00250 | Polish eEvidence — RS enforces Partial GFR via Block Delivery CTA | Collection | RS |
 | UAT-DARS-017 | LNS-2026-00255 | Belgian eEvidence — EA clears + failed-delivery retry | Collection | RS |
 | UAT-DARS-018 | LNS-2026-00265 | Greek eEvidence — EA overrules Form 3 | Collection | RS, ATT |
 | UAT-DARS-019 | LNS-2026-00270 | Swedish eEvidence — manual vs automated jobs | Collection | RS |
-| UAT-DARS-026 | LNS-2026-00130 | Irish eEvidence — Workflow 1 Standard Production National (default happy path) | Collection | RS |
-| UAT-DARS-027 | LNS-2026-00140 | German eEvidence — Workflow 3 Emergency Production 8h (Art. 9(2)) | Collection | RS |
+| UAT-DARS-020 | LNS-2026-00300 | US Subpoena — multi-tenant TPID attorney scope | Triage | TS, ATT |
+| UAT-DARS-021 | LNS-2026-984174 | Rejected subpoena — civil matter, insufficient legal authority | Terminal · Rejected | RS |
+| UAT-DARS-022 | LNS-2026-00280 | Portuguese eEvidence — Workflow 8 IA Withdrawal (mid-collection) | Collection | RS |
 | UAT-DARS-023 | LNS-2026-00215 | Spanish EPOC-PR — Workflow 4 Active Preservation Order (Form 2 receipt + ack) | Collection | RS |
 | UAT-DARS-024 | LNS-2026-00245 | Italian eEvidence — Workflow 2 Active EA Review Window | Collection | RS |
 | UAT-DARS-025 | LNS-2026-00247 | French eEvidence — Workflow 2 EA Window Lapsed + Resume Delivery | Collection | RS |
-| UAT-DARS-022 | LNS-2026-00280 | Portuguese eEvidence — Workflow 8 IA Withdrawal (mid-collection) | Collection · Withdrawn | RS |
-| UAT-DARS-020 | LNS-2026-00300 | US Subpoena — multi-tenant TPID attorney scope | Triage | TS, ATT |
-| UAT-DARS-021 | LNS-2026-984174 | Rejected subpoena — civil matter, insufficient legal authority | Terminal · Rejected | RS |
+| UAT-DARS-026 | LNS-2026-00130 | Irish eEvidence — Workflow 1 Standard Production National (default happy path) | Collection | RS |
+| UAT-DARS-027 | LNS-2026-00140 | German eEvidence — Workflow 3 Emergency Production 8h (Art. 9(2)) | Collection | RS |
+| UAT-DARS-028 | LNS-2026-00310 | Romania — eEvidence · EPOC ER (placeholder — please author) | Triage | TBD |
 
 ---
 
@@ -182,18 +185,47 @@ On case open
         │   │       └── Demo case: UAT-DARS-018 (LNS-2026-00265, Greek)
         │   │
         │   ├── eevidenceGroundsForRefusal.decision.kind === "Full"
-        │   │   ├── ► Workflow 6 — Full GFR (delivery completely blocked)
-        │   │   ├── Panel:   Red "Full Grounds for Refusal — delivery blocked"
-        │   │   ├── Chip:    "SLA paused · EA Hold — Full"
-        │   │   ├── Gates:   ALL delivery actions blocked; SLA paused
-        │   │   └── Demo case: UAT-DARS-015 (LNS-2026-00240, Italian)
+        │   │   │
+        │   │   ├── eevidenceGroundsForRefusal.enforcementApplied !== true  (RS still deciding)
+        │   │   │   ├── ► Workflow 6 — Full GFR received, RS reviewing
+        │   │   │   ├── Panel:   Red "Full Grounds for Refusal — review the EA's decision"
+        │   │   │   ├── Chip:    "SLA paused · EA Hold — Full"
+        │   │   │   ├── Gates:   Delivery NOT auto-blocked — RS retains discretion
+        │   │   │   │            to dispute the refusal. EA's reasons + RS action
+        │   │   │   │            CTA "Block Delivery (case-wide)" surface on the panel.
+        │   │   │   └── Demo case: UAT-DARS-015 (LNS-2026-00240, Italian — informational state)
+        │   │   │
+        │   │   └── eevidenceGroundsForRefusal.enforcementApplied === true  (RS enforced)
+        │   │       ├── ► Workflow 6 — Full GFR enforced by RS
+        │   │       ├── Panel:   Red "Full Grounds for Refusal — delivery blocked"
+        │   │       │            + confirmation chip showing actor + date
+        │   │       ├── Chip:    "SLA paused · EA Hold — Full" (unchanged)
+        │   │       ├── Gates:   `canDeliver()` returns false → all delivery
+        │   │       │            actions disabled; per-row + toolbar gates fire.
+        │   │       ├── Audit:   `GfrEnforced` event (scope: case-wide)
+        │   │       └── Demo case: UAT-DARS-028 (LNS-2026-00240, post-enforcement)
         │   │
         │   └── eevidenceGroundsForRefusal.decision.kind === "Partial"
-        │       ├── ► Workflow 6 — Partial GFR (per-LDTask block)
-        │       ├── Panel:   Amber "Partial Grounds for Refusal — N task(s) blocked"
-        │       ├── Chip:    "Partial GFR — N task(s) blocked"
-        │       ├── Gates:   Blocked identifiers greyed; non-listed proceed normally
-        │       └── Demo case: UAT-DARS-016 (LNS-2026-00250, Polish journalist)
+        │       │
+        │       ├── eevidenceGroundsForRefusal.enforcementApplied !== true  (RS still deciding)
+        │       │   ├── ► Workflow 6 — Partial GFR received, RS reviewing
+        │       │   ├── Panel:   Amber "Partial Grounds for Refusal — N task(s) blocked"
+        │       │   │            + RS action CTA "Block Delivery for these N identifier(s)"
+        │       │   ├── Chip:    "Partial GFR — N task(s) blocked"
+        │       │   ├── Gates:   Per-identifier delivery NOT auto-blocked —
+        │       │   │            `identifierBlockedByPartialGfr()` returns false
+        │       │   │            until the RS enforces the block.
+        │       │   └── Demo case: UAT-DARS-016 (LNS-2026-00250, Polish — informational state)
+        │       │
+        │       └── eevidenceGroundsForRefusal.enforcementApplied === true  (RS enforced)
+        │           ├── ► Workflow 6 — Partial GFR enforced by RS
+        │           ├── Panel:   Amber panel + confirmation chip
+        │           │            showing actor + date + identifier count
+        │           ├── Gates:   Listed identifiers' delivery actions
+        │           │            greyed via the per-identifier helper;
+        │           │            non-listed identifiers continue to deliver.
+        │           ├── Audit:   `GfrEnforced` event (scope: N target identifiers)
+        │           └── Demo case: UAT-DARS-029 (LNS-2026-00250, post-enforcement)
         │
         └── isInternational === false (national EPOC, no EA review)
             │
@@ -656,7 +688,7 @@ Triggered at any point (overlay on the above):
 
 ### UAT-DARS-015 · LNS-2026-00240 — Italian eEvidence: Full GFR (EA Hold)
 
-**Capability validated**: Full Grounds for Refusal HOLD state; SLA pause; delivery gates disabled.
+**Capability validated**: Full GFR informational state — EA's decision surfaced WITHOUT auto-blocking delivery. RS retains discretion via the "Block Delivery (case-wide)" CTA. SLA pauses on Full GFR receipt; delivery gating is a separate user action validated by UAT-DARS-028.
 
 **Persona**: RS (primary), ATT (secondary)
 
@@ -672,23 +704,23 @@ Triggered at any point (overlay on the above):
 2. Inspect the page-top alert zone for `GroundsForRefusalPanel`.
 3. Read the sticky header chip.
 4. Inspect the SLA chip in the sticky header.
-5. Attempt to click Send / Form 3 / Resolve action buttons in the CollectionTracker.
+5. Inspect the Submit-to-Delivery / Block Delivery toolbar buttons in CollectionTracker.
 6. Open Case Overview → Audit Thread.
 
 **Expected Results**:
-- Step 2: Red Full-GFR HOLD card with reason `ImmunitiesOrPrivileges (Art. 12(1)(a))`.
+- Step 2: Red Full-GFR card headlined **"Full Grounds for Refusal — review the EA's decision"** with reason `ImmunitiesOrPrivileges (Art. 12(1)(a))` and a primary red **"Block Delivery (case-wide)"** CTA button.
 - Step 3: Sticky header shows red **"EA Hold — Full"** chip.
 - Step 4: SLA chip displays paused state.
-- Step 5: All action buttons disabled (red lock icon).
-- Step 6: Audit Thread carries `GfrReceived` event.
+- Step 5: Submit-to-Delivery / Block Delivery toolbar buttons remain ENABLED — the case is not auto-blocked. The toolbar Block Delivery button reads "Block Delivery" (clickable), NOT "Blocked — GFR enforced."
+- Step 6: Audit Thread carries `GfrReceived` event; no `GfrEnforced` event yet.
 
-**Pass criteria**: Full GFR completely locks downstream actions; SLA paused.
+**Pass criteria**: Full GFR is informational — panel renders the EA's reasons + action CTA; delivery actions remain clickable. SLA pauses but no auto-gating fires. UAT-DARS-028 covers the post-enforcement state.
 
 ---
 
 ### UAT-DARS-016 · LNS-2026-00250 — Polish eEvidence: Partial GFR + journalist immunity
 
-**Capability validated**: Partial Grounds for Refusal with per-identifier cascade; multi-identifier scope handling.
+**Capability validated**: Partial GFR informational state — EA's per-identifier veto list surfaced WITHOUT auto-blocking. RS reviews and decides via "Block Delivery for these N identifier(s)" CTA. Per-identifier gating fires only post-enforcement (validated by UAT-DARS-029).
 
 **Persona**: RS (primary), ATT (secondary)
 
@@ -702,17 +734,17 @@ Triggered at any point (overlay on the above):
 **Test Steps**:
 1. Open the case.
 2. Inspect the page-top alert zone for `GroundsForRefusalPanel`.
-3. Inside CollectionTracker, identify the journalist identifier (LDID-100002).
-4. Compare the action buttons / locks on the journalist row vs. the witness + phone rows.
+3. Identify the journalist identifier (LDID-100002) inside CollectionTracker.
+4. Compare the action buttons / per-row state on the journalist row vs. the witness + phone rows.
 5. Inspect the SLA chip in the sticky header.
 
 **Expected Results**:
-- Step 2: Amber Partial-GFR panel listing the blocked LDTask + reason `FreedomOfPressOrExpression`.
+- Step 2: Amber Partial-GFR panel listing the blocked LDTask + reason `FreedomOfPressOrExpression`, with a primary amber **"Block Delivery for these 1 identifier"** CTA below the blocked-identifiers list.
 - Step 3: Journalist row clearly identifiable.
-- Step 4: Journalist row shows red lock on every service / category; witness + phone rows fully actionable.
+- Step 4: Journalist row appears the same as the witness + phone rows — no auto-grey, no per-row lock. All three rows show clickable delivery actions.
 - Step 5: SLA chip is **unchanged** (Partial does NOT pause SLA).
 
-**Pass criteria**: Per-identifier cascade — blocked LDTask gated, others proceed; SLA unaffected.
+**Pass criteria**: Partial GFR is informational — panel renders the EA's list + action CTA; per-identifier delivery actions remain unblocked. UAT-DARS-029 covers the post-enforcement state where the listed identifier becomes greyed.
 
 ---
 
@@ -1140,6 +1172,115 @@ Triggered at any point (overlay on the above):
 
 ---
 
+### UAT-DARS-028 · LNS-2026-00240 — Italian eEvidence: RS enforces Full GFR via "Block Delivery (case-wide)"
+
+**Capability validated**: User-driven Full GFR enforcement — RS reviews the EA's decision and clicks the panel's CTA to enforce the block. `applyGfrEnforcement` flips `enforcementApplied: true` on the GFR block, appends a `GfrEnforced` audit event (scope: case-wide), and downstream gates engage. Counterpart to UAT-DARS-015 which validates the pre-enforcement informational state.
+
+**Persona**: RS
+
+**Workflow stage**: Collection · In Progress · Full GFR received, RS reviewing
+
+**Case shape**: Italy / National / eEvidence · 1 Enterprise email identifier · `decision.kind === "Full"` · `enforcementApplied !== true`
+
+**Preconditions**:
+1. Default queue.
+2. Case has a Full GFR with no prior enforcement (the seed lands in this state on case open).
+
+**Test Steps**:
+1. Open the case.
+2. Inspect the GFR Panel — verify the headline + the Block Delivery CTA.
+3. Inspect the CollectionTracker pipeline. Verify the toolbar "Block Delivery" button + the per-row "Review & Deliver" button are CLICKABLE.
+4. Click the **Block Delivery (case-wide)** primary button on the GFR Panel.
+5. Re-inspect the GFR Panel + toolbar + per-row delivery button.
+6. Re-inspect the page-top "Delivery is blocked" inline banner.
+7. Open the Audit Thread.
+8. Hard-reload the page. Re-inspect the GFR Panel + audit thread.
+
+**Expected Results**:
+- Step 2: Panel headline reads **"Full Grounds for Refusal — review the EA's decision"** with red **"Block Delivery (case-wide)"** button + helper text "Enforces the EA's GFR. The block is auditable and reversible from the Block Delivery banner."
+- Step 3: Toolbar button reads **"Block Delivery"** (clickable, not "Blocked — GFR enforced"). Per-row Review & Deliver button is enabled.
+- Step 4: Toast reads **"Delivery blocked — GFR enforced"** with description **"Case-wide delivery is now blocked. GfrEnforced event appended to the audit thread."**
+- Step 5:
+  - GFR Panel headline swaps to **"Full Grounds for Refusal — delivery blocked"**. A confirmation chip appears showing **"Delivery blocked [date] by [RS name]"**. The Block Delivery CTA is no longer rendered.
+  - Toolbar button reads **"Blocked — GFR enforced"** and is non-interactive.
+  - Per-row Review & Deliver button is disabled with tooltip **"Action blocked — GFR enforced by the RS. See the GFR Panel."**
+- Step 6: Inline banner reads **"Delivery is blocked — GFR enforced. The RS chose to enforce the EA's Grounds for Refusal."** The Unblock button is NOT rendered (the block is GFR-scoped, not a generic RS block).
+- Step 7: Audit Thread has a new **`GfrEnforced`** event, actor = CURRENT_USER, role = ResponseSpecialist, note reads **"RS blocked delivery in response to Full GFR (scope: case-wide)."**
+- Step 8: After reload, panel stays in the enforced confirmation state. Exactly one `GfrEnforced` event present — `applyGfrEnforcement` is idempotent.
+
+**Pass criteria**:
+- `enforcementApplied: true` persisted on `eevidenceGroundsForRefusal` with stamped `enforcementAppliedAt` + `enforcementAppliedBy`.
+- All delivery gates engage post-enforcement (`canDeliver()` returns false).
+- Exactly one `GfrEnforced` audit event after multiple opens.
+
+**Undo path (accidental-click recovery)**:
+9. After step 7, click the **Undo** button on the confirmation chip in the GFR Panel.
+10. Re-inspect the GFR Panel + toolbar + per-row delivery button + audit thread.
+
+**Expected Results (undo)**:
+- Step 9: Toast reads **"GFR enforcement released"** with description **"Delivery actions are re-enabled. GfrEnforcementReleased event appended to the audit thread."**
+- Step 10:
+  - Panel headline reverts to **"Full Grounds for Refusal — review the EA's decision"** with the **"Block Delivery (case-wide)"** primary CTA back in place. Confirmation chip is gone.
+  - Toolbar button reads **"Block Delivery"** again (clickable).
+  - Per-row Review & Deliver button is re-enabled.
+  - Audit Thread now carries TWO events in order: the original `GfrEnforced` PLUS a new `GfrEnforcementReleased` event with note "RS released the prior GFR enforcement (Full GFR; original block by [actor]).". The original enforcement event stays in the log — releases append, not rewrite.
+
+---
+
+### UAT-DARS-029 · LNS-2026-00250 — Polish eEvidence: RS enforces Partial GFR via "Block Delivery for these N identifier(s)"
+
+**Capability validated**: User-driven Partial GFR enforcement — RS reviews the EA's per-identifier veto list and clicks the panel's CTA to block delivery for the listed identifiers' data-type jobs. `applyGfrEnforcement` flips `enforcementApplied: true` and downstream per-row gating activates via `identifierBlockedByPartialGfr`. Non-listed identifiers continue to deliver normally. Counterpart to UAT-DARS-016 which validates the pre-enforcement informational state.
+
+**Persona**: RS
+
+**Workflow stage**: Collection · In Progress · Partial GFR received, RS reviewing
+
+**Case shape**: Poland / National / eEvidence · 3 identifiers (2 email + 1 phone) · `decision.kind === "Partial"` · `decision.blockedTaskObjectIds` = 1 journalist identifier · `enforcementApplied !== true`
+
+**Preconditions**:
+1. Default queue.
+2. Case has a Partial GFR with no prior enforcement.
+
+**Test Steps**:
+1. Open the case.
+2. Inspect the GFR Panel — verify the blocked-identifiers list + the Block Delivery CTA.
+3. Inside CollectionTracker, identify the journalist identifier (LDID-100002) and the two non-listed identifiers (witness + phone). Confirm all three rows have clickable delivery actions.
+4. Click the **Block Delivery for these 1 identifier** primary button on the GFR Panel.
+5. Re-inspect the GFR Panel + per-row delivery state.
+6. Open the Audit Thread.
+7. Hard-reload the page. Re-inspect.
+
+**Expected Results**:
+- Step 2: Panel renders the blocked-identifiers list (1 journalist taskId) + reason chips + amber **"Block Delivery for these 1 identifier"** button + helper "Enforces the EA's Partial GFR; non-listed identifiers continue to deliver normally."
+- Step 3: All three rows clickable. SLA chip unchanged (Partial does NOT pause SLA).
+- Step 4: Toast reads **"Delivery blocked — GFR enforced"** with description **"Listed target identifiers can no longer deliver. GfrEnforced event appended to the audit thread."**
+- Step 5:
+  - GFR Panel renders a confirmation chip below the blocked list showing **"Delivery blocked for the 1 listed target identifier on [date] by [RS name]."** The Block Delivery CTA is no longer rendered.
+  - Journalist row: per-row delivery actions disabled (grey lock); tooltip cites `identifierBlockedByPartialGfr`.
+  - Witness + phone rows: unchanged, delivery actions remain clickable.
+  - Sticky header chip + SLA chip unchanged.
+- Step 6: Audit Thread carries one new **`GfrEnforced`** event with note **"RS blocked delivery in response to Partial GFR (scope: 1 target identifier)."**
+- Step 7: After reload, state persists. Exactly one `GfrEnforced` event — idempotent.
+
+**Pass criteria**:
+- Per-identifier gating fires only after the RS clicks the CTA.
+- `identifierBlockedByPartialGfr(formData, journalistTaskId)` returns true post-enforcement; returns true for journalist only, never for the non-listed identifiers regardless of enforcement state.
+- Audit scope label correctly reads "1 target identifier" (not "case-wide").
+
+**Undo path (accidental-click recovery)**:
+8. After step 6, click the **Undo** button on the confirmation chip in the GFR Panel.
+9. Re-inspect the GFR Panel + journalist row's delivery actions + audit thread.
+
+**Expected Results (undo)**:
+- Step 8: Toast reads **"GFR enforcement released"** with the same description as UAT-028.
+- Step 9:
+  - Panel reverts to the pre-enforcement state with the **"Block Delivery for these 1 identifier"** CTA back in place. Confirmation chip is gone.
+  - Journalist row's delivery actions become clickable again — `identifierBlockedByPartialGfr` returns false because `enforcementApplied` is cleared.
+  - Witness + phone rows unchanged (they were never affected).
+  - Audit Thread carries TWO events: original `GfrEnforced` (scope: 1 target identifier) PLUS new `GfrEnforcementReleased` event referencing the original actor.
+
+---
+
 ## 6. Cross-cutting smoke tests
 
 Run these once per UAT cycle, after the per-case tests. They verify infrastructure not tied to any single case.
@@ -1238,6 +1379,8 @@ Print or copy this table into your UAT log per test run.
 | UAT-DARS-025 | | | | | |
 | UAT-DARS-026 | | | | | |
 | UAT-DARS-027 | | | | | |
+| UAT-DARS-028 | | | | | |
+| UAT-DARS-029 | | | | | |
 | UAT-DARS-SMOKE-A | | | | | |
 | UAT-DARS-SMOKE-B | | | | | |
 | UAT-DARS-SMOKE-C | | | | | |
