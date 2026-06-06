@@ -27,6 +27,8 @@ import type {
   EscalationAuditEvent,
 } from "../types/caseTypes";
 import { EscalateToAttorneyDialog } from "./escalation/EscalateToAttorneyDialog";
+import { EscalationCompleteBanner } from "./escalation/EscalationCompleteBanner";
+import { AutoStateChangeBanner } from "./escalation/AutoStateChangeBanner";
 import { GroundsForRefusalPanel } from "./escalation/GroundsForRefusalPanel";
 import { RetractForm3Dialog } from "./escalation/RetractForm3Dialog";
 import { FailedDeliveryBanner } from "./delivery/FailedDeliveryBanner";
@@ -39,6 +41,7 @@ import {
   gfrBlock,
   canRetractForm3,
   retractGateReason,
+  isGfrEnforced,
 } from "../utils/groundsForRefusal";
 import {
   isEEvidenceDelivery,
@@ -59,6 +62,7 @@ import { applyPreservationOrderReceipt, applyPreservationOrderAcknowledged } fro
 import { applyWithdrawal } from "../utils/withdrawal";
 import { applyForm3Submission } from "../utils/form3Submission";
 import { pauseSlaTimerOnFormThreeSubmission } from "../utils/slaTimer";
+import { applyGfrEnforcement, releaseGfrEnforcement } from "../utils/gfrEnforcement";
 import { PreservationExtensionBanner } from "./preservation/PreservationExtensionBanner";
 import { EndPreservationBanner } from "./preservation/EndPreservationBanner";
 import { PreservationOrderActiveBanner } from "./preservation/PreservationOrderActiveBanner";
@@ -377,6 +381,11 @@ export function CollectionTracker({
   const [deliveryReviewMode, setDeliveryReviewMode] = useState<"submit" | "retry">("submit");
   const [showPublishReview, setShowPublishReview] = useState(false);
   const [showDeliveryReview, setShowDeliveryReview] = useState(false);
+  // Bug #2: confirmation dialog before bulk-starting collection. The
+  // dialog surfaces the job count + identifier count so the RS sees
+  // exactly what they're committing to before kicking off the IA's
+  // backend processing.
+  const [showStartCollectionDialog, setShowStartCollectionDialog] = useState(false);
   // Document viewer state — Collection now uses the same shared
   // `DocumentViewerPanel` (with Verify / Reject / per-document properties)
   // that Triage and Review Case mount. We alias `warrantModalOpen` to
@@ -788,6 +797,38 @@ export function CollectionTracker({
     toast.success("Delivery resumed", {
       description:
         "EA review window had lapsed without a decision. Submit-to-Delivery is re-enabled.",
+    });
+  }, [formData, setSharedFormData]);
+
+  // GFR enforcement — wired into the Full / Partial GFR panel CTAs. Sets
+  // `enforcementApplied` on the GFR block + appends `GfrEnforced` audit.
+  // Idempotent — clicking after enforcement is in effect is a no-op.
+  const handleBlockDeliveryFromGfr = useCallback(() => {
+    if (!formData || !setSharedFormData) return;
+    const next = applyGfrEnforcement(formData);
+    if (next === formData) return;
+    setSharedFormData(next);
+    const kind = formData.eevidenceGroundsForRefusal?.decision?.kind;
+    toast.success("Delivery blocked — GFR enforced", {
+      description:
+        kind === "Partial"
+          ? "Listed target identifiers can no longer deliver. GfrEnforced event appended to the audit thread."
+          : "Case-wide delivery is now blocked. GfrEnforced event appended to the audit thread.",
+    });
+  }, [formData, setSharedFormData]);
+
+  // Undo — covers accidental Block Delivery clicks AND deliberate
+  // release after re-evaluation. Clears `enforcementApplied` +
+  // appends `GfrEnforcementReleased`. The original GfrEnforced audit
+  // event stays in the log so the trail captures both actions.
+  const handleUndoBlockDeliveryFromGfr = useCallback(() => {
+    if (!formData || !setSharedFormData) return;
+    const next = releaseGfrEnforcement(formData);
+    if (next === formData) return;
+    setSharedFormData(next);
+    toast.success("GFR enforcement released", {
+      description:
+        "Delivery actions are re-enabled. GfrEnforcementReleased event appended to the audit thread.",
     });
   }, [formData, setSharedFormData]);
 
@@ -1939,6 +1980,55 @@ export function CollectionTracker({
     });
   };
 
+  // Bug #2 fix — explicit "Start Collection" action. The previous
+  // implementation auto-advanced NotStarted → Started on every Refresh
+  // tick, which the RS could read as jobs auto-progressing without
+  // their action. Now the RS must explicitly start collection; Refresh
+  // only ticks already-started jobs toward Complete (simulating the
+  // IA's backend processing).
+  //
+  // Flips every NotStarted enabled job to Started + generates a fresh
+  // jobId. Confirmation is shown via the StartCollection dialog before
+  // the user lands here.
+  const handleStartCollectionAll = useCallback(() => {
+    if (!setSharedFormData || !formData) return;
+    let started = 0;
+    const updatedFormData = { ...formData };
+    updatedFormData.identifiers = updatedFormData.identifiers.map((identifier) => {
+      const updatedServices = { ...identifier.services };
+      Object.entries(updatedServices).forEach(([serviceKey, service]: [string, any]) => {
+        let updatedGroups = { ...service.categoryGroups };
+        iterateServiceCategories(service, (categoryKey, category: any) => {
+          if (!category.enabled) return;
+          if (category.collectionStatus && category.collectionStatus !== "Not Started") return;
+          const collectionJobId = category.jobId ?? generateJobId();
+          updatedGroups = applyItemUpdate(updatedGroups, categoryKey, {
+            collectionStatus: "Started",
+            jobId: collectionJobId,
+            collectionStatusUpdatedAt: new Date().toISOString(),
+          });
+          started++;
+        });
+        updatedServices[serviceKey] = { ...service, categoryGroups: updatedGroups };
+      });
+      return { ...identifier, services: updatedServices };
+    });
+    if (started === 0) {
+      toast.info("No queued collection jobs", {
+        description: "All enabled data-category jobs have already been started.",
+      });
+      return;
+    }
+    setSharedFormData(updatedFormData);
+    toast.success(
+      `${started} collection ${started === 1 ? "job" : "jobs"} started`,
+      {
+        description:
+          "Click Refresh to advance jobs as the IA's backend processes them.",
+      },
+    );
+  }, [formData, setSharedFormData]);
+
   // Handle publish selected jobs
   const handlePublishSelected = () => {
     if (selectedJobsForPublish.size === 0) {
@@ -2522,11 +2612,15 @@ export function CollectionTracker({
             let newPublishStatus = category.publishStatus || "Not Started";
             let newDeliveryStatus = category.deliveryStatus || "Not Started";
             
-            // Simulate collection status progression
-            if (currentStatus === "Not Started" && Math.random() > 0.5) {
-              newStatus = "Started";
-              statusChanges++;
-            } else if (currentStatus === "Started" && Math.random() > 0.6) {
+            // Simulate collection status progression — ONLY for jobs the
+            // RS has explicitly started via "Start Collection". The
+            // previous `NotStarted → Started` auto-progression here let
+            // jobs advance without any user action, which read as a bug
+            // (jobs "auto-progress" when the RS clicks Refresh). The
+            // entry to Started state is now a deliberate user action
+            // via `handleStartCollectionAll`; Refresh only ticks
+            // already-started jobs toward Complete.
+            if (currentStatus === "Started" && Math.random() > 0.6) {
               const outcomes = ["Complete", "No Data", "Started"];
               newStatus = outcomes[Math.floor(Math.random() * outcomes.length)];
               if (newStatus !== currentStatus) statusChanges++;
@@ -2567,10 +2661,9 @@ export function CollectionTracker({
               let newAddPubStatus = addJob.publishStatus || "Not Started";
               let newAddDelStatus = addJob.deliveryStatus || "Not Started";
 
-              if (addColStatus === "Not Started" && Math.random() > 0.5) {
-                newAddColStatus = "Started";
-                statusChanges++;
-              } else if (addColStatus === "Started" && Math.random() > 0.6) {
+              // Same explicit-start gate as the main category: Refresh
+              // only progresses jobs the RS has explicitly started.
+              if (addColStatus === "Started" && Math.random() > 0.6) {
                 const outcomes = ["Complete", "No Data", "Started"];
                 newAddColStatus = outcomes[Math.floor(Math.random() * outcomes.length)];
                 if (newAddColStatus !== addColStatus) statusChanges++;
@@ -2806,6 +2899,8 @@ export function CollectionTracker({
           formData={formData}
           onRetractForm3={handleOpenRetractForm3Dialog}
           onResumeDelivery={handleResumeDelivery}
+          onBlockDelivery={handleBlockDeliveryFromGfr}
+          onUndoBlockDelivery={handleUndoBlockDeliveryFromGfr}
         />
 
         {/* Phase 2: Correspondence Hub access from Collection. Inbound
@@ -2818,6 +2913,27 @@ export function CollectionTracker({
           onMarkInboundRead={handleMarkInboundRead}
           onOpenPanel={() => setCorrespondencePanelOpen(true)}
         />
+        {/* RS / TS pull-model affordance — same banner mounted on
+            DataEntryForm. The escalation can have completed at any
+            workflow stage, so the banner needs to render on Collection
+            too. Click Acknowledge to stamp `rsAcknowledgedAt` + clear
+            the queue badge. */}
+        {setSharedFormData && (
+          <EscalationCompleteBanner
+            formData={formData}
+            setFormData={(updater) => setSharedFormData(updater(formData))}
+          />
+        )}
+        {/* Pull-model surface for auto-derived state changes. EA review
+            window typically lapses while the case is on Collection
+            (cases land here once the EA review window is open), so the
+            banner mostly fires here. */}
+        {setSharedFormData && (
+          <AutoStateChangeBanner
+            formData={formData}
+            setFormData={(updater) => setSharedFormData(updater(formData))}
+          />
+        )}
         {/* Phase 5c.5: LE Cancelled / Withdrawn surfacing on the Collection
          *  page — same banner as Step 2/3 with destructive actions gated
          *  below. Acknowledging from here cascades to identifier taskStatus
@@ -2899,26 +3015,30 @@ export function CollectionTracker({
                   <TooltipTrigger asChild>
                     <Button
                       variant={
-                        fullGfrActive || deliveryBlocked ? "default" : "outline"
+                        isGfrEnforced(formData) || deliveryBlocked
+                          ? "default"
+                          : "outline"
                       }
                       size="sm"
-                      disabled={fullGfrActive}
+                      // The toolbar button is no longer auto-disabled by
+                      // Full GFR receipt — the EA's decision is informational
+                      // until the RS clicks "Block Delivery" on the GFR
+                      // Panel (which sets `enforcementApplied`). When that
+                      // is in effect, the button reflects the block state.
                       className={cn(
                         "h-9",
-                        fullGfrActive
+                        isGfrEnforced(formData)
                           ? "bg-[#a4262c] hover:bg-[#a4262c] text-white border-[#a4262c] cursor-not-allowed opacity-90"
                           : deliveryBlocked
                             ? "bg-[#a4262c] hover:bg-[#8a2121] text-white border-[#a4262c]"
                             : "border-[#a4262c] text-[#a4262c] hover:bg-[#fde7e9]",
                       )}
                       onClick={() => {
-                        // When a Full GFR is active, delivery is blocked by
-                        // the EA's legal veto — the RS cannot manually
-                        // unblock it. The button stays disabled until the
-                        // GFR clears (None decision) or the window lapses
-                        // and the RS uses the explicit Resume CTA in the
-                        // GFR Panel (Phase E).
-                        if (fullGfrActive) return;
+                        // When the GFR is being enforced, the toolbar
+                        // button is informational — unblocking after
+                        // enforcement is a separate workflow (review the
+                        // GFR Panel for the EA's decision + reasons).
+                        if (isGfrEnforced(formData)) return;
                         if (deliveryBlocked) {
                           setDeliveryBlocked(false);
                           toast.success(
@@ -2930,23 +3050,21 @@ export function CollectionTracker({
                       }}
                     >
                       <ShieldBan className="w-4 h-4 mr-2" />
-                      {fullGfrActive
-                        ? "Blocked by EA — Full GFR"
+                      {isGfrEnforced(formData)
+                        ? "Blocked — GFR enforced"
                         : deliveryBlocked
                           ? "Delivery Blocked"
                           : "Block Delivery"}
                     </Button>
                   </TooltipTrigger>
-                  {fullGfrActive && (
+                  {isGfrEnforced(formData) && (
                     <TooltipContent>
                       <p className="text-xs font-semibold">
-                        Delivery is blocked by the Enforcing Authority's
-                        Grounds for Refusal.
+                        Delivery is blocked because the GFR has been enforced.
                       </p>
                       <p className="text-xs text-slate-300 mt-0.5">
-                        Manual unblock disabled while the EA holds the
-                        case. See the GFR Panel for the EA's decision
-                        and reasons.
+                        See the GFR Panel for the EA's decision, reasons,
+                        and the RS who enforced the block.
                       </p>
                     </TooltipContent>
                   )}
@@ -2963,6 +3081,56 @@ export function CollectionTracker({
                 </Button>
               </div>
             </div>
+
+            {/* Bug #2 — Start Collection confirmation dialog. Surfaces
+                the queued-job + identifier counts so the RS sees the
+                scope of what they're starting. Cancel just dismisses;
+                Confirm fires `handleStartCollectionAll` which flips the
+                NotStarted jobs to Started and toasts the count. */}
+            <Dialog open={showStartCollectionDialog} onOpenChange={setShowStartCollectionDialog}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-[#0078d4]">
+                    <Zap className="w-5 h-5" />
+                    Start Collection
+                  </DialogTitle>
+                  <DialogDescription className="text-[#605e5c]">
+                    This will kick off collection on{" "}
+                    <span className="font-semibold text-[#323130]">
+                      {collectionStats.notStarted} queued{" "}
+                      {collectionStats.notStarted === 1 ? "job" : "jobs"}
+                    </span>{" "}
+                    across the case's enabled data categories. The IA's
+                    backend processes the requests; click Refresh to tick
+                    job statuses toward Complete.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="bg-[#deecf9] border border-[#0078d4]/30 rounded-md p-3 text-xs text-[#243a5e] flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    Started jobs cannot be returned to the queue. Once
+                    Complete, you'll explicitly review + submit them to
+                    the Package phase via "Review &amp; Package".
+                  </span>
+                </div>
+                <div className="flex justify-end gap-2 mt-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowStartCollectionDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-[#0078d4] hover:bg-[#106ebe] text-white"
+                    onClick={() => {
+                      setShowStartCollectionDialog(false);
+                      handleStartCollectionAll();
+                    }}
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    Start Collection
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {/* Block Delivery confirmation dialog */}
             <Dialog open={showBlockDeliveryDialog} onOpenChange={setShowBlockDeliveryDialog}>
@@ -3002,26 +3170,27 @@ export function CollectionTracker({
             </Dialog>
 
             {/* Delivery blocked banner — surfaces when EITHER the RS
-                manually blocked delivery OR a Full GFR is active. The
-                Unblock affordance is hidden under Full GFR (the EA's
-                legal block can't be released by RS click; only an EA
-                decision or a window lapse can clear it). */}
-            {(deliveryBlocked || fullGfrActive) && (
+                manually blocked delivery OR the GFR has been enforced
+                by the RS (Block Delivery CTA on the GFR Panel). The
+                Unblock affordance is hidden when the block is GFR-
+                enforced (release that block from the GFR Panel context,
+                not a generic toolbar). */}
+            {(deliveryBlocked || isGfrEnforced(formData)) && (
               <div className="mb-4 flex items-center gap-3 bg-[#fde7e9] border border-[#d13438] rounded-lg px-4 py-3">
                 <ShieldBan className="w-5 h-5 text-[#a4262c] flex-shrink-0" />
                 <div className="flex-1">
                   <span className="text-sm font-semibold text-[#a4262c]">
-                    {fullGfrActive
-                      ? "Delivery is blocked by the Enforcing Authority."
+                    {isGfrEnforced(formData)
+                      ? "Delivery is blocked — GFR enforced."
                       : "Delivery is blocked."}
                   </span>
                   <span className="text-sm text-[#605e5c] ml-2">
-                    {fullGfrActive
-                      ? "Full GFR — no pending or new jobs will be delivered while the EA's hold is in force."
+                    {isGfrEnforced(formData)
+                      ? "The RS chose to enforce the EA's Grounds for Refusal. No pending or new jobs will be delivered."
                       : "No pending or new jobs will be delivered until unblocked."}
                   </span>
                 </div>
-                {!fullGfrActive && (
+                {!isGfrEnforced(formData) && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -3118,6 +3287,29 @@ export function CollectionTracker({
                         )}
                       </span>
                     </div>
+                  </div>
+                )}
+
+                {/* Start Collection CTA — surfaces whenever any enabled
+                    data-category job is still NotStarted. The RS must
+                    explicitly click here to kick off collection on
+                    those jobs; Refresh only progresses jobs that have
+                    already entered the Started state. */}
+                {collectionStats.notStarted > 0 && (
+                  <div className="mt-auto pt-3 mt-3 border-t border-[#c7e0f4] flex flex-col gap-2">
+                    <p className="text-xs text-[#605e5c]">
+                      {collectionStats.notStarted} {collectionStats.notStarted === 1 ? "job" : "jobs"} queued — Refresh won't advance them until you start collection.
+                    </p>
+                    <Button
+                      size="sm"
+                      disabled={cancellationLocked}
+                      title={cancellationLockedTooltip}
+                      className="w-full h-8 bg-[#0078d4] hover:bg-[#106ebe] text-white text-xs"
+                      onClick={() => setShowStartCollectionDialog(true)}
+                    >
+                      <Zap className="w-3 h-3 mr-1.5" />
+                      Start Collection ({collectionStats.notStarted})
+                    </Button>
                   </div>
                 )}
 
@@ -3255,8 +3447,8 @@ export function CollectionTracker({
                     bouncing the click. */}
                 {deliverableJobs.length > 0 && (() => {
                   const deliveryGateReason: string | undefined = !canDeliverCase
-                    ? fullGfrActive
-                      ? "Action blocked — EA issued Full Grounds for Refusal. See the GFR Panel."
+                    ? isGfrEnforced(formData)
+                      ? "Action blocked — GFR enforced by the RS. See the GFR Panel."
                       : gfrBlockData && !gfrBlockData.decision && !gfrBlockData.manualDeliveryResumed
                         ? "Action blocked — EA review window active. Awaiting EA determination."
                         : "Action blocked — EA review window lapsed. Click Resume Delivery in the GFR Panel to proceed."
@@ -3292,8 +3484,8 @@ export function CollectionTracker({
                       >
                         <Truck className="w-3 h-3 mr-1.5" />
                         {!canDeliverCase
-                          ? fullGfrActive
-                            ? "Blocked — Full GFR"
+                          ? isGfrEnforced(formData)
+                            ? "Blocked — GFR enforced"
                             : "Blocked — EA review window"
                           : `Review & Deliver (${deliverableJobs.length})`}
                       </Button>

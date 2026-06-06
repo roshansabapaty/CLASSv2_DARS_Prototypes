@@ -162,24 +162,6 @@ const useStyles = makeStyles({
   tenantAdminLabel: {
     fontWeight: tokens.fontWeightSemibold,
   },
-  // "View other cases on this tenant" link — sits below the tenant admin
-  // caption on Enterprise rows when at least one prior case exists under
-  // the same tenant.
-  priorTenantLink: {
-    display: "inline-flex",
-    alignItems: "center",
-    columnGap: "4px",
-    fontSize: tokens.fontSizeBase200,
-    color: "#0078d4",
-    background: "none",
-    border: "none",
-    padding: 0,
-    cursor: "pointer",
-    textDecoration: "underline",
-    ":hover": {
-      color: "#106ebe",
-    },
-  },
   valueStack: {
     display: "flex",
     flexDirection: "column",
@@ -460,16 +442,6 @@ interface IdentifierTableRowProps {
    *  parent LE-identifier's value. Drives the ↳ connector + indent +
    *  "Linked to LE: <parent value>" caption. */
   parentValue?: string;
-  /** Phase 5 (Enterprise surfacing) — when the row's identifier is
-   *  Enterprise and the parent provides a handler, surfaces a
-   *  "View other cases on this tenant" link in the Value cell. Wires the
-   *  PriorTenantHistoryPanel drawer at the form level. Omitting hides
-   *  the link entirely. */
-  onOpenPriorTenantHistory?: (args: {
-    tenantId: string;
-    tpid?: string;
-    tenantDisplayName?: string;
-  }) => void;
   readOnly?: boolean;
   forceExpanded?: boolean;
   /** Incremented each time the parent toggles expand/collapse all, to re-trigger the effect */
@@ -509,7 +481,6 @@ export function IdentifierTableRow({
   index,
   displayLabel,
   parentValue,
-  onOpenPriorTenantHistory,
   readOnly = false,
   forceExpanded,
   forceExpandedKey,
@@ -817,27 +788,6 @@ export function IdentifierTableRow({
                       </>
                     )}
                   </div>
-                )}
-              {identifier.checkAccounts?.accountType === "Enterprise" &&
-                identifier.checkAccounts?.tenantId &&
-                onOpenPriorTenantHistory && (
-                  <button
-                    type="button"
-                    className={styles.priorTenantLink}
-                    onClick={() =>
-                      onOpenPriorTenantHistory({
-                        tenantId: identifier.checkAccounts!.tenantId!,
-                        tpid: identifier.checkAccounts?.parentTpid,
-                        tenantDisplayName:
-                          identifier.checkAccounts?.tenantPrimaryDomain,
-                      })
-                    }
-                    aria-label={`View other cases on tenant ${
-                      identifier.checkAccounts?.tenantPrimaryDomain ?? ""
-                    }`}
-                  >
-                    View other cases on this tenant →
-                  </button>
                 )}
             </div>
           )}

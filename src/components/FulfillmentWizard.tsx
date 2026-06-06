@@ -350,6 +350,32 @@ export function FulfillmentWizard({
     dataCenterLocations: {} as Record<string, Record<string, string>>,
   });
 
+  // Bug fix (Submit Collection disabled after wizard completion): re-sync
+  // `wizardData.identifiers` from the `identifiers` prop whenever the
+  // parent's `formData.identifiers` changes. Without this, the wizard's
+  // local copy is set ONCE at mount and goes stale — most notably when
+  // Check Accounts runs inside the wizard: the parent's
+  // `handleCheckAccountExistence` writes results to `formData.identifiers
+  // [*].services[svc].accountExistence`, which propagates as a new
+  // `identifiers` prop, but the wizard's `wizardData.identifiers` would
+  // otherwise hold a pre-check snapshot. The downstream completion
+  // handler would then write back the stale services tree, dropping
+  // the Check Accounts payload and leaving the validation gate
+  // unsatisfied.
+  //
+  // The dependency on `identifiers` (a stable reference per render in
+  // React) ensures the effect only fires when the parent emits a new
+  // array — adding / editing / Check-Accounts-mutating identifiers all
+  // create a fresh array reference via setFormData(prev => ({ ...prev,
+  // identifiers: prev.identifiers.map(...) })).
+  useEffect(() => {
+    setWizardData((prev) =>
+      prev.identifiers === identifiers
+        ? prev
+        : { ...prev, identifiers },
+    );
+  }, [identifiers]);
+
   // Storage region is fully derivable from check-accounts results, so
   // we stamp it onto `dataCenterLocations` whenever the inputs change —
   // when check-accounts completes (Step 1 or Step 3), when identifiers
@@ -600,7 +626,22 @@ export function FulfillmentWizard({
       // Collection Jobs button stays disabled with the validation error
       // "Select at least one Microsoft service for at least one identifier".
       const serviceUpdates: Record<string, any> = {};
-      const updatedServices: Record<string, any> = { ...(identifier.services as any) };
+      // Bug fix (Submit Collection disabled after wizard completion): read
+      // the services baseline from the LATEST `formData.identifiers`, not
+      // from `wizardData.identifiers`. The wizard's local state is set
+      // once at mount and never re-syncs, so any Check Accounts run made
+      // mid-wizard writes its results to `formData.identifiers[*].services
+      // [svc].accountExistence` — invisible to the stale wizard copy.
+      // Without this lookup, on completion the wizard would overwrite the
+      // services tree with its stale copy, dropping the accountExistence
+      // payloads. The validation gate then reads back missing/stale data
+      // and the Submit Collection button stays disabled.
+      const latestIdentifier =
+        formData?.identifiers?.find((i: any) => i.id === identifier.id) ??
+        identifier;
+      const updatedServices: Record<string, any> = {
+        ...(latestIdentifier.services as any),
+      };
       // Build the per-item enabled map (group → item → true) for each new service.
       // Items selected via individualConfig.selectedItems are flipped enabled.
       const individualCfg = wizardData.serviceConfig.individualSettings?.[identifier.id];
@@ -1306,19 +1347,22 @@ function Step3SummaryReview({
     return getServiceDisplayName(serviceId);
   };
 
-  // Simulate account check
+  // Simulate account check — Step 3 / Summary Review re-check button.
+  //
+  // Honours the per-identifier seeded `checkAccounts.accountType` so
+  // demo cases (e.g. LNS-2026-00210 must resolve Enterprise) don't
+  // silently flip to Consumer on a re-check. Falls back to a one-shot
+  // dice roll only for identifiers with no seeded accountType. Replaces
+  // a prior Math.random()-only implementation that overrode every seed.
   const simulateAccountCheck = async () => {
     setIsChecking(true);
     setCheckProgress(0);
 
     const results: Record<string, any> = {};
     const totalSteps = identifiers.length;
-    // Source storage locations from the canonical REGION_TO_LOCATION
-    // map so the values written here match the keys the Collection
-    // Boundary mapper looks up. Previously this used short ad-hoc
-    // strings ("US-West", "EU-West", …) which weren't valid keys, so
-    // the Collection Boundary column always read "—" after a re-check.
     const STORAGE_LOCATIONS = Object.keys(REGION_TO_LOCATION);
+    const pickStorage = () =>
+      STORAGE_LOCATIONS[Math.floor(Math.random() * STORAGE_LOCATIONS.length)];
 
     for (let i = 0; i < identifiers.length; i++) {
       const identifier = identifiers[i];
@@ -1326,17 +1370,33 @@ function Step3SummaryReview({
       // Simulate delay
       await new Promise((resolve) => setTimeout(resolve, 800));
 
-      // Randomly assign account existence (80% success rate for demo)
-      // An account can only be Consumer OR Enterprise, never both
-      const exists = Math.random() > 0.2;
-      const accountRoll = exists ? Math.random() : -1;
-      const hasConsumer = accountRoll >= 0 && accountRoll < 0.55;
-      const hasEnterprise = accountRoll >= 0.55;
-      // Single canonical storage location per identifier so the
-      // Consumer/Enterprise distinction here doesn't accidentally split
-      // an account across two regions during the simulated check.
-      const pickStorage = () =>
-        STORAGE_LOCATIONS[Math.floor(Math.random() * STORAGE_LOCATIONS.length)];
+      // Honour seeded accountType first; only roll dice for identifiers
+      // that have no seed at all. Token-only rows (XBOX 5x5) stay N/A.
+      const seededType = identifier.checkAccounts?.accountType as
+        | "Consumer"
+        | "Enterprise"
+        | "N/A"
+        | undefined;
+      const isTokenOnly = identifier.type === "XBOX 5X5 Token";
+      let hasConsumer = false;
+      let hasEnterprise = false;
+      let exists = false;
+      if (isTokenOnly || seededType === "N/A") {
+        exists = false;
+      } else if (seededType === "Consumer") {
+        hasConsumer = true;
+        exists = true;
+      } else if (seededType === "Enterprise") {
+        hasEnterprise = true;
+        exists = true;
+      } else {
+        // No seed → preserve the prior dice-roll behavior for
+        // dynamically-added identifiers that don't carry a seeded type.
+        exists = Math.random() > 0.2;
+        const roll = exists ? Math.random() : -1;
+        hasConsumer = roll >= 0 && roll < 0.55;
+        hasEnterprise = roll >= 0.55;
+      }
 
       results[identifier.id] = {
         checked: true,
@@ -1345,17 +1405,31 @@ function Step3SummaryReview({
           ...(hasConsumer ? ["Consumer"] : []),
           ...(hasEnterprise ? ["Enterprise"] : []),
         ],
-        consumer: hasConsumer ? {
-          storageLocation: pickStorage(),
-          primaryId: identifier.type === "Email" ? identifier.value : `consumer_${identifier.value.substring(0, 8)}@outlook.com`,
-          relatedIdentifiers: ["alias1@outlook.com", "alias2@hotmail.com"],
-        } : null,
-        enterprise: hasEnterprise ? {
-          storageLocation: pickStorage(),
-          primaryId: identifier.type === "Email" ? identifier.value : `ent_${identifier.value.substring(0, 8)}@contoso.com`,
-          relatedIdentifiers: ["work.alias@company.com"],
-          organizationId: "org-" + Math.random().toString(36).substring(7),
-        } : null,
+        consumer: hasConsumer
+          ? {
+              storageLocation:
+                identifier.checkAccounts?.dataLocation ?? pickStorage(),
+              primaryId:
+                identifier.type === "Email" || identifier.type === "Email Address"
+                  ? identifier.value
+                  : `consumer_${identifier.value.substring(0, 8)}@outlook.com`,
+              relatedIdentifiers: ["alias1@outlook.com", "alias2@hotmail.com"],
+            }
+          : null,
+        enterprise: hasEnterprise
+          ? {
+              storageLocation:
+                identifier.checkAccounts?.dataLocation ?? pickStorage(),
+              primaryId:
+                identifier.type === "Email" || identifier.type === "Email Address"
+                  ? identifier.value
+                  : `ent_${identifier.value.substring(0, 8)}@contoso.com`,
+              relatedIdentifiers: ["work.alias@company.com"],
+              organizationId:
+                identifier.checkAccounts?.tenantId ??
+                "org-" + Math.random().toString(36).substring(7),
+            }
+          : null,
       };
 
       setCheckProgress(Math.round(((i + 1) / totalSteps) * 100));

@@ -58,7 +58,11 @@ import { isInbound, readRespondedByOutbound } from "../types/correspondence";
 import {
   isAttorneyEscalationActive,
   getEscalationSummaryForCase,
+  isEnterpriseCase,
 } from "../utils/escalationHelpers";
+import { gfrApplies, gfrBlock } from "../utils/groundsForRefusal";
+import { findBreachedRfi } from "./escalation/RfiReplyOverdueBanner";
+import { findFreshPaiInbounds } from "./escalation/AwaitingInfoReplyBanner";
 import {
   getActiveAttorneyEscalation,
   createAttorneyEscalation,
@@ -79,10 +83,15 @@ import { FormFillerDialog } from "./forms-library/FormFillerDialog";
 import { getTemplateById } from "../config/formTemplates";
 import { EnterpriseRequestCard } from "./enterprise-request/EnterpriseRequestCard";
 import { EnterpriseContextSection } from "./attorney-escalation/EnterpriseContextSection";
+import type { EnterpriseCtaAction } from "./enterprise-context/enterpriseCtaTypes";
+import { getPrimaryOrg } from "../utils/caseEscalation";
+import { MOCK_ORGS } from "../data/mockOrgs";
+import { setCaseFormDataInRegistry } from "../utils/caseDataRegistry";
 import { LoginLocationPanel } from "./cross-border/LoginLocationPanel";
-import { PriorTenantHistoryPanel } from "./enterprise-context/PriorTenantHistoryPanel";
 import { ManifestErrorWarningBanner } from "./enterprise-request/ManifestErrorWarningBanner";
 import { InformControllerNoticeBanner } from "./enterprise-request/InformControllerNoticeBanner";
+import { EscalationCompleteBanner } from "./escalation/EscalationCompleteBanner";
+import { AutoStateChangeBanner } from "./escalation/AutoStateChangeBanner";
 import { NotifyUserNoticeBanner } from "./enterprise-request/NotifyUserNoticeBanner";
 import { EscalateToAttorneyDialog } from "./escalation/EscalateToAttorneyDialog";
 import { AttorneyReviewPanel } from "./escalation/AttorneyReviewPanel";
@@ -105,6 +114,7 @@ import {
 } from "../utils/slaTimer";
 import { applyForm3Submission } from "../utils/form3Submission";
 import { applyPreservationOrderAcknowledged } from "../utils/preservationOrderReceipt";
+import { applyGfrEnforcement, releaseGfrEnforcement } from "../utils/gfrEnforcement";
 import {
   useEaWindowExpiry,
   applyManualDeliveryResume,
@@ -449,16 +459,6 @@ export function DataEntryForm({
     string | null
   >(null);
 
-  // Phase 5 (Enterprise surfacing) — PriorTenantHistoryPanel state.
-  // Opened from the "View other cases on this tenant" link on Enterprise
-  // identifier rows in the IdentifierTable. Same drawer the attorney
-  // workspace uses, but mounted here for RS / TS visibility too.
-  const [priorTenantDrawer, setPriorTenantDrawer] = useState<{
-    tenantId: string;
-    tpid?: string;
-    tenantDisplayName?: string;
-  } | null>(null);
-
   // Resolve Case dialog — opened from the Step 2/3 banner secondary CTA,
   // the collection-page resolve bar, and (Phase 5c.5+) the workflow-stage
   // banner's Resolve / Edit-resolution action.
@@ -789,6 +789,150 @@ export function DataEntryForm({
       return next;
     });
   }, [setFormData]);
+  // GFR enforcement — mirror of CollectionTracker. See handler there for
+  // the full docstring. Sets `enforcementApplied` + appends GfrEnforced.
+  const handleBlockDeliveryFromGfr = useCallback(() => {
+    setFormData((prev) => {
+      const next = applyGfrEnforcement(prev);
+      if (next === prev) return prev;
+      const kind = prev.eevidenceGroundsForRefusal?.decision?.kind;
+      toast.success("Delivery blocked — GFR enforced", {
+        description:
+          kind === "Partial"
+            ? "Listed target identifiers can no longer deliver. GfrEnforced event appended to the audit thread."
+            : "Case-wide delivery is now blocked. GfrEnforced event appended to the audit thread.",
+      });
+      return next;
+    });
+  }, [setFormData]);
+  // Undo — covers accidental Block Delivery clicks. Releases the
+  // enforcement and appends GfrEnforcementReleased.
+  const handleUndoBlockDeliveryFromGfr = useCallback(() => {
+    setFormData((prev) => {
+      const next = releaseGfrEnforcement(prev);
+      if (next === prev) return prev;
+      toast.success("GFR enforcement released", {
+        description:
+          "Delivery actions are re-enabled. GfrEnforcementReleased event appended to the audit thread.",
+      });
+      return next;
+    });
+  }, [setFormData]);
+
+  // Enterprise Context CTA handler — mirrors the Attorney Review
+  // workspace's handler so RS / TS recorded checks and routing
+  // decisions round-trip with the Attorney's surface via the case-data
+  // registry. Specialist scope: handles setTenantTier,
+  // recordDerogationCheck, and redirectToEnterprise (the three CTAs
+  // the user opted RS / TS into). FlagPolicyReview / ViewPriorHistory
+  // are hidden by ctaScope on the section itself; flag/clearExecReview
+  // are dead now that the TenantTierCheck CTA owns the exec-review
+  // gate.
+  const handleEnterpriseCtaAction = useCallback(
+    (a: EnterpriseCtaAction) => {
+      setFormData((prev) => {
+        const ec = prev.enterpriseContext;
+        if (!ec) return prev;
+        let nextEc = ec;
+        let nextCorrespondence = prev.correspondence;
+
+        switch (a.kind) {
+          case "setTenantTier": {
+            const primary = getPrimaryOrg(prev);
+            const tierCheck = {
+              isS500: a.isS500,
+              isV100: a.isV100,
+              checkedAt: a.audit.performedAt,
+              checkedBy: a.audit.actor,
+              checkedRole: a.audit.actorRole ?? "ResponseSpecialist",
+            } as const;
+            const patchOrg = <T extends { tenantId: string }>(o: T): T => {
+              if (primary && o.tenantId === primary.tenantId) {
+                return { ...o, isS500: a.isS500, isV100: a.isV100 } as T;
+              }
+              return o;
+            };
+            nextEc = {
+              ...ec,
+              tenantTierCheck: tierCheck,
+              execReviewRequired:
+                a.isS500 || a.isV100 ? true : ec.execReviewRequired,
+              org: patchOrg(ec.org),
+              orgs: ec.orgs ? ec.orgs.map(patchOrg) : undefined,
+            };
+            if (primary && MOCK_ORGS[primary.tenantId]) {
+              MOCK_ORGS[primary.tenantId].isS500 = a.isS500;
+              MOCK_ORGS[primary.tenantId].isV100 = a.isV100;
+            }
+            // No toast (DARS is pull-model): the recorded result is
+            // visible on the Enterprise Context card via the S500 /
+            // V100 / Exec-review badges, and the dialog itself
+            // discloses the org write-through inline before the user
+            // commits. Audit event captures the action for compliance.
+            break;
+          }
+          case "recordDerogationCheck":
+            nextEc = { ...ec, derogationCheck: a.result };
+            // No toast — the Derogation badge in the Enterprise
+            // Context header changes visibly on save.
+            break;
+          case "redirectToEnterprise": {
+            const correspondenceId = `corr-redirect-${Date.now().toString(36)}`;
+            nextEc = {
+              ...ec,
+              redirectedToEnterprise: {
+                at: a.audit.performedAt,
+                by: a.audit.actor,
+                correspondenceId,
+              },
+            };
+            const redirectItem = {
+              id: correspondenceId,
+              direction: "Outbound" as const,
+              subject: "Redirect to Enterprise — production letter",
+              kind: "Letter" as const,
+              counterparty: "IssuingAuthority" as const,
+              createdAt: a.audit.performedAt,
+              createdBy: a.audit.actor,
+              body: a.correspondenceBody,
+              transmission: { status: "Draft" as const },
+            } as unknown as NonNullable<typeof prev.correspondence>[number];
+            nextCorrespondence = [
+              ...(prev.correspondence ?? []),
+              redirectItem,
+            ];
+            // No toast — the new Draft correspondence appears in the
+            // Correspondence Hub list AND the Enterprise Context
+            // header gains a "Redirected to enterprise" badge.
+            break;
+          }
+          default:
+            // Other action kinds (flagPolicyReview / viewPriorTenantHistory /
+            // flag/clearExecReview) aren't reachable in specialist scope —
+            // the buttons that fire them are hidden in the case form.
+            break;
+        }
+
+        const next: FormData = {
+          ...prev,
+          enterpriseContext: nextEc,
+          escalationAuditEvents: [
+            ...(prev.escalationAuditEvents ?? []),
+            a.audit,
+          ],
+          ...(nextCorrespondence !== prev.correspondence
+            ? { correspondence: nextCorrespondence }
+            : {}),
+        };
+        // Round-trip to the registry so the Attorney workspace picks up
+        // the same attestation / redirect / derogation result on its
+        // next read of this case.
+        setCaseFormDataInRegistry(prev.caseId, next);
+        return next;
+      });
+    },
+    [],
+  );
   const handleConfirmRetractForm3 = () => {
     if (!canRetractForm3(formData)) {
       toast.error(
@@ -2711,32 +2855,157 @@ export function DataEntryForm({
             (showAttorneyAlert || showPeerAlert)
               ? getEscalationSummaryForCase(formData.caseId)
               : undefined;
-          return (
-            <div className="space-y-3 mb-4">
-              <GroundsForRefusalPanel
-                formData={formData}
-                onRetractForm3={handleOpenRetractForm3Dialog}
-                onResumeDelivery={handleResumeDelivery}
-              />
-              <EnterpriseEscalationBanner
-                formData={formData}
-                onOpenEscalateDialog={handleOpenEscalateDialog}
-              />
-              <RfiReplyOverdueBanner
-                formData={formData}
-                onOpenEscalateDialog={handleOpenEscalateDialog}
-              />
-              <AwaitingInfoReplyBanner
-                formData={formData}
-                onOpenEscalateDialog={handleOpenEscalateDialog}
-                onSendAnotherRfi={handleBannerSendAnotherRfi}
-                onDismiss={handleBannerDismiss}
-              />
-              <ConditionsBanner
-                formData={formData}
-                onAcknowledge={handleAcknowledgeConditions}
-              />
-              {showAttorneyAlert && esc && (
+
+          // Page-top banner stack (audit P0 #1). Each candidate
+          // computes a predicate that mirrors the banner's internal
+          // visibility guard so we count slots accurately. Blockers
+          // (legal-veto + enterprise-routing) sort first, then
+          // actionable banners (RS / TS / attorney follow-ups).
+          // Cap at VISIBLE_CAP renders inline; the rest collapse into
+          // a single "Show N more notices" disclosure so the case
+          // form's first actionable field stays above the fold even
+          // when the case is heavily flagged. AwaitingInfoReply's
+          // session-dismissed state stays internal — if the user
+          // dismisses, the banner returns null but its slot was
+          // already allocated this render; the slot frees up on the
+          // next render.
+          type BannerTier = "blocker" | "actionable";
+          type BannerEntry = {
+            key: string;
+            tier: BannerTier;
+            render: () => React.ReactNode;
+          };
+          const candidates: BannerEntry[] = [];
+
+          if (gfrApplies(formData) && !!gfrBlock(formData)) {
+            candidates.push({
+              key: "gfr",
+              tier: "blocker",
+              render: () => (
+                <GroundsForRefusalPanel
+                  formData={formData}
+                  onRetractForm3={handleOpenRetractForm3Dialog}
+                  onResumeDelivery={handleResumeDelivery}
+                  onBlockDelivery={handleBlockDeliveryFromGfr}
+                  onUndoBlockDelivery={handleUndoBlockDeliveryFromGfr}
+                />
+              ),
+            });
+          }
+          if (!esc && isEnterpriseCase(formData)) {
+            candidates.push({
+              key: "enterprise-escalation",
+              tier: "blocker",
+              render: () => (
+                <EnterpriseEscalationBanner
+                  formData={formData}
+                  onOpenEscalateDialog={handleOpenEscalateDialog}
+                />
+              ),
+            });
+          }
+          if (findBreachedRfi(formData.correspondence, formData.country)) {
+            candidates.push({
+              key: "rfi-overdue",
+              tier: "actionable",
+              render: () => (
+                <RfiReplyOverdueBanner
+                  formData={formData}
+                  onOpenEscalateDialog={handleOpenEscalateDialog}
+                />
+              ),
+            });
+          }
+          if (esc?.status === "InformationRequested") {
+            // Mirror AwaitingInfoReplyBanner's internal lookup: the
+            // banner only renders when at least one fresh PAI inbound
+            // exists since the most recent InformationRequested
+            // audit. Replicating the predicate here lets us count the
+            // slot accurately.
+            const events = formData.escalationAuditEvents ?? [];
+            let lastInfoRequestedAt: Date | undefined;
+            for (const e of events) {
+              if (e.kind !== "InformationRequested") continue;
+              const ts = new Date(e.performedAt);
+              if (!lastInfoRequestedAt || ts > lastInfoRequestedAt) {
+                lastInfoRequestedAt = ts;
+              }
+            }
+            if (
+              findFreshPaiInbounds(
+                formData.correspondence,
+                lastInfoRequestedAt,
+              ).length > 0
+            ) {
+              candidates.push({
+                key: "awaiting-info-reply",
+                tier: "actionable",
+                render: () => (
+                  <AwaitingInfoReplyBanner
+                    formData={formData}
+                    onOpenEscalateDialog={handleOpenEscalateDialog}
+                    onSendAnotherRfi={handleBannerSendAnotherRfi}
+                    onDismiss={handleBannerDismiss}
+                  />
+                ),
+              });
+            }
+          }
+          if (
+            esc?.status === "ApprovedWithConditions" &&
+            !esc.conditionsAcknowledgedAt &&
+            esc.conditionsNote
+          ) {
+            candidates.push({
+              key: "conditions",
+              tier: "actionable",
+              render: () => (
+                <ConditionsBanner
+                  formData={formData}
+                  onAcknowledge={handleAcknowledgeConditions}
+                />
+              ),
+            });
+          }
+          if (
+            esc &&
+            (esc.status === "ApprovedForDelivery" ||
+              esc.status === "ApprovedWithConditions" ||
+              esc.status === "Blocked") &&
+            !esc.rsAcknowledgedAt
+          ) {
+            candidates.push({
+              key: "escalation-complete",
+              tier: "actionable",
+              render: () => (
+                <EscalationCompleteBanner
+                  formData={formData}
+                  setFormData={setFormData}
+                />
+              ),
+            });
+          }
+          const gfrForAutoState = formData.eevidenceGroundsForRefusal;
+          if (
+            gfrForAutoState?.windowLapsed &&
+            !gfrForAutoState.windowLapseAcknowledgedAt
+          ) {
+            candidates.push({
+              key: "auto-state-change",
+              tier: "actionable",
+              render: () => (
+                <AutoStateChangeBanner
+                  formData={formData}
+                  setFormData={setFormData}
+                />
+              ),
+            });
+          }
+          if (showAttorneyAlert && esc) {
+            candidates.push({
+              key: "review-attorney",
+              tier: "actionable",
+              render: () => (
                 <ReviewRequiredAlertBanner
                   role="attorney"
                   status={esc.status}
@@ -2745,18 +3014,61 @@ export function DataEntryForm({
                     scrollToCaseOverviewPanel("attorney-review-panel")
                   }
                 />
-              )}
-              {showPeerAlert && esc && (
+              ),
+            });
+          }
+          if (showPeerAlert && esc) {
+            candidates.push({
+              key: "review-peer",
+              tier: "actionable",
+              render: () => (
                 <ReviewRequiredAlertBanner
                   role="peer"
                   status={esc.status}
-                  assigneeLabel={
-                    summary?.assigneeLabel ?? "Any reviewer"
-                  }
+                  assigneeLabel={summary?.assigneeLabel ?? "Any reviewer"}
                   onReview={() =>
                     scrollToCaseOverviewPanel("peer-review-panel")
                   }
                 />
+              ),
+            });
+          }
+
+          // Stable sort by tier so blockers always read first.
+          const tierRank = (t: BannerTier) => (t === "blocker" ? 0 : 1);
+          candidates.sort((a, b) => tierRank(a.tier) - tierRank(b.tier));
+
+          const VISIBLE_CAP = 3;
+          const visible = candidates.slice(0, VISIBLE_CAP);
+          const hidden = candidates.slice(VISIBLE_CAP);
+
+          return (
+            <div className="space-y-3 mb-4">
+              {visible.map((b) => (
+                <React.Fragment key={b.key}>{b.render()}</React.Fragment>
+              ))}
+              {hidden.length > 0 && (
+                <details
+                  className="rounded-md border border-slate-200 bg-slate-50"
+                  // Default closed — the cap is the point.
+                >
+                  <summary
+                    className={cn(
+                      "cursor-pointer select-none px-3 py-2 text-sm font-medium text-slate-700",
+                      "hover:bg-slate-100 rounded-md",
+                    )}
+                  >
+                    Show {hidden.length} more{" "}
+                    {hidden.length === 1 ? "notice" : "notices"}
+                  </summary>
+                  <div className="space-y-3 px-3 pb-3 pt-1">
+                    {hidden.map((b) => (
+                      <React.Fragment key={b.key}>
+                        {b.render()}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </details>
               )}
             </div>
           );
@@ -4586,9 +4898,6 @@ export function DataEntryForm({
                    onAttorneyAction wired, so escalated-row styling +
                    inline AttorneyReviewPanel stay off). */
                 onOpenLoginLocation={(id) => setIpHistoryIdentifierId(id)}
-                onOpenPriorTenantHistory={(args) =>
-                  setPriorTenantDrawer(args)
-                }
               />
             </div>
           )}
@@ -4603,7 +4912,29 @@ export function DataEntryForm({
           a nested action button inside that card. Renders only when the
           case has been seeded / written with an enterpriseContext block. */}
       {formData.enterpriseContext && (
-        <EnterpriseContextSection case={formData} />
+        <EnterpriseContextSection
+          case={formData}
+          // Phase 5 — mount the Related DARS case search inside the
+          // Enterprise Context card so RS / TS can hunt for tenant-touching
+          // cases without leaving the section. Backs the same
+          // `relatedCaseNumbers` field the Case Identification picker
+          // writes to, so picks round-trip between the two surfaces.
+          relatedCasesValue={formData.relatedCaseNumbers ?? ""}
+          onRelatedCasesChange={(next) =>
+            setFormData((prev) => ({ ...prev, relatedCaseNumbers: next }))
+          }
+          // Phase 6 — Enterprise CTAs (Tenant tier check, Redirect to
+          // Enterprise, Check Concession Tracker) available to RS / TS
+          // from the Case Details surface. ctaScope="specialist" hides
+          // Flag Policy Review (attorney-scoped) and the ViewPriorHistory
+          // button (its workflow is now driven by the Related DARS case
+          // search above). actorRole stamps audit + attestation records
+          // so the cross-surface display can distinguish RS / TS from
+          // Attorney attestations.
+          onCtaAction={handleEnterpriseCtaAction}
+          ctaScope="specialist"
+          actorRole="ResponseSpecialist"
+        />
       )}
             </>
           }
@@ -5119,17 +5450,6 @@ export function DataEntryForm({
         identifierId={ipHistoryIdentifierId ?? undefined}
       />
 
-      {/* Phase 5 — PriorTenantHistoryPanel drawer for RS / TS.
-          Opens when the user clicks the "View other cases on this tenant"
-          link on an Enterprise identifier row. Read-only — no attorney
-          actions leak into this surface. */}
-      <PriorTenantHistoryPanel
-        open={priorTenantDrawer !== null}
-        onClose={() => setPriorTenantDrawer(null)}
-        tenantId={priorTenantDrawer?.tenantId}
-        tpid={priorTenantDrawer?.tpid}
-        tenantDisplayName={priorTenantDrawer?.tenantDisplayName}
-      />
     </div>
   );
 }
