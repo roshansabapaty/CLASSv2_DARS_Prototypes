@@ -308,14 +308,18 @@ export function CaseCardOperationalBadges({
                 <Badge
                   variant="outline"
                   className={cn(
+                    // Audit P2 #9 — migrated from inline hex chains
+                    // (e.g. `bg-[#fde7e9] text-[#a4262c]`) to semantic
+                    // tier tokens. See src/utils/colorTokens.ts +
+                    // src/styles/globals.css.
                     "text-xs cursor-help",
                     gfrChip.tier === "alertRed"
-                      ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
+                      ? "bg-danger-bg text-danger-fg border-danger-border/40"
                       : gfrChip.tier === "warnAmber"
-                        ? "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40"
+                        ? "bg-warn-orange-bg text-warn-orange-fg border-warn-orange-border/40"
                         : gfrChip.tier === "successGreen"
-                          ? "bg-[#dff6dd] text-[#0b6a0b] border-[#107c10]/40"
-                          : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
+                          ? "bg-success-bg text-success-fg border-success-border/40"
+                          : "bg-info-purple-bg text-info-purple-fg border-info-purple-border/40",
                   )}
                   style={{ fontWeight: 600 }}
                   aria-label={gfrChip.label}
@@ -357,23 +361,20 @@ export function CaseCardOperationalBadges({
                     // escalation badge. Pull-model surfaces use this so
                     // RS / TS can scan the queue and find cases where
                     // the attorney has done something requiring them.
+                    // Audit P2 #9 — migrated to semantic tokens.
                     escalationTier === "blocked"
-                      ? "bg-[#fde7e9] text-[#a4262c] border-[#a4262c]/40"
+                      ? "bg-danger-bg text-danger-fg border-danger-border/40"
                       : escalationTier === "info-requested"
-                        ? "bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40"
+                        ? "bg-warn-amber-bg text-warn-amber-fg border-warn-amber-border/40"
                         : escalationTier === "redirect"
-                          ? "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40"
+                          ? "bg-warn-orange-bg text-warn-orange-fg border-warn-orange-border/40"
                           : escalationTier === "reviewed"
-                            // Audit P1 #7: was infoSlateBlue, which read
-                            // as "FYI" rather than "needs your action."
-                            // Saturated amber/orange signals the
-                            // pickup-required state distinctly from
-                            // info-requested (lighter amber) and
-                            // redirect (lighter peach).
-                            ? "bg-[#fcd5b5] text-[#7a3a00] border-[#ca5010]/60"
+                            // Audit P1 #7: saturated amber/orange
+                            // signals the pickup-required state.
+                            ? "bg-attention-bg text-attention-fg border-attention-border/60"
                             : escalationTier === "complete"
-                              ? "bg-[#dff6dd] text-[#0b6a0b] border-[#107c10]/40"
-                              : "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
+                              ? "bg-success-bg text-success-fg border-success-border/40"
+                              : "bg-info-purple-bg text-info-purple-fg border-info-purple-border/40",
                   )}
                   style={{ fontWeight: 600 }}
                 >
@@ -415,7 +416,8 @@ export function CaseCardOperationalBadges({
               <TooltipTrigger asChild>
                 <Badge
                   variant="outline"
-                  className="bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40 text-xs cursor-help"
+                  // Audit P2 #9 — migrated to semantic warn-amber tier.
+                  className="bg-warn-amber-bg text-warn-amber-fg border-warn-amber-border/40 text-xs cursor-help"
                   style={{ fontWeight: 600 }}
                   aria-label={`${attorneyReviewTotal} correspondence item${attorneyReviewTotal === 1 ? "" : "s"} awaiting attorney review`}
                 >

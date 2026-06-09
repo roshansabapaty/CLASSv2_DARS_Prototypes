@@ -145,56 +145,77 @@ export function BadgeFilterPopover({
             })}
           </div>
 
-          {/* Any / All toggle — only visible when 2+ badges are
-              selected, since the choice is meaningless with one. */}
-          {count > 1 && (
-            <div className="border-t border-[#edebe9] pt-2.5">
-              <div className="text-[11px] uppercase tracking-wide text-[#605e5c] mb-1.5 font-semibold">
-                Match
-              </div>
-              <div
-                role="radiogroup"
-                aria-label="Badge filter match mode"
-                className="inline-flex border border-[#e1dfdd] rounded-md p-0.5 bg-white"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={value.mode === "any"}
-                  onClick={() => setMode("any")}
+          {/* Audit P2 #10 — Any / All toggle is always visible so the
+              match mode is discoverable on first open, not buried
+              behind a 2-badge selection threshold. When count ≤ 1 the
+              toggle is disabled but still rendered, with helper text
+              explaining what it controls so users see the choice exists
+              before they need it. */}
+          {(() => {
+            const enabled = count > 1;
+            return (
+              <div className="border-t border-[#edebe9] pt-2.5">
+                <div className="text-[11px] uppercase tracking-wide text-[#605e5c] mb-1.5 font-semibold">
+                  Match
+                </div>
+                <div
+                  role="radiogroup"
+                  aria-label="Badge filter match mode"
+                  aria-disabled={!enabled}
                   className={cn(
-                    "px-3 py-1 text-xs rounded transition-colors",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4]",
-                    value.mode === "any"
-                      ? "bg-[#0078d4] text-white"
-                      : "text-[#605e5c] hover:text-[#323130]",
+                    "inline-flex border rounded-md p-0.5",
+                    enabled
+                      ? "border-[#e1dfdd] bg-white"
+                      : "border-[#f3f2f1] bg-[#faf9f8] opacity-60",
                   )}
                 >
-                  Any (OR)
-                </button>
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={value.mode === "all"}
-                  onClick={() => setMode("all")}
-                  className={cn(
-                    "px-3 py-1 text-xs rounded transition-colors",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4]",
-                    value.mode === "all"
-                      ? "bg-[#0078d4] text-white"
-                      : "text-[#605e5c] hover:text-[#323130]",
-                  )}
-                >
-                  All (AND)
-                </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={value.mode === "any"}
+                    onClick={() => enabled && setMode("any")}
+                    disabled={!enabled}
+                    className={cn(
+                      "px-3 py-1 text-xs rounded transition-colors",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4]",
+                      enabled
+                        ? value.mode === "any"
+                          ? "bg-[#0078d4] text-white"
+                          : "text-[#605e5c] hover:text-[#323130]"
+                        : "text-[#a19f9d] cursor-not-allowed",
+                    )}
+                  >
+                    Any (OR)
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={value.mode === "all"}
+                    onClick={() => enabled && setMode("all")}
+                    disabled={!enabled}
+                    className={cn(
+                      "px-3 py-1 text-xs rounded transition-colors",
+                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4]",
+                      enabled
+                        ? value.mode === "all"
+                          ? "bg-[#0078d4] text-white"
+                          : "text-[#605e5c] hover:text-[#323130]"
+                        : "text-[#a19f9d] cursor-not-allowed",
+                    )}
+                  >
+                    All (AND)
+                  </button>
+                </div>
+                <p className="text-[11px] text-[#605e5c] mt-1.5">
+                  {enabled
+                    ? value.mode === "any"
+                      ? "Show cases that have any of the selected badges."
+                      : "Show cases that have every selected badge."
+                    : "Controls whether cases must match all or any of the selected badges. Select 2+ badges to activate."}
+                </p>
               </div>
-              <p className="text-[11px] text-[#605e5c] mt-1.5">
-                {value.mode === "any"
-                  ? "Show cases that have any of the selected badges."
-                  : "Show cases that have every selected badge."}
-              </p>
-            </div>
-          )}
+            );
+          })()}
         </div>
       </PopoverContent>
     </Popover>

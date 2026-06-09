@@ -37,6 +37,18 @@ export interface CommonViewFilters {
   /** Extra filters mounted via the "+ Add filter" menu. Optional for
    *  back-compat with views saved before the catalog shipped. */
   extraFilters?: Record<string, unknown>;
+  /** Page-level scope. "active" = non-resolved cases only (default);
+   *  "all" = include resolved cases. Optional for back-compat with
+   *  views saved before the scope toggle shipped — readers should
+   *  treat `undefined` as `"active"`. A re-opened case naturally
+   *  re-enters Active because the predicate compares against the
+   *  case's *current* stage, not its history. */
+  caseScope?: "active" | "all";
+  /** Up to 2 sort tiebreakers managed via the CustomViewPanel.
+   *  Walked in order when the primary `sortState` ties. Optional for
+   *  back-compat — legacy views had no concept of multi-key sort,
+   *  so readers treat `undefined` as an empty list. */
+  sortTiebreakers?: SortState[];
 }
 
 /** Case Queue view — same shape as common today now that Case Status /

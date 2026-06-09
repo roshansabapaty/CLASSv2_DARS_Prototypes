@@ -22,6 +22,7 @@ import {
   FileText,
   AlertTriangle,
   AlertCircle,
+  BookmarkPlus,
   Shield,
   Building2,
   Globe,
@@ -31,6 +32,10 @@ import {
   Clock,
   Search,
 } from "lucide-react";
+// Fluent v9 — matches the LeftNav rail's Cases entry icon
+// (`Briefcase24Filled` when active). Using the 32-sized variant for the
+// page header so the icon scales with the bumped h1 typography.
+import { Briefcase32Filled } from "@fluentui/react-icons";
 import { cn } from "./ui/utils";
 import {
   Tooltip,
@@ -61,8 +66,13 @@ import {
   defaultColumnOrder,
   sanitizeColumnOrder,
   applyColumnOrder,
+  defaultColumnVisibility,
+  sanitizeColumnVisibility,
+  setColumnHidden,
+  filterVisibleColumns,
   type ColumnId,
   type ColumnOrder,
+  type ColumnVisibility,
   type ColumnWidths,
   type SortState,
 } from "./case-queue/caseListColumns";
@@ -79,10 +89,25 @@ import { AddFilterMenu } from "./case-queue/AddFilterMenu";
 import { ExtraFilterChip } from "./case-queue/ExtraFilterChip";
 import { AdvancedFiltersPanel } from "./case-queue/AdvancedFiltersPanel";
 import {
+  FilterColumnSyncDialog,
+  type FilterColumnSyncDirection,
+  type FilterColumnSyncRequest,
+} from "./case-queue/FilterColumnSyncDialog";
+import { CustomViewPanel } from "./case-queue/CustomViewPanel";
+import { exportCasesToCsv } from "./case-queue/caseListExport";
+import { Download, Sliders } from "lucide-react";
+import {
   FILTER_CATALOG,
   caseMatchesExtraFilters,
   distinctAssignees,
   distinctCrimes,
+  distinctTenants,
+  distinctAgencies,
+  distinctRequestOrigins,
+  distinctIdentifierTypes,
+  distinctAgencyNames,
+  distinctValidatingAuthorities,
+  distinctCompetentAuthorities,
   getFilterDef,
 } from "./case-queue/extraFilterCatalog";
 import {
@@ -262,6 +287,28 @@ const COLUMN_WIDTHS_STORAGE_KEY = "dars.caseQueue.columnWidths";
 // the Cases queue and Attorney Dashboard can drift. See the matching
 // constant in AttorneyDashboard.tsx.
 const COLUMN_ORDER_STORAGE_KEY = "dars.caseQueue.columnOrder";
+const COLUMN_HIDDEN_STORAGE_KEY = "dars.caseQueue.columnHidden";
+const CASE_SCOPE_STORAGE_KEY = "dars.caseQueue.caseScope";
+
+type CaseScope = "active" | "all";
+
+function readPersistedCaseScope(): CaseScope {
+  try {
+    const raw = localStorage.getItem(CASE_SCOPE_STORAGE_KEY);
+    if (raw === "active" || raw === "all") return raw;
+  } catch {
+    /* localStorage may be blocked */
+  }
+  return "active";
+}
+
+/** Active = the case isn't currently Resolved. A re-opened case
+ *  (moved back from Resolved to any other stage) automatically
+ *  re-enters Active because this predicate reads the *current* stage.
+ *  No history-aware bookkeeping needed. */
+function isActiveCase(c: { caseStage: string }): boolean {
+  return c.caseStage !== "Resolved";
+}
 const PREVIEW_PANE_MIN_VIEWPORT = 1024;
 
 function readPersistedColumnWidths(): ColumnWidths {
@@ -281,6 +328,16 @@ function readPersistedColumnOrder(): ColumnOrder {
     return sanitizeColumnOrder(JSON.parse(raw), CASE_LIST_COLUMNS);
   } catch {
     return defaultColumnOrder(CASE_LIST_COLUMNS);
+  }
+}
+
+function readPersistedColumnHidden(): ColumnVisibility {
+  try {
+    const raw = localStorage.getItem(COLUMN_HIDDEN_STORAGE_KEY);
+    if (!raw) return defaultColumnVisibility();
+    return sanitizeColumnVisibility(JSON.parse(raw), CASE_LIST_COLUMNS);
+  } catch {
+    return defaultColumnVisibility();
   }
 }
 
@@ -356,9 +413,38 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
       /* localStorage may be blocked */
     }
   };
+  // Per-user hide-list (column ids that should be omitted from render).
+  // Locked columns (Case ID) are never hidden — see
+  // `sanitizeColumnVisibility` / `setColumnHidden` in caseListColumns.ts.
+  const [columnHidden, setColumnHiddenState] = useState<ColumnVisibility>(() =>
+    readPersistedColumnHidden(),
+  );
+  const persistColumnHidden = (next: ColumnVisibility) => {
+    setColumnHiddenState(next);
+    try {
+      localStorage.setItem(COLUMN_HIDDEN_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* localStorage may be blocked */
+    }
+  };
+  const handleToggleColumnHidden = (columnId: ColumnId, nextHidden: boolean) => {
+    persistColumnHidden(
+      setColumnHidden(columnHidden, columnId, nextHidden, CASE_LIST_COLUMNS),
+    );
+  };
+  // `orderedColumns` = the full source-of-truth list in the user's
+  // preferred order (every column, hidden or not). The Edit Columns
+  // menu walks this list so the user can toggle a hidden column back
+  // on. `visibleOrderedColumns` is the subset that actually renders
+  // in the table — header + row both consume this so the grid
+  // template stays aligned.
   const orderedColumns = useMemo(
     () => applyColumnOrder(CASE_LIST_COLUMNS, columnOrder),
     [columnOrder],
+  );
+  const visibleOrderedColumns = useMemo(
+    () => filterVisibleColumns(orderedColumns, columnHidden),
+    [orderedColumns, columnHidden],
   );
   // Auto-scroll the table while dragging a column past the visible
   // edge — the table is the only horizontally-scrollable element on
@@ -451,6 +537,11 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // headers. Layered on top of the Sort dropdown so the dropdown remains
   // the tiebreaker when no column sort is active.
   const [sortState, setSortState] = useState<SortState | null>(null);
+  // Up to 2 tiebreakers driven from the CustomViewPanel. When the
+  // primary `sortState` ties, the comparator falls through these in
+  // order, then to the case-id stable sort. Toolbar Sort dropdown
+  // only manages `sortState`; tiebreakers are panel-only.
+  const [sortTiebreakers, setSortTiebreakers] = useState<SortState[]>([]);
   const handleColumnSort = (columnId: ColumnId) => {
     setSortState((prev) => {
       if (!prev || prev.columnId !== columnId) {
@@ -460,6 +551,10 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
       return null; // asc → desc → none cycle
     });
   };
+  // Customize view panel — the unified canvas. Driven open by the
+  // toolbar button and by the "Customize view…" CTAs at the bottom
+  // of the legacy Sort / +Add filter / Edit columns menus.
+  const [customizePanelOpen, setCustomizePanelOpen] = useState(false);
   // Redesign Preview + Wireframes state was lifted to App.tsx — both
   // modals are now triggered from the App header's Help & Resources
   // menu so they can fire from any route, not just the case list.
@@ -483,6 +578,21 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // ── Extra filters (catalogue-driven "+ Add filter" menu) — must be
   //    declared above `currentQueueSnapshot` because the snapshot
   //    spreads `extraFilters` into its captured shape. ────────────────
+  // Page-level scope toggle. "active" hides Resolved cases (the
+  // overwhelmingly common need); "all" un-hides them. Persisted so a
+  // user who flips to "all" doesn't have to re-flip every load.
+  const [caseScope, setCaseScopeRaw] = useState<CaseScope>(() =>
+    readPersistedCaseScope(),
+  );
+  const setCaseScope = (next: CaseScope) => {
+    setCaseScopeRaw(next);
+    try {
+      localStorage.setItem(CASE_SCOPE_STORAGE_KEY, next);
+    } catch {
+      /* localStorage may be blocked */
+    }
+  };
+
   const [extraFilters, setExtraFilters] = useState<Record<string, unknown>>(
     {},
   );
@@ -490,6 +600,37 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   const [newlyAddedFilterId, setNewlyAddedFilterId] = useState<string | null>(
     null,
   );
+  // Pending column-sync confirmation. Set whenever an add/remove
+  // changes a filter whose linked column would flip visibility — see
+  // `FilterColumnSyncDialog` for the product loop. `null` = no
+  // confirmation outstanding.
+  const [filterColumnSyncRequest, setFilterColumnSyncRequest] =
+    useState<FilterColumnSyncRequest | null>(null);
+  // Open the dialog only when there's a real column-visibility change
+  // to confirm. Suppresses for: filters with no columnId (badges),
+  // locked columns (case-id), and no-op flips (column already in the
+  // desired state).
+  const maybeRequestColumnSync = (
+    direction: FilterColumnSyncDirection,
+    filterId: string,
+  ) => {
+    const def = getFilterDef(filterId);
+    if (!def?.columnId) return;
+    const col = CASE_LIST_COLUMNS.find((c) => c.id === def.columnId);
+    if (!col || col.locked) return;
+    const isHidden = columnHidden.includes(def.columnId as ColumnId);
+    // Add → asking "show?" only when currently hidden.
+    // Remove → asking "hide?" only when currently visible.
+    if (direction === "add" && !isHidden) return;
+    if (direction === "remove" && isHidden) return;
+    setFilterColumnSyncRequest({
+      direction,
+      filterId,
+      filterLabel: def.label,
+      columnId: def.columnId,
+      columnLabel: col.label,
+    });
+  };
   const handleAddExtraFilter = (filterId: string) => {
     const def = getFilterDef(filterId);
     if (!def) return;
@@ -499,6 +640,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
         : { ...prev, [filterId]: def.defaultValue },
     );
     setNewlyAddedFilterId(filterId);
+    maybeRequestColumnSync("add", filterId);
   };
   const handleRemoveExtraFilter = (filterId: string) => {
     setExtraFilters((prev) => {
@@ -507,6 +649,16 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
       return next;
     });
     if (newlyAddedFilterId === filterId) setNewlyAddedFilterId(null);
+    maybeRequestColumnSync("remove", filterId);
+  };
+  const handleColumnSyncConfirm = (req: FilterColumnSyncRequest) => {
+    // Add confirmed → show the column (drop from hidden-set).
+    // Remove confirmed → hide the column (add to hidden-set).
+    handleToggleColumnHidden(
+      req.columnId as ColumnId,
+      req.direction === "remove",
+    );
+    setFilterColumnSyncRequest(null);
   };
   const handleChangeExtraFilter = (filterId: string, value: unknown) => {
     setExtraFilters((prev) => ({ ...prev, [filterId]: value }));
@@ -516,6 +668,8 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
     quickFilter,
     sortState,
     extraFilters: { ...extraFilters },
+    caseScope,
+    sortTiebreakers: [...sortTiebreakers],
   };
   const currentView = [...SYSTEM_QUEUE_VIEWS, ...userSavedViews].find(
     (v) => v.id === currentViewId,
@@ -530,6 +684,14 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
       setQuickFilter(f.quickFilter as QuickFilter);
       setSortState(f.sortState);
       setExtraFilters(f.extraFilters ? { ...f.extraFilters } : {});
+      // Treat a view saved before the scope toggle shipped as "active" —
+      // matches the page default so legacy views aren't silently
+      // broadened.
+      setCaseScope(f.caseScope ?? "active");
+      // Tiebreakers — empty list for legacy views (their sort was
+      // single-key, so dropping the tiebreakers is the right
+      // restore-as-saved behaviour).
+      setSortTiebreakers(f.sortTiebreakers ? [...f.sortTiebreakers] : []);
       setCurrentViewId(view.id);
     },
     [setCurrentViewId],
@@ -618,7 +780,13 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // The four standalone dropdowns + the badges popover used to filter
   // here. They all live in the catalog-driven "+ Add filter" menu now,
   // so the chain narrows from `cases` directly via the extras bag.
-  const extraFilteredCases = cases.filter((c) =>
+  //
+  // Page-level scope (`caseScope`) runs first so per-tab counts in
+  // the quick-filter strip reflect the chosen scope. Resolved cases
+  // re-enter Active automatically if their stage flips back.
+  const scopedCases =
+    caseScope === "active" ? cases.filter(isActiveCase) : cases;
+  const extraFilteredCases = scopedCases.filter((c) =>
     caseMatchesExtraFilters(c, extraFilters),
   );
 
@@ -670,12 +838,21 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // Sort cases — column click-to-sort (3F) takes precedence; the toolbar
   // dropdown is the fallback tiebreaker for ties or when no column sort
   // is active.
-  const columnComparator = buildSortComparator(sortState);
+  const primaryComparator = buildSortComparator(sortState);
+  // Up to 2 tiebreakers from the CustomViewPanel. Each builds its own
+  // comparator; we walk them in order when earlier ones tie.
+  const tiebreakerComparators = sortTiebreakers.map((s) =>
+    buildSortComparator(s),
+  );
   const sortedCases = [...filteredCases].sort((a, b) => {
-    const colCmp = columnComparator(a, b);
+    const colCmp = primaryComparator(a, b);
     if (colCmp !== 0) return colCmp;
-    // Default tiebreaker — due-date ascending (most-urgent first) when
-    // no column sort is active. Replaces the removed Sort By dropdown.
+    for (const cmp of tiebreakerComparators) {
+      const r = cmp(a, b);
+      if (r !== 0) return r;
+    }
+    // Default final tiebreaker — due-date ascending (most-urgent
+    // first) when no panel-configured tiebreaker resolves the tie.
     return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
   });
 
@@ -815,18 +992,27 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
        centers on wide monitors. The Queue has no sticky case header to
        exclude — the whole route lives inside the container. */
     <PageContainer>
-    {/* Queue root vertical rhythm — consumes the Phase 1 spacing token so
-        Phase 2's retune (16 → 24px) ripples through here in one diff. */}
-    <div className="space-y-[var(--section-gap)]">
-      {/* Queue Header. The "Redesign Preview" + "Wireframes" buttons
-          moved into the App header's Help & Resources menu so the
-          page header stays focused on case-list context only. */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-slate-900">Cases</h1>
-          <p className="text-sm text-slate-600 mt-1">
-            {filteredCases.length} {filteredCases.length === 1 ? "case" : "cases"} found
-          </p>
+    {/* Queue root vertical rhythm — explicit 30px gaps between every
+        section (h1 header → quick-filter tabs → filter controls →
+        active-filter chips → case list). Previously inherited from
+        --section-gap (24px); the explicit 30px bumps the breathing
+        room so each band reads as its own row. */}
+    <div className="space-y-[30px]">
+      {/* Queue Header. ~60px of top padding separates this page header
+          from the app shell's wrap-around header so the two read as
+          distinct horizontal bands. Page header reads as the primary
+          h1: large, bold, with a Briefcase icon matching the LeftNav
+          rail's Cases entry. The legacy "N cases found" subtitle was
+          removed — the count is already visible on each tab's chip
+          and at the bottom of the list, so duplicating it under the
+          h1 was visual noise. */}
+      <div className="flex items-center justify-between pt-[60px]">
+        <div className="flex items-center gap-3">
+          <Briefcase32Filled
+            primaryFill="#0078d4"
+            aria-hidden="true"
+          />
+          <h1 className="text-3xl font-bold text-[#201f1e] m-0">Cases</h1>
         </div>
       </div>
 
@@ -865,6 +1051,53 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           follow-up. A spacer between groups creates the visual
           hierarchy the audit asked for. */}
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Page-level scope toggle. Moved here from the page header
+            so the scope axis sits visually adjacent to the quick-
+            filter tabs that narrow within it. Reading order is
+            scope → tabs → toolbar, left-to-right and top-to-bottom.
+            "Active" hides Resolved cases; "All" un-hides them. A
+            re-opened case re-enters Active automatically because
+            the predicate reads the case's *current* stage. */}
+        <div
+          role="radiogroup"
+          aria-label="Case scope"
+          className="inline-flex rounded-md border border-[#edebe9] bg-white p-0.5 shrink-0"
+        >
+          {(["active", "all"] as const).map((scope) => {
+            const selected = caseScope === scope;
+            const label = scope === "active" ? "Active" : "All";
+            const helper =
+              scope === "active"
+                ? "Active cases — anything not currently Resolved"
+                : "All cases — including Resolved";
+            return (
+              <button
+                key={scope}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-label={helper}
+                title={helper}
+                onClick={() => setCaseScope(scope)}
+                className={cn(
+                  "px-3 h-8 text-sm rounded-[5px] transition-colors",
+                  selected
+                    ? "bg-[#0078d4] text-white font-semibold"
+                    : "text-[#323130] hover:bg-[#f3f2f1]",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        {/* Vertical divider sets the scope toggle apart from the
+            quick-filter tabs so the hierarchy reads as "scope · then
+            tabs within scope" instead of one long horizontal pill row. */}
+        <div
+          aria-hidden="true"
+          className="h-6 w-px bg-[#edebe9] shrink-0"
+        />
         <div
           role="tablist"
           aria-label="Quick filters"
@@ -885,9 +1118,11 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
             return (
               <React.Fragment key={tab.key}>
                 {showSeparator && (
+                  // Divider grew with the buttons (h-5 → h-6) so it
+                  // still spans the visual height of the cluster.
                   <span
                     aria-hidden="true"
-                    className="inline-block w-px h-5 bg-slate-300 mx-1"
+                    className="inline-block w-px h-6 bg-slate-300 mx-1"
                   />
                 )}
                 <button
@@ -896,8 +1131,12 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                   aria-label={`${tab.label}, ${count} ${count === 1 ? "case" : "cases"}`}
                   type="button"
                   onClick={() => setQuickFilter(tab.key)}
+                  // Bumped ~15% across the board (h-8 → h-9, px-2.5 →
+                  // px-3, gap-1.5 → gap-2, text-xs → text-sm) so the
+                  // tab strip reads at the new page-header scale set
+                  // by the bolded "Cases" h1 above.
                   className={cn(
-                    "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors",
+                    "inline-flex items-center gap-2 h-9 px-3 rounded-md text-sm font-medium border transition-colors",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
                     active
                       ? "bg-[#0078d4] text-white border-[#0078d4]"
@@ -907,16 +1146,32 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                   {Icon && (
                     <Icon
                       className={cn(
-                        "w-3.5 h-3.5",
+                        "w-4 h-4",
                         active ? "text-white" : iconClassFor(tab.urgency, count),
                       )}
                       aria-hidden="true"
                     />
                   )}
-                  <span>{tab.label}</span>
+                  <span>
+                    {/* "All" is ambiguous next to the page-level
+                        Active/All scope toggle — the tab actually
+                        means "no quick-filter applied within the
+                        current scope". Re-label it dynamically so
+                        the word "All" always refers to what's
+                        actually visible at the moment. */}
+                    {tab.key === "all"
+                      ? caseScope === "active"
+                        ? "All Active"
+                        : "All Cases"
+                      : tab.label}
+                  </span>
                   <span
+                    // Count chip scaled with the tab itself: 18px → 21px,
+                    // 10px → 12px text, px-1 → px-1.5 — keeps the chip
+                    // proportional to the bigger button so it doesn't
+                    // look like a leftover smaller element.
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px]",
+                      "inline-flex items-center justify-center min-w-[21px] h-[21px] px-1.5 rounded-full text-xs",
                       active
                         ? "bg-white/20 text-white"
                         : count === 0
@@ -944,23 +1199,13 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
         />
       </div>
 
-      {/* Row 2 — Search + view-state controls. */}
+      {/* Row 2 — View-state controls on the left; Search box pushed to
+          the right so it aligns above the table's rightmost column
+          (the Edit-column-order icon button anchored at the same right
+          edge of the page container below). The `ml-auto` on the
+          search wrapper does the right-justify; on narrow viewports
+          the flex-wrap drops it to its own line, still right-aligned. */}
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[260px] max-w-[480px]">
-          <Search
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#605e5c] pointer-events-none"
-            aria-hidden="true"
-          />
-          <Input
-            type="search"
-            placeholder="Search by case ID, identifier, assignee, country…"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-8 h-9 text-sm"
-            aria-label="Search cases"
-          />
-        </div>
-
         {/* Saved Views — multi-property filter combinations the user
             can name, save, and restore. System views ship with the
             prototype; user views persist to localStorage. */}
@@ -981,21 +1226,113 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           activeFilterIds={Object.keys(extraFilters)}
           onAdd={handleAddExtraFilter}
           onOpenAdvanced={() => setAdvancedPanelOpen(true)}
+          onOpenCustomize={() => setCustomizePanelOpen(true)}
         />
 
         {/* Sort By — drives the same `sortState` the Detailed-list
             column headers use. Surfaced here so Card-view / Preview-pane
             users (who have no column headers to click) can still pick a
             sort order. */}
-        <CaseQueueSortByMenu sortState={sortState} onChange={setSortState} />
+        <CaseQueueSortByMenu
+          sortState={sortState}
+          onChange={setSortState}
+          onOpenCustomize={() => setCustomizePanelOpen(true)}
+        />
+
+        {/* Save current view — opens the SaveViewDialog that the
+            SavedViewsMenu's "Save current as…" item also opens. Lifted
+            to its own toolbar button so users can save a view without
+            digging into the Saved Views menu first; matches the
+            outline-pill style of Sort + Add filter so the toolbar
+            reads as a single cluster. */}
+        {/* Customize view — opens the unified panel that merges the
+            three legacy menus (Sort, +Add filter, Edit columns) into
+            one canvas. Sits BEFORE Save current view so the toolbar
+            reads "shape the view" → "save the view" left-to-right.
+            The legacy menus stay for one-shot tweaks (each surfaces
+            a "Customize view…" CTA pinned at the bottom of its
+            10-row scroll-capped list as a deep link here). */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setCustomizePanelOpen(true)}
+          className="h-9 gap-1.5 text-xs"
+          aria-label="Customize view"
+        >
+          <Sliders className="w-3.5 h-3.5" aria-hidden="true" />
+          <span className="font-medium">Customize view</span>
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setSaveViewDialogOpen(true)}
+          className="h-9 gap-1.5 text-xs"
+          aria-label="Save current view"
+        >
+          <BookmarkPlus className="w-3.5 h-3.5" aria-hidden="true" />
+          <span className="font-medium">Save current view</span>
+        </Button>
+
+        {/* Export list — downloads a CSV of the filtered + sorted
+            rows currently on screen, using the user's visible column
+            subset in their chosen order. Honoring the on-screen
+            slice (instead of the full case set) means transparency
+            reports and operational forecasts come out of the same
+            controls the user just dialed in — no chance of a desync
+            between what they reviewed and what they shipped. */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const { filename, rowCount } = exportCasesToCsv({
+              surface: "cases",
+              scope: caseScope,
+              cases: sortedCases,
+              columns: visibleOrderedColumns,
+            });
+            announceStatus(
+              `Exported ${rowCount} case${rowCount === 1 ? "" : "s"} to ${filename}.`,
+            );
+          }}
+          className="h-9 gap-1.5 text-xs"
+          aria-label="Export list to CSV"
+          disabled={sortedCases.length === 0}
+        >
+          <Download className="w-3.5 h-3.5" aria-hidden="true" />
+          <span className="font-medium">Export list</span>
+        </Button>
+
+        {/* Search — right-justified via `ml-auto` so the box's right
+            edge lines up with the table's rightmost column (the
+            Edit-column-order button) directly below it. Kept fixed-
+            width (max 360px) so it doesn't stretch arbitrarily on
+            wide monitors. */}
+        <div className="relative ml-auto w-full sm:w-[360px] max-w-[360px]">
+          <Search
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#605e5c] pointer-events-none"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            placeholder="Search by case ID, identifier, assignee, country…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-8 h-9 text-sm"
+            aria-label="Search cases"
+          />
+        </div>
       </div>
       {/* Active extra-filter chips — one chip per filter mounted via
-          the "+ Add filter" menu or the Advanced Filters panel. The
-          four formerly-standalone toolbar dropdowns (Case Status /
-          Country / Request Type / SLA Deadline) are now catalog entries
-          that surface here as chips. */}
+          the "+ Add filter" menu or the Advanced Filters panel. Sits
+          at the queue's 30px vertical rhythm now (was pulled in by
+          `-mt-1`); the chips read as their own band, not a tagged-on
+          fragment of the toolbar above. */}
       {Object.keys(extraFilters).length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap -mt-1">
+        <div className="flex items-center gap-2 flex-wrap">
           {FILTER_CATALOG.filter((def) =>
             Object.prototype.hasOwnProperty.call(extraFilters, def.id),
           ).map((def) => (
@@ -1014,6 +1351,13 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
               requestTypeOptions={availableRequestTypes}
               requestSubTypeOptions={availableRequestSubTypes}
               servicesOptions={availableServices}
+              tenantOptions={distinctTenants(cases)}
+              agencyOptions={distinctAgencies(cases)}
+              requestOriginOptions={distinctRequestOrigins(cases)}
+              identifierTypeOptions={distinctIdentifierTypes(cases)}
+              agencyNameOptions={distinctAgencyNames(cases)}
+              validatingAuthorityOptions={distinctValidatingAuthorities(cases)}
+              competentAuthorityOptions={distinctCompetentAuthorities(cases)}
             />
           ))}
           <button
@@ -1082,8 +1426,12 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
             onColumnResize={setColumnWidth}
             sortState={sortState}
             onSort={handleColumnSort}
-            columns={orderedColumns}
+            columns={visibleOrderedColumns}
+            allColumns={orderedColumns}
+            hiddenColumnIds={columnHidden}
+            onToggleColumnHidden={handleToggleColumnHidden}
             onReorder={handleReorderColumns}
+            onOpenCustomize={() => setCustomizePanelOpen(true)}
           />
           {sortedCases.map((caseItem, idx) => {
             const priorityConfig = getPriorityConfig(caseItem.casePriority);
@@ -1099,7 +1447,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                 onOpen={(id) => handleOpenCase(id)}
                 ariaRowIndex={idx + 2 /* +1 for the header row offset */}
                 columnWidths={columnWidths}
-                columns={orderedColumns}
+                columns={visibleOrderedColumns}
               />
             );
           })}
@@ -1141,7 +1489,11 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                 sortState={sortState}
                 onSort={handleColumnSort}
                 columns={orderedColumns}
+                allColumns={orderedColumns}
+                hiddenColumnIds={columnHidden}
+                onToggleColumnHidden={handleToggleColumnHidden}
                 onReorder={handleReorderColumns}
+                onOpenCustomize={() => setCustomizePanelOpen(true)}
               />
               {sortedCases.map((caseItem, idx) => {
                 const priorityConfig = getPriorityConfig(caseItem.casePriority);
@@ -1268,6 +1620,58 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           Advanced filters…". Drafts the filter bag locally so the
           user can toggle / configure many filters at once and Apply
           atomically. */}
+      {/* Filter ↔ column sync confirmation — fires from the add /
+          remove handlers above when a catalogue filter's linked column
+          would flip visibility. */}
+      <FilterColumnSyncDialog
+        request={filterColumnSyncRequest}
+        onConfirm={handleColumnSyncConfirm}
+        onCancel={() => setFilterColumnSyncRequest(null)}
+      />
+
+      {/* Customize view panel — unified canvas for filters + sort +
+          columns. Live-applied; "Save as view…" routes through the
+          existing SaveViewDialog. */}
+      <CustomViewPanel
+        open={customizePanelOpen}
+        onOpenChange={setCustomizePanelOpen}
+        extraFilters={extraFilters}
+        onAddFilter={handleAddExtraFilter}
+        onRemoveFilter={handleRemoveExtraFilter}
+        onChangeFilterValue={handleChangeExtraFilter}
+        primarySort={sortState}
+        onChangePrimarySort={setSortState}
+        sortTiebreakers={sortTiebreakers}
+        onChangeSortTiebreakers={setSortTiebreakers}
+        allColumns={orderedColumns}
+        hiddenColumnIds={columnHidden}
+        onToggleColumnHidden={handleToggleColumnHidden}
+        onReorderColumns={handleReorderColumns}
+        assigneeOptions={distinctAssignees(cases)}
+        crimeOptions={distinctCrimes(cases)}
+        caseStatusOptions={availableCaseStatuses}
+        countryOptions={availableCountries}
+        jurisdictionOptions={availableJurisdictions}
+        requestTypeOptions={availableRequestTypes}
+        requestSubTypeOptions={availableRequestSubTypes}
+        servicesOptions={availableServices}
+        tenantOptions={distinctTenants(cases)}
+        agencyOptions={distinctAgencies(cases)}
+        requestOriginOptions={distinctRequestOrigins(cases)}
+        identifierTypeOptions={distinctIdentifierTypes(cases)}
+        agencyNameOptions={distinctAgencyNames(cases)}
+        validatingAuthorityOptions={distinctValidatingAuthorities(cases)}
+        competentAuthorityOptions={distinctCompetentAuthorities(cases)}
+        onSaveAsView={() => setSaveViewDialogOpen(true)}
+        onResetToDefault={() => {
+          setExtraFilters({});
+          setSortState(null);
+          setSortTiebreakers([]);
+          persistColumnHidden(defaultColumnVisibility(CASE_LIST_COLUMNS));
+          handleReorderColumns(defaultColumnOrder(CASE_LIST_COLUMNS));
+        }}
+      />
+
       <AdvancedFiltersPanel
         open={advancedPanelOpen}
         onOpenChange={setAdvancedPanelOpen}
@@ -1281,6 +1685,13 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
         requestTypeOptions={availableRequestTypes}
         requestSubTypeOptions={availableRequestSubTypes}
         servicesOptions={availableServices}
+        tenantOptions={distinctTenants(cases)}
+        agencyOptions={distinctAgencies(cases)}
+        requestOriginOptions={distinctRequestOrigins(cases)}
+        identifierTypeOptions={distinctIdentifierTypes(cases)}
+        agencyNameOptions={distinctAgencyNames(cases)}
+        validatingAuthorityOptions={distinctValidatingAuthorities(cases)}
+        competentAuthorityOptions={distinctCompetentAuthorities(cases)}
       />
 
       {/* Bulk Assign Dialog (Surface E) — driven by the bulk-actions toolbar.

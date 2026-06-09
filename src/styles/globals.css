@@ -26,6 +26,56 @@
   --fluent-red: #d13438;
   --fluent-orange: #ca5010;
   --fluent-green: #107c10;
+
+  /* Audit P2 #9 — Semantic color tokens. Six tiers + a neutral set,
+   * each with bg / fg / border, that map onto the inline hex values
+   * scattered across banner / badge / chip components. Components
+   * MUST migrate to the matching semantic Tailwind class
+   * (`bg-danger-bg text-danger-fg border-danger-border`) over time —
+   * see src/utils/colorTokens.ts for the migration map. Adding a new
+   * tier here is the single point of change.
+   *
+   * Tier semantics (mirrors EscalationBadgeTier + GFR chip tiers):
+   *   danger       — legal-veto, blocked, exec review required
+   *   warn-amber   — info requested, RFI overdue, conditions
+   *   warn-orange  — redirect requested, partial GFR
+   *   attention    — Reviewed pickup (decision drafted, RS to act)
+   *   success      — GFR cleared, escalation complete
+   *   info-blue    — informational signals, peer review fallback
+   *   info-purple  — Tier 3 enterprise context, peer-tier neutral
+   */
+  /* Names without `--color-` prefix here in :root; the @theme inline
+   * block below re-exposes each as `--color-*` so Tailwind generates
+   * `bg-*-bg / text-*-fg / border-*-border` utilities. Mirrors the
+   * existing pattern (--background → --color-background) so the new
+   * tokens slot into Tailwind v4's theme resolution cleanly. */
+  --danger-bg: #fde7e9;
+  --danger-fg: #a4262c;
+  --danger-border: #a4262c;
+
+  --warn-amber-bg: #fff4ce;
+  --warn-amber-fg: #7a4f00;
+  --warn-amber-border: #a26a00;
+
+  --warn-orange-bg: #fff4e6;
+  --warn-orange-fg: #7a3a00;
+  --warn-orange-border: #ca5010;
+
+  --attention-bg: #fcd5b5;
+  --attention-fg: #7a3a00;
+  --attention-border: #ca5010;
+
+  --success-bg: #dff6dd;
+  --success-fg: #0b6a0b;
+  --success-border: #107c10;
+
+  --info-blue-bg: #deecf9;
+  --info-blue-fg: #004578;
+  --info-blue-border: #0078d4;
+
+  --info-purple-bg: #f3f0fa;
+  --info-purple-fg: #5c2d91;
+  --info-purple-border: #8764b8;
   
   --background: #faf9f8;
   --foreground: #201f1e;
@@ -163,6 +213,38 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Audit P2 #9 — Semantic color tier tokens exposed to Tailwind so
+   * components can use `bg-danger-bg text-danger-fg border-danger-border`
+   * instead of inline `bg-[#fde7e9]`. The underlying hex values live
+   * in :root above (without the `--color-` prefix). */
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-fg: var(--danger-fg);
+  --color-danger-border: var(--danger-border);
+
+  --color-warn-amber-bg: var(--warn-amber-bg);
+  --color-warn-amber-fg: var(--warn-amber-fg);
+  --color-warn-amber-border: var(--warn-amber-border);
+
+  --color-warn-orange-bg: var(--warn-orange-bg);
+  --color-warn-orange-fg: var(--warn-orange-fg);
+  --color-warn-orange-border: var(--warn-orange-border);
+
+  --color-attention-bg: var(--attention-bg);
+  --color-attention-fg: var(--attention-fg);
+  --color-attention-border: var(--attention-border);
+
+  --color-success-bg: var(--success-bg);
+  --color-success-fg: var(--success-fg);
+  --color-success-border: var(--success-border);
+
+  --color-info-blue-bg: var(--info-blue-bg);
+  --color-info-blue-fg: var(--info-blue-fg);
+  --color-info-blue-border: var(--info-blue-border);
+
+  --color-info-purple-bg: var(--info-purple-bg);
+  --color-info-purple-fg: var(--info-purple-fg);
+  --color-info-purple-border: var(--info-purple-border);
 }
 
 @layer base {

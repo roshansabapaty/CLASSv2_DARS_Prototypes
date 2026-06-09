@@ -47,6 +47,7 @@ import { CopyableText } from "../CopyButton";
 import { TruncatedText } from "../ui/truncated-text";
 import { SlaDeadlineChip } from "../sla/SlaDeadlineChip";
 import { isCaseSlaPausedById } from "../../utils/slaTimer";
+import { getCaseFormDataById } from "../../utils/caseDataRegistry";
 import { useCorrespondenceNotifications } from "../../hooks/useCorrespondenceNotifications";
 import {
   escalationBadgeLabelForCase,
@@ -61,6 +62,7 @@ import {
 } from "./case-queue-types";
 import {
   CASE_LIST_COLUMNS,
+  getDenseGridColsClass,
   type ColumnDef,
   type ColumnWidths,
   buildGridTemplate,
@@ -200,12 +202,11 @@ export function CaseQueueListRow({
   const fullGridCols = bulkSelectable
     ? "grid-cols-[auto_1.1fr_0.6fr_0.8fr_0.8fr_0.9fr_1fr_0.9fr_auto_1fr_0.9fr_auto_1.3fr_0.9fr_1fr_1.1fr_1.3fr]"
     : "grid-cols-[1.1fr_0.6fr_0.8fr_0.8fr_0.9fr_1fr_0.9fr_auto_1fr_0.9fr_auto_1.3fr_0.9fr_1fr_1.1fr_1.3fr]";
-  // Dense template — case-id | priority | due | stage | assigned-to | internal-esc | escalated-to.
-  // Per-signal operational columns drop in dense mode; mirrors
-  // DENSE_COLUMN_IDS in CaseQueueListHeader.tsx.
-  const denseGridCols = bulkSelectable
-    ? "grid-cols-[auto_1.1fr_auto_1fr_0.9fr_1fr_1.2fr_1.2fr]"
-    : "grid-cols-[1.1fr_auto_1fr_0.9fr_1fr_1.2fr_1.2fr]";
+  // Dense template — single source of truth lives in
+  // `caseListColumns.ts` (see the `DENSE_TRACKS` contract comment
+  // there). Lifted out so the header and row CAN'T drift apart on
+  // future edits.
+  const denseGridCols = getDenseGridColsClass(bulkSelectable);
 
   // When the caller supplies `columnWidths` (Detailed-list mode in the
   // queue), switch to an inline grid template that matches the
@@ -252,14 +253,39 @@ export function CaseQueueListRow({
   // the iterator can skip them without disturbing the column sequence.
   const cellByColumn: Partial<Record<string, React.ReactNode>> = {
     "case-id": (
+      // Case ID gets a 15% font-size bump (14px → 16px). Inline style
+      // because the app's root font-size is set to 14px in globals.css,
+      // which anchors Tailwind's rem-based `text-*` scale (text-sm and
+      // text-base both end up resolving to 14px here).
+      //
+      // `min-w-0` on the gridcell AND on CopyableText is required so
+      // the flex truncation chain isn't blocked by the intermediate
+      // <button> CopyableText renders (it's `inline-flex` by default,
+      // which has its own intrinsic content size). Without min-w-0 on
+      // the button, the parent grid cell couldn't shrink the Case ID
+      // text below ~120px and the value visually bled into the next
+      // column when the preview pane was stretched wide.
+      //
+      // copyLabel is set to the full case ID so CopyableText's
+      // built-in Radix tooltip surfaces the complete value on hover
+      // — including when the column is narrow enough to truncate the
+      // visible text with an ellipsis. Previously the cell nested a
+      // <TruncatedText> tooltip inside the CopyableText tooltip; the
+      // outer one always won so users never saw the full ID when
+      // clipped. After the user copies, the tooltip flips to "Copied
+      // — <caseId>" for confirmation.
       <div role="gridcell" className={cn("min-w-0 flex items-center gap-1.5", cellPadding)}>
-        <CopyableText text={caseItem.caseId} copyLabel="Copy case ID">
-          <TruncatedText
-            className="font-mono text-sm font-semibold text-slate-900 truncate min-w-0"
-            tooltipText={caseItem.caseId}
+        <CopyableText
+          text={caseItem.caseId}
+          copyLabel={caseItem.caseId}
+          className="min-w-0 max-w-full"
+        >
+          <span
+            className="font-mono text-slate-900 truncate min-w-0 block"
+            style={{ fontSize: "16px", fontWeight: 600 }}
           >
             {caseItem.caseId}
-          </TruncatedText>
+          </span>
         </CopyableText>
       </div>
     ),
@@ -703,6 +729,312 @@ export function CaseQueueListRow({
         })()}
       </div>
     ),
+
+    // ── Filter-driven synthesised columns (hidden by default) ─────────
+    // Each cell reads from the same source as the matching FilterDef's
+    // predicate so a user sees the value being filtered on. Em-dash
+    // ("—") for cases with no value — same convention as the other
+    // signal columns.
+    "crime": isDense ? null : (() => {
+      const list = caseItem.natureOfCrime ?? [];
+      const label = list.join(", ");
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          {label ? (
+            <TruncatedText
+              className="text-xs text-[#323130] truncate max-w-full"
+              aria-label={`Nature of crime: ${label}`}
+              tooltipText={label}
+            >
+              {label}
+            </TruncatedText>
+          ) : (
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          )}
+        </div>
+      );
+    })(),
+
+    "request-type": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.requestType ? (
+          <TruncatedText
+            className="text-xs text-[#323130] truncate max-w-full"
+            aria-label={`Request type: ${caseItem.requestType}`}
+            tooltipText={caseItem.requestType}
+          >
+            {caseItem.requestType}
+          </TruncatedText>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "request-sub-type": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.requestSubType ? (
+          <TruncatedText
+            className="text-xs text-[#323130] truncate max-w-full"
+            aria-label={`Request sub-type: ${caseItem.requestSubType}`}
+            tooltipText={caseItem.requestSubType}
+          >
+            {caseItem.requestSubType}
+          </TruncatedText>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "request-origin": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.requestOrigin ? (
+          <TruncatedText
+            className="text-xs text-[#323130] truncate max-w-full"
+            aria-label={`Request origin: ${caseItem.requestOrigin}`}
+            tooltipText={caseItem.requestOrigin}
+          >
+            {caseItem.requestOrigin}
+          </TruncatedText>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "tenant": isDense ? null : (() => {
+      const fd = getCaseFormDataById(caseItem.caseId);
+      const ec = fd?.enterpriseContext;
+      let tenant = "";
+      if (ec?.orgs?.length) {
+        tenant = ec.orgs.find((o) => o.tenantDisplayName)?.tenantDisplayName ?? "";
+      } else if (ec?.org?.tenantDisplayName) {
+        tenant = ec.org.tenantDisplayName;
+      }
+      const extraCount = ec?.orgs?.length ? Math.max(0, ec.orgs.length - 1) : 0;
+      const label = extraCount > 0 ? `${tenant} +${extraCount}` : tenant;
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          {tenant ? (
+            <TruncatedText
+              className="text-xs text-[#323130] truncate max-w-full"
+              aria-label={`Tenant: ${label}`}
+              tooltipText={label}
+            >
+              {label}
+            </TruncatedText>
+          ) : (
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          )}
+        </div>
+      );
+    })(),
+
+    "agency": isDense ? null : (() => {
+      const fd = getCaseFormDataById(caseItem.caseId);
+      const agency =
+        fd?.legalContext?.primaryIssuingAuthority?.name ?? fd?.agency ?? "";
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          {agency ? (
+            <TruncatedText
+              className="text-xs text-[#323130] truncate max-w-full"
+              aria-label={`Issuing authority: ${agency}`}
+              tooltipText={agency}
+            >
+              {agency}
+            </TruncatedText>
+          ) : (
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          )}
+        </div>
+      );
+    })(),
+
+    "stale-escalation": isDense ? null : (() => {
+      const esc = getCaseFormDataById(caseItem.caseId)?.attorneyEscalation;
+      if (!esc) {
+        return (
+          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          </div>
+        );
+      }
+      const isTerminal =
+        esc.status === "ApprovedForDelivery" ||
+        esc.status === "ApprovedWithConditions";
+      if (isTerminal) {
+        return (
+          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          </div>
+        );
+      }
+      let lastActivity = new Date(esc.escalatedAt).getTime();
+      for (const a of esc.actions ?? []) {
+        const t = new Date(a.performedAt).getTime();
+        if (Number.isFinite(t) && t > lastActivity) lastActivity = t;
+      }
+      const days = Math.max(
+        0,
+        Math.floor((Date.now() - lastActivity) / (24 * 60 * 60 * 1000)),
+      );
+      // Visual urgency: > 7 days = red, > 3 = amber, ≤ 3 = neutral.
+      // Matches the "stale" thresholds the LENS Lead persona uses.
+      const tone =
+        days > 7
+          ? "text-[#a4262c]"
+          : days > 3
+            ? "text-[#7a4f00]"
+            : "text-[#323130]";
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          <span
+            className={cn("text-xs", tone)}
+            style={{ fontWeight: days > 7 ? 600 : 400 }}
+            aria-label={`Escalation age: ${days} day${days === 1 ? "" : "s"}`}
+          >
+            {days}d
+          </span>
+        </div>
+      );
+    })(),
+
+    "recommend-rejection": isDense ? null : (
+      <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+        {caseItem.caseStage === "Recommend Rejection" ? (
+          <Badge
+            variant="outline"
+            className="text-[10px] py-0 px-1.5 bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40"
+            style={{ fontWeight: 600 }}
+            aria-label="Recommend rejection candidate"
+          >
+            Recommended
+          </Badge>
+        ) : (
+          <span className="text-[11px] text-[#a19f9d]">—</span>
+        )}
+      </div>
+    ),
+
+    "agency-name": isDense ? null : (() => {
+      const fd = getCaseFormDataById(caseItem.caseId);
+      const names = new Set<string>();
+      for (const ar of fd?.legalContext?.agencies ?? []) {
+        if (ar.agency?.name) names.add(ar.agency.name);
+      }
+      if (names.size === 0 && fd?.agency) names.add(fd.agency);
+      const sorted = Array.from(names).sort();
+      const label = sorted.join(", ");
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          {label ? (
+            <TruncatedText
+              className="text-xs text-[#323130] truncate max-w-full"
+              aria-label={`Agencies: ${label}`}
+              tooltipText={label}
+            >
+              {label}
+            </TruncatedText>
+          ) : (
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          )}
+        </div>
+      );
+    })(),
+
+    "validating-authority": isDense ? null : (() => {
+      const fd = getCaseFormDataById(caseItem.caseId);
+      let name = fd?.legalContext?.primaryValidatingAuthority?.name ?? "";
+      if (!name) {
+        for (const ar of fd?.legalContext?.agencies ?? []) {
+          if (ar.role === "ValidatingAuthority" && ar.agency?.name) {
+            name = ar.agency.name;
+            break;
+          }
+        }
+      }
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          {name ? (
+            <TruncatedText
+              className="text-xs text-[#323130] truncate max-w-full"
+              aria-label={`Validating Authority: ${name}`}
+              tooltipText={name}
+            >
+              {name}
+            </TruncatedText>
+          ) : (
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          )}
+        </div>
+      );
+    })(),
+
+    "competent-authority": isDense ? null : (() => {
+      const fd = getCaseFormDataById(caseItem.caseId);
+      let name = fd?.legalContext?.primaryCompetentAuthority?.name ?? "";
+      if (!name) {
+        for (const ar of fd?.legalContext?.agencies ?? []) {
+          if (ar.role === "CompetentAuthority" && ar.agency?.name) {
+            name = ar.agency.name;
+            break;
+          }
+        }
+      }
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+          {name ? (
+            <TruncatedText
+              className="text-xs text-[#323130] truncate max-w-full"
+              aria-label={`Competent Authority: ${name}`}
+              tooltipText={name}
+            >
+              {name}
+            </TruncatedText>
+          ) : (
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          )}
+        </div>
+      );
+    })(),
+
+    "identifier-types": isDense ? null : (() => {
+      // Render each distinct type as a small chip, with count when > 1.
+      // Matches the visual treatment of the Services column so the two
+      // multi-value columns scan consistently.
+      const types = caseItem.identifierTypes ?? {};
+      const keys = Object.keys(types).sort();
+      if (keys.length === 0) {
+        return (
+          <div role="gridcell" className={cn("min-w-0 flex items-center", cellPadding)}>
+            <span className="text-[11px] text-[#a19f9d]">—</span>
+          </div>
+        );
+      }
+      const fullLabel = keys
+        .map((k) => (types[k] > 1 ? `${k} (${types[k]})` : k))
+        .join(", ");
+      return (
+        <div role="gridcell" className={cn("min-w-0 flex items-center gap-1 flex-wrap", cellPadding)}>
+          {keys.map((k) => (
+            <Badge
+              key={k}
+              variant="outline"
+              className="text-[10px] py-0 px-1.5 bg-slate-50 text-slate-600 border-slate-200"
+              aria-label={`Identifier type: ${k}${types[k] > 1 ? ` (${types[k]})` : ""}`}
+              title={fullLabel}
+            >
+              {k}
+              {types[k] > 1 && (
+                <span className="ml-0.5 text-slate-400">·{types[k]}</span>
+              )}
+            </Badge>
+          ))}
+        </div>
+      );
+    })(),
   };
 
   // Iterate the parent-supplied columns in user-customised order, drop

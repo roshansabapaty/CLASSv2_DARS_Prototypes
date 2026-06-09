@@ -22,15 +22,21 @@ import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import {
-  Scale,
   AlertTriangle,
+  BookmarkPlus,
   ChevronRight,
   Clock,
+  Scale,
   Search,
   UserMinus,
   Skull,
   UserCheck,
 } from "lucide-react";
+// Fluent v9 — matches the LeftNav rail's Attorney Dashboard entry
+// (`Scales24Filled` when active). 32-sized variant for the page header
+// so the icon scales with the bumped h1 typography. Mirrors the
+// Cases-page swap from lucide → Fluent for app-bar / page-header parity.
+import { Scales32Filled } from "@fluentui/react-icons";
 import { CURRENT_USER, RESPONSE_SPECIALISTS } from "../../constants/caseConstants";
 import { toast } from "sonner@2.0.3";
 import { CaseQueueBulkActionsBar } from "../case-queue/CaseQueueBulkActionsBar";
@@ -48,16 +54,23 @@ import {
 } from "../case-queue/CaseQueueViewToggle";
 import { CaseQueueListRow } from "../case-queue/CaseQueueListRow";
 import { CaseQueueListHeader } from "../case-queue/CaseQueueListHeader";
+import { PageContainer } from "../layout/PageContainer";
 import { CaseQueuePreviewPane } from "../case-queue/CaseQueuePreviewPane";
 import {
   ATTORNEY_DASHBOARD_COLUMNS,
+  CASE_LIST_COLUMNS,
   defaultColumnWidths,
   buildSortComparator,
   defaultColumnOrder,
   sanitizeColumnOrder,
   applyColumnOrder,
+  defaultColumnVisibility,
+  sanitizeColumnVisibility,
+  setColumnHidden,
+  filterVisibleColumns,
   type ColumnId,
   type ColumnOrder,
+  type ColumnVisibility,
   type SortState,
 } from "../case-queue/caseListColumns";
 
@@ -66,6 +79,10 @@ import { useDragAutoScroll } from "../../hooks/useDragAutoScroll";
 // Per-surface column order storage. The Attorney Dashboard maintains
 // its own order independent of the main Case Queue (see CaseQueue.tsx).
 const COLUMN_ORDER_STORAGE_KEY = "dars.attorneyDashboard.columnOrder";
+const COLUMN_HIDDEN_STORAGE_KEY = "dars.attorneyDashboard.columnHidden";
+const CASE_SCOPE_STORAGE_KEY = "dars.attorneyDashboard.caseScope";
+
+type CaseScope = "active" | "all";
 
 function readPersistedColumnOrder(): ColumnOrder {
   try {
@@ -75,6 +92,39 @@ function readPersistedColumnOrder(): ColumnOrder {
   } catch {
     return defaultColumnOrder(ATTORNEY_DASHBOARD_COLUMNS);
   }
+}
+
+function readPersistedColumnHidden(): ColumnVisibility {
+  try {
+    const raw = localStorage.getItem(COLUMN_HIDDEN_STORAGE_KEY);
+    if (!raw) return defaultColumnVisibility(ATTORNEY_DASHBOARD_COLUMNS);
+    return sanitizeColumnVisibility(
+      JSON.parse(raw),
+      ATTORNEY_DASHBOARD_COLUMNS,
+    );
+  } catch {
+    return defaultColumnVisibility(ATTORNEY_DASHBOARD_COLUMNS);
+  }
+}
+
+function readPersistedCaseScope(): CaseScope {
+  try {
+    const raw = localStorage.getItem(CASE_SCOPE_STORAGE_KEY);
+    if (raw === "active" || raw === "all") return raw;
+  } catch {
+    /* localStorage may be blocked */
+  }
+  return "active";
+}
+
+/** Active = the case isn't currently Resolved. A re-opened case
+ *  (moved back from Resolved to any other stage) re-enters Active
+ *  automatically because the predicate reads the case's CURRENT
+ *  stage, not its history. Identical semantics to the Case Queue
+ *  surface so personas who move between pages see consistent
+ *  behavior. */
+function isActiveCase(c: { caseStage: string }): boolean {
+  return c.caseStage !== "Resolved";
 }
 import { useStatusAnnouncer } from "../StatusAnnouncer";
 import {
@@ -102,10 +152,25 @@ import { AddFilterMenu } from "../case-queue/AddFilterMenu";
 import { ExtraFilterChip } from "../case-queue/ExtraFilterChip";
 import { AdvancedFiltersPanel } from "../case-queue/AdvancedFiltersPanel";
 import {
+  FilterColumnSyncDialog,
+  type FilterColumnSyncDirection,
+  type FilterColumnSyncRequest,
+} from "../case-queue/FilterColumnSyncDialog";
+import { CustomViewPanel } from "../case-queue/CustomViewPanel";
+import { exportCasesToCsv } from "../case-queue/caseListExport";
+import { Download, Sliders } from "lucide-react";
+import {
   FILTER_CATALOG,
   caseMatchesExtraFilters,
   distinctAssignees,
   distinctCrimes,
+  distinctTenants,
+  distinctAgencies,
+  distinctRequestOrigins,
+  distinctIdentifierTypes,
+  distinctAgencyNames,
+  distinctValidatingAuthorities,
+  distinctCompetentAuthorities,
   getFilterDef,
 } from "../case-queue/extraFilterCatalog";
 import {
@@ -353,6 +418,25 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   // `baseCases.sort` above — when a column sort is active, it takes
   // precedence; the escalation order falls back as the tiebreaker.
   const [sortState, setSortState] = React.useState<SortState | null>(null);
+  // Multi-key tiebreakers managed via the CustomViewPanel. Walked
+  // in order when the primary `sortState` ties; falls through to the
+  // dashboard's default escalation-weight ordering as the final tier.
+  const [sortTiebreakers, setSortTiebreakers] = React.useState<SortState[]>([]);
+  // Page-level scope toggle. "active" hides Resolved cases (the
+  // overwhelmingly common attorney workflow — resolved escalations
+  // don't need ongoing review); "all" un-hides them. Persisted
+  // separately from the Case Queue's scope.
+  const [caseScope, setCaseScopeRaw] = React.useState<CaseScope>(() =>
+    readPersistedCaseScope(),
+  );
+  const setCaseScope = (next: CaseScope) => {
+    setCaseScopeRaw(next);
+    try {
+      localStorage.setItem(CASE_SCOPE_STORAGE_KEY, next);
+    } catch {
+      /* localStorage may be blocked */
+    }
+  };
   // User-customised column order — persisted per-surface so this
   // dashboard's layout doesn't bleed into the main Case Queue.
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>(() =>
@@ -366,10 +450,43 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
       /* localStorage may be blocked */
     }
   };
+  // Per-user hide-list. Synthesised columns from the filter→column
+  // sync work start hidden by default via `defaultColumnVisibility`.
+  const [columnHidden, setColumnHiddenState] =
+    React.useState<ColumnVisibility>(() => readPersistedColumnHidden());
+  const persistColumnHidden = (next: ColumnVisibility) => {
+    setColumnHiddenState(next);
+    try {
+      localStorage.setItem(COLUMN_HIDDEN_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* localStorage may be blocked */
+    }
+  };
+  const handleToggleColumnHidden = (columnId: ColumnId, nextHidden: boolean) => {
+    persistColumnHidden(
+      setColumnHidden(
+        columnHidden,
+        columnId,
+        nextHidden,
+        ATTORNEY_DASHBOARD_COLUMNS,
+      ),
+    );
+  };
+  // Full ordered list (visible + hidden) for the Edit Columns menu /
+  // CustomViewPanel; rendering uses the visible subset so the grid
+  // template stays aligned with the header.
   const orderedColumns = React.useMemo(
     () => applyColumnOrder(ATTORNEY_DASHBOARD_COLUMNS, columnOrder),
     [columnOrder],
   );
+  const visibleOrderedColumns = React.useMemo(
+    () => filterVisibleColumns(orderedColumns, columnHidden),
+    [orderedColumns, columnHidden],
+  );
+  // Customize view panel — unified canvas. Opened by the toolbar
+  // button and the "Customize view…" CTAs at the bottom of the
+  // legacy Sort / +Add filter / Edit columns menus.
+  const [customizePanelOpen, setCustomizePanelOpen] = React.useState(false);
   // Auto-scroll the dashboard's detailed-list table while dragging a
   // column past the visible edge. The dense preview-pane mode uses a
   // fr-based grid that doesn't overflow, so no scroll wiring there.
@@ -414,6 +531,30 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   const [newlyAddedFilterId, setNewlyAddedFilterId] = React.useState<
     string | null
   >(null);
+  // Filter ↔ column sync state. Suppresses for filters with no
+  // `columnId`, locked columns, and no-op flips — same rules as the
+  // Case Queue surface so behaviour stays consistent.
+  const [filterColumnSyncRequest, setFilterColumnSyncRequest] =
+    React.useState<FilterColumnSyncRequest | null>(null);
+  const maybeRequestColumnSync = (
+    direction: FilterColumnSyncDirection,
+    filterId: string,
+  ) => {
+    const def = getFilterDef(filterId);
+    if (!def?.columnId) return;
+    const col = ATTORNEY_DASHBOARD_COLUMNS.find((c) => c.id === def.columnId);
+    if (!col || col.locked) return;
+    const isHidden = columnHidden.includes(def.columnId as ColumnId);
+    if (direction === "add" && !isHidden) return;
+    if (direction === "remove" && isHidden) return;
+    setFilterColumnSyncRequest({
+      direction,
+      filterId,
+      filterLabel: def.label,
+      columnId: def.columnId,
+      columnLabel: col.label,
+    });
+  };
   const handleAddExtraFilter = (filterId: string) => {
     const def = getFilterDef(filterId);
     if (!def) return;
@@ -423,6 +564,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
         : { ...prev, [filterId]: def.defaultValue },
     );
     setNewlyAddedFilterId(filterId);
+    maybeRequestColumnSync("add", filterId);
   };
   const handleRemoveExtraFilter = (filterId: string) => {
     setExtraFilters((prev) => {
@@ -431,6 +573,14 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
       return next;
     });
     if (newlyAddedFilterId === filterId) setNewlyAddedFilterId(null);
+    maybeRequestColumnSync("remove", filterId);
+  };
+  const handleColumnSyncConfirm = (req: FilterColumnSyncRequest) => {
+    handleToggleColumnHidden(
+      req.columnId as ColumnId,
+      req.direction === "remove",
+    );
+    setFilterColumnSyncRequest(null);
   };
   const handleChangeExtraFilter = (filterId: string, value: unknown) => {
     setExtraFilters((prev) => ({ ...prev, [filterId]: value }));
@@ -440,6 +590,8 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
     quickFilter,
     sortState,
     extraFilters: { ...extraFilters },
+    caseScope,
+    sortTiebreakers: [...sortTiebreakers],
   };
   const currentView = [...SYSTEM_ATTORNEY_VIEWS, ...userSavedViews].find(
     (v) => v.id === currentViewId,
@@ -454,6 +606,12 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
       setQuickFilter(f.quickFilter as DashboardQuickFilter);
       setSortState(f.sortState);
       setExtraFilters(f.extraFilters ? { ...f.extraFilters } : {});
+      // Legacy views (saved before the scope toggle / tiebreakers
+      // shipped) default to "active" and an empty tiebreaker list —
+      // matches page defaults so re-applying an older view doesn't
+      // silently broaden scope or revert to single-key sort.
+      setCaseScope(f.caseScope ?? "active");
+      setSortTiebreakers(f.sortTiebreakers ? [...f.sortTiebreakers] : []);
       setCurrentViewId(view.id);
     },
     [setCurrentViewId],
@@ -580,12 +738,21 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
     setBulkAssignDialogOpen(true);
   };
 
+  // Page-level scope runs first so per-tab counts in the quick-
+  // filter strip reflect the chosen scope. Resolved cases re-enter
+  // Active automatically if their stage flips back.
+  const scopedCases = React.useMemo(
+    () =>
+      caseScope === "active" ? baseCases.filter(isActiveCase) : baseCases,
+    [baseCases, caseScope],
+  );
+
   const filteredCases = React.useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     const tabPredicate =
       DASHBOARD_QUICK_FILTERS.find((t) => t.key === quickFilter)?.predicate ??
       (() => true);
-    const filtered = baseCases.filter((c) => {
+    const filtered = scopedCases.filter((c) => {
       if (term) {
         const haystack =
           `${c.caseId} ${c.assigneeName ?? ""} ${c.country ?? ""} ${c.jurisdiction ?? ""}`.toLowerCase();
@@ -597,13 +764,31 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
       if (!caseMatchesExtraFilters(c, extraFilters)) return false;
       return tabPredicate(c);
     });
-    if (!sortState) return filtered;
-    const cmp = buildSortComparator(sortState);
-    return [...filtered].sort(cmp);
-  }, [baseCases, searchTerm, quickFilter, sortState, extraFilters]);
+    if (!sortState && sortTiebreakers.length === 0) return filtered;
+    const primaryCmp = buildSortComparator(sortState);
+    const tiebreakerCmps = sortTiebreakers.map((s) => buildSortComparator(s));
+    return [...filtered].sort((a, b) => {
+      const r = primaryCmp(a, b);
+      if (r !== 0) return r;
+      for (const cmp of tiebreakerCmps) {
+        const t = cmp(a, b);
+        if (t !== 0) return t;
+      }
+      return 0;
+    });
+  }, [
+    scopedCases,
+    searchTerm,
+    quickFilter,
+    sortState,
+    sortTiebreakers,
+    extraFilters,
+  ]);
 
-  // Per-tab count, computed against the base set (not the filtered set)
-  // so the tab chips show their own pool size.
+  // Per-tab count, computed against the SCOPED set (not the
+  // search/extras-filtered set). Anchoring on scopedCases means the
+  // tab chips reflect the page-level Active/All scope — the
+  // "narrowing by scope" axis sits above tabs in the mental model.
   const tabCounts = React.useMemo(() => {
     const counts: Record<DashboardQuickFilter, number> = {
       all: 0,
@@ -611,14 +796,14 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
       unassigned: 0,
       threatToLife: 0,
     };
-    for (const c of baseCases) {
+    for (const c of scopedCases) {
       counts.all += 1;
       if (matchesMyCases(c)) counts.myCases += 1;
       if (isUnassignedAttorneyEscalation(c.caseId)) counts.unassigned += 1;
       if (c.isThreatToLife) counts.threatToLife += 1;
     }
     return counts;
-  }, [baseCases]);
+  }, [scopedCases]);
 
   // Persisted view mode. Preview-pane is now enabled with an attorney-
   // flavored content variant (Gap 4).
@@ -661,34 +846,38 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
     filteredCases.find((c) => c.caseId === selectedPreviewCaseId) ?? null;
 
   return (
-    <div
-      className={cn(
-        "mx-auto px-6 py-6 space-y-4",
-        viewMode === "preview" ? "max-w-7xl" : "max-w-5xl",
-      )}
-    >
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <Scale className="w-5 h-5 text-[#5c2d91]" />
-          <h1 className="text-xl font-semibold text-[#323130]">
-            Attorney Dashboard
-          </h1>
-        </div>
-        <p className="text-sm text-[#605e5c]">
-          Cases flagged by the Response or Triage Specialist for{" "}
-          <span className="font-medium text-[#323130]">Internal Escalation</span>{" "}
-          or{" "}
-          <span className="font-medium text-[#323130]">Lawyer Assignment</span>.
-          {" "}This view filters the main queue down to the cases that need
-          attorney review or action.
-        </p>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Badge
-            variant="outline"
-            className="text-xs bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40"
-          >
-            {filteredCases.length} case{filteredCases.length === 1 ? "" : "s"} requiring attorney attention
-          </Badge>
+    // PageContainer caps body width at --page-max-w
+    // (`min(1600px, calc(100vw - 96px))` — see globals.css) and applies
+    // the --page-gutter-x horizontal padding, matching the Cases page.
+    // Previously the Attorney Dashboard used hardcoded `max-w-5xl`
+    // (1024px) / `max-w-7xl` (1280px) wrappers, which left a center-
+    // confined column with wide empty margins on full-screen viewports.
+    // Switching to PageContainer makes the dashboard grow with the
+    // viewport up to 1600px just like the main queue.
+    // Explicit 30px gap between the <header> and the case list below
+    // it; matches the Cases-page rhythm.
+    <PageContainer className="py-6 space-y-[30px]">
+      {/* 30px gap between each band inside the header — h1 row → quick-
+          filter tabs → filter controls → active-filter chips — so the
+          surface reads as a stack of distinct rows instead of a dense
+          toolbar. */}
+      <header className="space-y-[30px]">
+        {/* Page header — matches the Cases page's pattern: 60px of top
+            padding separates this band from the app-shell header
+            above, the icon is the Fluent variant that matches the
+            LeftNav rail's active state (`Scales24Filled`), the h1 is
+            bold-large, and the descriptive subtitle paragraph + the
+            "N cases requiring attorney attention" count badge that
+            used to live here were dropped — counts are visible on each
+            tab chip and at the bottom of the list, and the workflow
+            context lives in onboarding / docs. */}
+        <div className="flex items-center justify-between pt-[60px]">
+          <div className="flex items-center gap-3">
+            <Scales32Filled primaryFill="#5c2d91" aria-hidden="true" />
+            <h1 className="text-3xl font-bold text-[#201f1e] m-0">
+              Attorney Dashboard
+            </h1>
+          </div>
         </div>
 
         {/* Toolbar — same 3-row split as the main Case Queue for
@@ -698,7 +887,49 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
               Row 3: Active extra-filter chips (conditional) */}
 
         {/* Row 1 — Quick filter tabs + View toggle */}
-        <div className="flex items-center gap-3 flex-wrap pt-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Page-level scope toggle. Moved from the page header to
+              the leading segment of the quick-filter row so the
+              hierarchy "scope → tabs within scope" reads naturally
+              left-to-right. Uses the Attorney brand purple for the
+              active state to match the surface's tab treatment. */}
+          <div
+            role="radiogroup"
+            aria-label="Case scope"
+            className="inline-flex rounded-md border border-[#edebe9] bg-white p-0.5 shrink-0"
+          >
+            {(["active", "all"] as const).map((scope) => {
+              const selected = caseScope === scope;
+              const label = scope === "active" ? "Active" : "All";
+              const helper =
+                scope === "active"
+                  ? "Active cases — anything not currently Resolved"
+                  : "All cases — including Resolved";
+              return (
+                <button
+                  key={scope}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-label={helper}
+                  title={helper}
+                  onClick={() => setCaseScope(scope)}
+                  className={cn(
+                    "px-3 h-8 text-sm rounded-[5px] transition-colors",
+                    selected
+                      ? "bg-[#5c2d91] text-white font-semibold"
+                      : "text-[#323130] hover:bg-[#f3f2f1]",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <div
+            aria-hidden="true"
+            className="h-6 w-px bg-[#edebe9] shrink-0"
+          />
           <div
             role="tablist"
             aria-label="Attorney dashboard quick filters"
@@ -715,19 +946,34 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                   aria-selected={active}
                   type="button"
                   onClick={() => setQuickFilter(tab.key)}
+                  // Bumped ~15% across the board to match the Cases
+                  // page (h-8 → h-9, px-2.5 → px-3, gap-1.5 → gap-2,
+                  // text-xs → text-sm). Purple active state preserved
+                  // — the Attorney brand color across the app.
                   className={cn(
-                    "inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs font-medium border transition-colors",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0078d4] focus-visible:ring-offset-1",
+                    "inline-flex items-center gap-2 h-9 px-3 rounded-md text-sm font-medium border transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5c2d91] focus-visible:ring-offset-1",
                     active
                       ? "bg-[#5c2d91] text-white border-[#5c2d91]"
                       : "bg-white text-[#323130] border-[#e1dfdd] hover:bg-[#f3f2f1]",
                   )}
                 >
-                  {Icon && <Icon className="w-3.5 h-3.5" aria-hidden="true" />}
-                  <span>{tab.label}</span>
+                  {Icon && <Icon className="w-4 h-4" aria-hidden="true" />}
+                  <span>
+                    {/* Dynamic label — "All" alone collides with the
+                        page-level Active/All scope toggle; rename to
+                        clarify what "All" actually means right now. */}
+                    {tab.key === "all"
+                      ? caseScope === "active"
+                        ? "All Active"
+                        : "All Cases"
+                      : tab.label}
+                  </span>
                   <span
+                    // Count chip scaled with the tab — 18px → 21px,
+                    // 10px → 12px text, px-1 → px-1.5.
                     className={cn(
-                      "inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px]",
+                      "inline-flex items-center justify-center min-w-[21px] h-[21px] px-1.5 rounded-full text-xs",
                       active
                         ? "bg-white/20 text-white"
                         : count === 0
@@ -736,7 +982,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                             ? "bg-[#fde7e9] text-[#a4262c]"
                             : tab.urgency === "warn"
                               ? "bg-[#fff4ce] text-[#7a4f00]"
-                              : "bg-[#deecf9] text-[#0078d4]",
+                              : "bg-[#f3f0fa] text-[#5c2d91]",
                     )}
                     aria-hidden="true"
                   >
@@ -749,23 +995,14 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
           <CaseQueueViewToggle value={viewMode} onChange={setViewMode} />
         </div>
 
-        {/* Row 2 — Search + Saved Views + Add Filter */}
+        {/* Row 2 — View-state controls on the left; Search pushed
+            right via `ml-auto` so it aligns above the table's
+            rightmost column (the Edit-column-order button anchored at
+            the same right edge of the page container below). Matches
+            the Cases page toolbar pattern. No standalone Sort button:
+            attorneys sort via column-header clicks, so a Sort toolbar
+            button would be redundant here. */}
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[260px] max-w-[480px]">
-            <Search
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#605e5c] pointer-events-none"
-              aria-hidden="true"
-            />
-            <Input
-              type="search"
-              placeholder="Search by case ID, identifier, assignee, country…"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 h-9 text-sm"
-              aria-label="Search attorney dashboard"
-            />
-          </div>
-
           {/* Saved Views — same component the Case Queue mounts. */}
           <SavedViewsMenu<AttorneyDashboardViewFilters>
             systemViews={SYSTEM_ATTORNEY_VIEWS}
@@ -782,14 +1019,93 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
             activeFilterIds={Object.keys(extraFilters)}
             onAdd={handleAddExtraFilter}
             onOpenAdvanced={() => setAdvancedPanelOpen(true)}
+            onOpenCustomize={() => setCustomizePanelOpen(true)}
           />
+
+          {/* Save current view — lifted to its own toolbar button so
+              attorneys can save a fresh view without opening the
+              Saved Views menu first. Same dialog the menu's "Save
+              current as…" item opens, just one fewer click. */}
+          {/* Customize view — opens the unified panel. Sits BEFORE
+              Save current view so the toolbar reads "shape the view"
+              → "save the view" left-to-right. Legacy menus (Sort /
+              +Add filter / Edit columns) each expose a "Customize
+              view…" CTA at the bottom of their scroll-capped list as
+              a deep link here. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setCustomizePanelOpen(true)}
+            className="h-9 gap-1.5 text-xs"
+            aria-label="Customize view"
+          >
+            <Sliders className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="font-medium">Customize view</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSaveViewDialogOpen(true)}
+            className="h-9 gap-1.5 text-xs"
+            aria-label="Save current view"
+          >
+            <BookmarkPlus className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="font-medium">Save current view</span>
+          </Button>
+
+          {/* Export list — same semantics as the Cases page: export
+              the on-screen filtered + sorted slice with the user's
+              visible columns in their chosen order. Filename
+              identifies the surface ("attorney-dashboard") so
+              downstream tooling can tell the two surfaces apart. */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              exportCasesToCsv({
+                surface: "attorney-dashboard",
+                scope: caseScope,
+                cases: filteredCases,
+                columns: visibleOrderedColumns,
+              });
+            }}
+            className="h-9 gap-1.5 text-xs"
+            aria-label="Export list to CSV"
+            disabled={filteredCases.length === 0}
+          >
+            <Download className="w-3.5 h-3.5" aria-hidden="true" />
+            <span className="font-medium">Export list</span>
+          </Button>
+
+          {/* Search — right-justified via `ml-auto`. Fixed 360px max-
+              width so it doesn't stretch arbitrarily on wide monitors;
+              right edge aligns with the table's rightmost column. */}
+          <div className="relative ml-auto w-full sm:w-[360px] max-w-[360px]">
+            <Search
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#605e5c] pointer-events-none"
+              aria-hidden="true"
+            />
+            <Input
+              type="search"
+              placeholder="Search by case ID, identifier, assignee, country…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 h-9 text-sm"
+              aria-label="Search attorney dashboard"
+            />
+          </div>
         </div>
 
         {/* Active extra-filter chips — same component the Case Queue
-            uses. Rendered below the toolbar row so chips can wrap
-            without crowding the quick-filter tabs. */}
+            uses. The 30px gap comes from the header's `space-y-[30px]`
+            so the chips read as their own row, not crowded onto the
+            toolbar above. */}
         {Object.keys(extraFilters).length > 0 && (
-          <div className="flex items-center gap-2 flex-wrap pt-1">
+          <div className="flex items-center gap-2 flex-wrap">
             {FILTER_CATALOG.filter((def) =>
               Object.prototype.hasOwnProperty.call(extraFilters, def.id),
             ).map((def) => (
@@ -802,6 +1118,22 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                 onRemove={() => handleRemoveExtraFilter(def.id)}
                 assigneeOptions={distinctAssignees(cases)}
                 crimeOptions={distinctCrimes(cases)}
+                // The four below were never plumbed when the dashboard
+                // adopted ExtraFilterChip — added now (empty arrays so
+                // the catalog filters that need them don't crash, and
+                // typecheck stays clean after the chip's interface
+                // tightened in the Phase 2 catalog expansion).
+                caseStatusOptions={[]}
+                countryOptions={[]}
+                jurisdictionOptions={[]}
+                requestTypeOptions={[]}
+                tenantOptions={distinctTenants(cases)}
+                agencyOptions={distinctAgencies(cases)}
+                requestOriginOptions={distinctRequestOrigins(cases)}
+                identifierTypeOptions={distinctIdentifierTypes(cases)}
+                agencyNameOptions={distinctAgencyNames(cases)}
+                validatingAuthorityOptions={distinctValidatingAuthorities(cases)}
+                competentAuthorityOptions={distinctCompetentAuthorities(cases)}
               />
             ))}
             <button
@@ -891,7 +1223,11 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
               sortState={sortState}
               onSort={handleColumnSort}
               columns={orderedColumns}
+              allColumns={orderedColumns}
+              hiddenColumnIds={columnHidden}
+              onToggleColumnHidden={handleToggleColumnHidden}
               onReorder={handleReorderColumns}
+              onOpenCustomize={() => setCustomizePanelOpen(true)}
             />
             {filteredCases.map((c, idx) => (
               <CaseQueueListRow
@@ -956,8 +1292,12 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                   columnWidths={cols}
                   sortState={sortState}
                   onSort={handleColumnSort}
-                  columns={orderedColumns}
+                  columns={visibleOrderedColumns}
+                  allColumns={orderedColumns}
+                  hiddenColumnIds={columnHidden}
+                  onToggleColumnHidden={handleToggleColumnHidden}
                   onReorder={handleReorderColumns}
+                  onOpenCustomize={() => setCustomizePanelOpen(true)}
                 />
                 {filteredCases.map((c, idx) => (
                   <CaseQueueListRow
@@ -966,7 +1306,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
                     priorityConfig={getPriorityConfig(c.casePriority)}
                     density="full"
                     columnWidths={cols}
-                    columns={orderedColumns}
+                    columns={visibleOrderedColumns}
                     bulkSelectable
                     bulkSelected={bulkSelectedCaseIds.has(c.caseId)}
                     onBulkToggle={toggleBulkSelected}
@@ -1114,6 +1454,65 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
         onApply={(next) => setExtraFilters(next)}
         assigneeOptions={distinctAssignees(cases)}
         crimeOptions={distinctCrimes(cases)}
+        // The four below were never plumbed when the dashboard adopted
+        // AdvancedFiltersPanel — added now (empty arrays so panel
+        // typecheck stays clean as the catalog grows).
+        caseStatusOptions={[]}
+        countryOptions={[]}
+        jurisdictionOptions={[]}
+        requestTypeOptions={[]}
+        tenantOptions={distinctTenants(cases)}
+        agencyOptions={distinctAgencies(cases)}
+        requestOriginOptions={distinctRequestOrigins(cases)}
+      />
+
+      {/* Filter ↔ column sync confirmation — fires from add / remove
+          handlers above when a catalogue filter's linked column
+          would flip visibility. */}
+      <FilterColumnSyncDialog
+        request={filterColumnSyncRequest}
+        onConfirm={handleColumnSyncConfirm}
+        onCancel={() => setFilterColumnSyncRequest(null)}
+      />
+
+      {/* Customize view panel — unified canvas for filters + sort +
+          columns. Live-applied; "Save as view…" routes through the
+          existing SaveViewDialog. */}
+      <CustomViewPanel
+        open={customizePanelOpen}
+        onOpenChange={setCustomizePanelOpen}
+        extraFilters={extraFilters}
+        onAddFilter={handleAddExtraFilter}
+        onRemoveFilter={handleRemoveExtraFilter}
+        onChangeFilterValue={handleChangeExtraFilter}
+        primarySort={sortState}
+        onChangePrimarySort={setSortState}
+        sortTiebreakers={sortTiebreakers}
+        onChangeSortTiebreakers={setSortTiebreakers}
+        allColumns={orderedColumns}
+        hiddenColumnIds={columnHidden}
+        onToggleColumnHidden={handleToggleColumnHidden}
+        onReorderColumns={handleReorderColumns}
+        assigneeOptions={distinctAssignees(cases)}
+        crimeOptions={distinctCrimes(cases)}
+        caseStatusOptions={[]}
+        countryOptions={[]}
+        jurisdictionOptions={[]}
+        requestTypeOptions={[]}
+        tenantOptions={distinctTenants(cases)}
+        agencyOptions={distinctAgencies(cases)}
+        requestOriginOptions={distinctRequestOrigins(cases)}
+        identifierTypeOptions={distinctIdentifierTypes(cases)}
+        onSaveAsView={() => setSaveViewDialogOpen(true)}
+        onResetToDefault={() => {
+          setExtraFilters({});
+          setSortState(null);
+          setSortTiebreakers([]);
+          persistColumnHidden(
+            defaultColumnVisibility(ATTORNEY_DASHBOARD_COLUMNS),
+          );
+          handleReorderColumns(defaultColumnOrder(ATTORNEY_DASHBOARD_COLUMNS));
+        }}
       />
 
       {/* Bulk Assign Dialog — driven by the bulk-actions toolbar. Same
@@ -1137,7 +1536,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
           clearBulkSelection();
         }}
       />
-    </div>
+    </PageContainer>
   );
 }
 

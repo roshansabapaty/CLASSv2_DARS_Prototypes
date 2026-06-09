@@ -65,6 +65,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "uat:update": "node scripts/update-uat-mock-cases.mjs",
-    "uat:check": "node scripts/update-uat-mock-cases.mjs --check"
+    "uat:check": "node scripts/update-uat-mock-cases.mjs --check",
+    "verify:ui": "node scripts/verify-ui.mjs"
   }
 }

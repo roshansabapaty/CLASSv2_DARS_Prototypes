@@ -43,7 +43,7 @@ export interface CaseQueueItem {
   jurisdiction: string;
   natureOfCrime: string[];
   isThreatToLife: boolean;
-  casePriority: "Emergency" | "Urgent" | "Routine";
+  casePriority: "Emergency" | "Urgent" | "Expedite" | "Standard" | "Routine";
   dueDate: string;
   hasEnterpriseAccounts?: boolean;
   hasAzureAccounts?: boolean;
@@ -830,6 +830,34 @@ export const MOCK_CASES: CaseQueueItem[] = [
       "XBOX/Minecraft",
     ],
   },
+  // ── TS-recommended rejection — civil-matter subpoena outside DARS
+  //    legal scope. Triaged by Elena Ruiz, waiting on LENS Lead approval
+  //    to finalize the rejection. Surfaces in the LENS Lead's
+  //    "Recommend Rejection" filter so the queue oversight workflow has
+  //    a target on demo. No FormData builder needed — the queue card
+  //    renders entirely from this entry; opening it falls through to
+  //    the generic factory in mockCaseDataFactory.ts.
+  {
+    caseId: "LNS-2026-00320",
+    createDate: "Jun 4, 2026",
+    caseType: "Law Enforcement Request",
+    assigneeName: "Elena Ruiz",
+    requestType: "Subpoena",
+    requestOrigin: "Email forward",
+    caseStage: "Recommend Rejection",
+    country: "United States",
+    jurisdiction: "State",
+    natureOfCrime: ["OtherFinancialCrimeOrFraud"],
+    isThreatToLife: false,
+    casePriority: "Routine",
+    dueDate: "Jul 4, 2026",
+    hasEnterpriseAccounts: false,
+    hasAzureAccounts: false,
+    accountExistenceChecked: false,
+    identifierCount: 1,
+    identifierTypes: { email: 1 },
+    servicesRequested: ["Email"],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -854,7 +882,7 @@ export function isHighPriorityCrime(crime: string): boolean {
 }
 
 export function getPriorityConfig(
-  priority: "Emergency" | "Urgent" | "Routine"
+  priority: "Emergency" | "Urgent" | "Expedite" | "Standard" | "Routine"
 ): PriorityConfig {
   switch (priority) {
     case "Emergency":
@@ -873,10 +901,26 @@ export function getPriorityConfig(
         badge: "bg-orange-50 text-orange-700 border-orange-200",
         icon: AlertTriangle,
       };
+    case "Expedite":
+      return {
+        label: "Expedite",
+        level: "P2",
+        color: "border-l-yellow-500",
+        badge: "bg-yellow-50 text-yellow-700 border-yellow-200",
+        icon: AlertTriangle,
+      };
+    case "Standard":
+      return {
+        label: "Standard",
+        level: "P3",
+        color: "border-l-teal-500",
+        badge: "bg-teal-50 text-teal-700 border-teal-200",
+        icon: FileText,
+      };
     case "Routine":
       return {
         label: "Routine",
-        level: "P2",
+        level: "P4",
         color: "border-l-blue-500",
         badge: "bg-blue-50 text-blue-700 border-blue-200",
         icon: FileText,

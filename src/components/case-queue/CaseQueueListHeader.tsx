@@ -18,7 +18,7 @@
  */
 
 import * as React from "react";
-import { ChevronDown, ChevronUp, ChevronsUpDown } from "lucide-react";
+import { ChevronDown, ChevronUp, ChevronsUpDown, SlidersHorizontal } from "lucide-react";
 import { Checkbox } from "../ui/checkbox";
 import {
   Tooltip,
@@ -30,6 +30,7 @@ import { ColumnResizer } from "./ColumnResizer";
 import { cn } from "../ui/utils";
 import {
   CASE_LIST_COLUMNS,
+  getDenseGridColsClass,
   type ColumnDef,
   type ColumnId,
   type ColumnWidths,
@@ -41,10 +42,10 @@ import {
 // a11y-first non-mouse path. Drag-and-drop on the header cell is the
 // mouse-first path; both write through the same `onReorder` callback.
 import {
+  Button,
   Menu,
   MenuButton,
   MenuList,
-  MenuItem,
   MenuPopover,
   MenuTrigger,
   tokens,
@@ -53,6 +54,7 @@ import {
   TableColumnTopBottomEditRegular,
   ArrowUpRegular,
   ArrowDownRegular,
+  LockClosedRegular,
 } from "@fluentui/react-icons";
 
 interface CaseQueueListHeaderProps {
@@ -108,6 +110,24 @@ interface CaseQueueListHeaderProps {
    *  renders read-only (no drag handles, no Settings menu).
    */
   onReorder?: (nextOrder: ColumnId[]) => void;
+  /** Full ordered column list — includes columns the user has hidden.
+   *  Drives the Edit Columns menu so the user can un-hide a column from
+   *  there. When omitted, the menu walks `columns` (back-compat). */
+  allColumns?: ColumnDef[];
+  /** Column ids the user has hidden. Drives the Edit Columns menu's
+   *  per-row checkbox state. Passed alongside `allColumns` so the menu
+   *  can render every column with the right initial state. */
+  hiddenColumnIds?: ColumnId[];
+  /** Fires when the user toggles the show/hide checkbox for a column
+   *  in the Edit Columns menu. Locked columns never fire this — the
+   *  checkbox renders disabled. When omitted, the show/hide checkboxes
+   *  are not rendered (back-compat). */
+  onToggleColumnHidden?: (columnId: ColumnId, nextHidden: boolean) => void;
+  /** Deep-link to the unified CustomViewPanel from the Edit Columns
+   *  menu. Pinned at the bottom of the menu's scroll region as a
+   *  "Customize view…" CTA matching the same pattern on the Sort
+   *  and +Add filter menus. */
+  onOpenCustomize?: () => void;
 }
 
 // Columns that survive density="dense" — derived from inspecting
@@ -137,7 +157,20 @@ export function CaseQueueListHeader({
   onSort,
   columns = CASE_LIST_COLUMNS,
   onReorder,
+  allColumns,
+  hiddenColumnIds,
+  onToggleColumnHidden,
+  onOpenCustomize,
 }: CaseQueueListHeaderProps) {
+  // The Edit Columns menu lists EVERY known column (visible or hidden)
+  // so the user can un-hide one. Falls back to `columns` when the
+  // parent hasn't wired the full list yet (back-compat: no hidden
+  // columns surface in the menu, matching today's no-hide behaviour).
+  const menuColumns = allColumns ?? columns;
+  const hiddenSet = React.useMemo(
+    () => new Set(hiddenColumnIds ?? []),
+    [hiddenColumnIds],
+  );
   // ── Column drag-and-drop state ────────────────────────────────────
   // dragIndex: which visible column is being dragged (null when idle)
   // dropTargetIndex: where the dragged column would land if released now
@@ -146,6 +179,12 @@ export function CaseQueueListHeader({
   const [dropTargetIndex, setDropTargetIndex] = React.useState<number | null>(null);
   const handleDragStart = (idx: number) => (e: React.DragEvent) => {
     if (!onReorder) return;
+    // Locked columns refuse to be picked up — Case ID stays at the
+    // leftmost position regardless of user drag attempts.
+    if (columns[idx]?.locked) {
+      e.preventDefault();
+      return;
+    }
     setDragIndex(idx);
     e.dataTransfer.effectAllowed = "move";
     // Some browsers refuse to start a drag without dataTransfer data set.
@@ -153,12 +192,16 @@ export function CaseQueueListHeader({
   };
   const handleDragOver = (idx: number) => (e: React.DragEvent) => {
     if (dragIndex === null) return;
+    // Refuse to highlight a locked column as a drop target — the
+    // dropped column can't displace a locked one.
+    if (columns[idx]?.locked) return;
     e.preventDefault(); // allow drop
     e.dataTransfer.dropEffect = "move";
     if (dropTargetIndex !== idx) setDropTargetIndex(idx);
   };
   const handleDrop = (idx: number) => (e: React.DragEvent) => {
     if (dragIndex === null || !onReorder) return;
+    if (columns[idx]?.locked) return;
     e.preventDefault();
     const currentOrder = columns.map((c) => c.id);
     const next = reorderColumn(currentOrder, dragIndex, idx);
@@ -172,7 +215,19 @@ export function CaseQueueListHeader({
   };
   const moveColumn = (fromIndex: number, toIndex: number) => {
     if (!onReorder) return;
+    // Lock-aware: source and target both must be unlocked.
+    if (columns[fromIndex]?.locked || columns[toIndex]?.locked) return;
     const currentOrder = columns.map((c) => c.id);
+    const next = reorderColumn(currentOrder, fromIndex, toIndex);
+    if (next !== currentOrder) onReorder(next);
+  };
+  // Reorder against the FULL column list (visible + hidden). Used by
+  // the Edit Columns menu so the persisted order keeps hidden columns
+  // in place — re-showing one later lands it back where it was.
+  const moveMenuColumn = (fromIndex: number, toIndex: number) => {
+    if (!onReorder) return;
+    if (menuColumns[fromIndex]?.locked || menuColumns[toIndex]?.locked) return;
+    const currentOrder = menuColumns.map((c) => c.id);
     const next = reorderColumn(currentOrder, fromIndex, toIndex);
     if (next !== currentOrder) onReorder(next);
   };
@@ -200,15 +255,11 @@ export function CaseQueueListHeader({
   //                       (dense rows don't render the rail either).
   const isDense = density === "dense";
 
-  // Tailwind dense template matches `denseGridCols` in
-  // CaseQueueListRow.tsx. When bulkSelectable is true, the leading `auto`
-  // is the checkbox column. The remaining `fr` slots are Case ID,
-  // Priority, Due Date, Stage, Assigned To, Internal Escalation,
-  // Escalated To — same order as DENSE_COLUMN_IDS. (Per-signal columns
-  // are dropped in dense mode.)
-  const denseGridCols = bulkSelectable
-    ? "grid-cols-[auto_1.1fr_auto_1fr_0.9fr_1fr_1.2fr_1.2fr]"
-    : "grid-cols-[1.1fr_auto_1fr_0.9fr_1fr_1.2fr_1.2fr]";
+  // Dense template — single source of truth lives in
+  // `caseListColumns.ts` so the header and row CAN'T drift apart.
+  // See the contract comment at `DENSE_TRACKS` for the two rules
+  // every fr track must follow.
+  const denseGridCols = getDenseGridColsClass(bulkSelectable);
 
   // Columns to render labels for. Dense mode drops everything except
   // DENSE_COLUMN_IDS to mirror the row.
@@ -395,46 +446,150 @@ export function CaseQueueListHeader({
               />
             </MenuTrigger>
             <MenuPopover>
+              {/* Single-level reorder list — each row is the column
+                  name + trailing up / down icon buttons. The previous
+                  per-column flyout submenu was a click-through cost
+                  for what's a simple two-direction shuffle; arrow
+                  buttons sitting next to the name make the action
+                  visible without an extra hover. Locked columns
+                  (Case ID) get a lock glyph + disabled arrows so the
+                  pinning is clearly communicated, not just enforced. */}
               <MenuList>
-                {visibleColumns.map((col, idx) => (
-                  <Menu key={col.id}>
-                    <MenuTrigger disableButtonEnhancement>
-                      <MenuItem>{col.label}</MenuItem>
-                    </MenuTrigger>
-                    <MenuPopover>
-                      <MenuList>
-                        <MenuItem
-                          icon={<ArrowUpRegular />}
-                          disabled={idx === 0}
-                          onClick={() => moveColumn(idx, idx - 1)}
-                        >
-                          Move up
-                        </MenuItem>
-                        <MenuItem
-                          icon={<ArrowDownRegular />}
-                          disabled={idx === visibleColumns.length - 1}
-                          onClick={() => moveColumn(idx, idx + 1)}
-                        >
-                          Move down
-                        </MenuItem>
-                        <MenuItem
-                          disabled={idx === 0}
-                          onClick={() => moveColumn(idx, 0)}
-                          style={{ color: tokens.colorNeutralForeground3 }}
-                        >
-                          Move to start
-                        </MenuItem>
-                        <MenuItem
-                          disabled={idx === visibleColumns.length - 1}
-                          onClick={() => moveColumn(idx, visibleColumns.length - 1)}
-                          style={{ color: tokens.colorNeutralForeground3 }}
-                        >
-                          Move to end
-                        </MenuItem>
-                      </MenuList>
-                    </MenuPopover>
-                  </Menu>
-                ))}
+                <div className="px-3 py-1.5 text-[11px] uppercase tracking-wide font-semibold text-[color:var(--colorNeutralForeground3)]">
+                  Show / reorder columns
+                </div>
+                {/* 10-row scroll cap — matches the AddFilterMenu and
+                    Sort menu pattern so heavy column catalogs stay
+                    scannable. Pin the Customize view CTA below. */}
+                <div style={{ maxHeight: 360, overflowY: "auto" }}>
+                {menuColumns.map((col, idx) => {
+                  const isFirst = idx === 0;
+                  const isLast = idx === menuColumns.length - 1;
+                  const locked = !!col.locked;
+                  const hidden = hiddenSet.has(col.id);
+                  // Up is also disabled when the column directly above
+                  // is locked (can't displace it). Same for Down.
+                  const upBlocked =
+                    isFirst || locked || !!menuColumns[idx - 1]?.locked;
+                  const downBlocked =
+                    isLast || locked || !!menuColumns[idx + 1]?.locked;
+                  return (
+                    <div
+                      key={col.id}
+                      className="flex items-center gap-2 px-3 py-1"
+                      style={{ minWidth: 280 }}
+                    >
+                      {/* Show / hide toggle. Locked columns render the
+                          checkbox disabled + always-checked so the
+                          pinning is visible, not just enforced. When
+                          `onToggleColumnHidden` isn't wired (back-compat)
+                          the checkbox is omitted entirely. */}
+                      {onToggleColumnHidden && (
+                        <Checkbox
+                          checked={!hidden}
+                          disabled={locked}
+                          onCheckedChange={(next) =>
+                            onToggleColumnHidden(col.id, !next)
+                          }
+                          aria-label={
+                            locked
+                              ? `${col.label} (locked — always visible)`
+                              : hidden
+                                ? `Show ${col.label} column`
+                                : `Hide ${col.label} column`
+                          }
+                          className="h-4 w-4"
+                        />
+                      )}
+                      <span
+                        className="flex-1 text-sm"
+                        style={{
+                          color: locked || hidden
+                            ? tokens.colorNeutralForeground3
+                            : tokens.colorNeutralForeground1,
+                        }}
+                      >
+                        {col.label}
+                      </span>
+                      {locked && (
+                        <LockClosedRegular
+                          aria-label="Locked"
+                          title="This column is locked and cannot be moved or hidden"
+                          style={{
+                            fontSize: 14,
+                            color: tokens.colorNeutralForeground3,
+                          }}
+                        />
+                      )}
+                      <Button
+                        appearance="subtle"
+                        size="small"
+                        icon={<ArrowUpRegular />}
+                        aria-label={`Move ${col.label} up`}
+                        title={
+                          locked
+                            ? "Locked column — cannot move"
+                            : isFirst
+                              ? "Already at the top"
+                              : menuColumns[idx - 1]?.locked
+                                ? "Blocked by a locked column above"
+                                : "Move up"
+                        }
+                        disabled={upBlocked}
+                        onClick={() => moveMenuColumn(idx, idx - 1)}
+                      />
+                      <Button
+                        appearance="subtle"
+                        size="small"
+                        icon={<ArrowDownRegular />}
+                        aria-label={`Move ${col.label} down`}
+                        title={
+                          locked
+                            ? "Locked column — cannot move"
+                            : isLast
+                              ? "Already at the bottom"
+                              : menuColumns[idx + 1]?.locked
+                                ? "Blocked by a locked column below"
+                                : "Move down"
+                        }
+                        disabled={downBlocked}
+                        onClick={() => moveMenuColumn(idx, idx + 1)}
+                      />
+                    </div>
+                  );
+                })}
+                </div>
+                {onOpenCustomize && (
+                  <div
+                    style={{
+                      borderTopWidth: 1,
+                      borderTopStyle: "solid",
+                      borderTopColor: tokens.colorNeutralStroke2,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={onOpenCustomize}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "8px 12px",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: "#0078d4",
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <SlidersHorizontal style={{ width: 14, height: 14 }} aria-hidden="true" />
+                      Customize view…
+                    </button>
+                  </div>
+                )}
               </MenuList>
             </MenuPopover>
           </Menu>

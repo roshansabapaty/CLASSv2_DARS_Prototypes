@@ -35,6 +35,13 @@ export interface AdvancedFiltersPanelProps {
   requestTypeOptions: string[];
   requestSubTypeOptions?: string[];
   servicesOptions?: string[];
+  tenantOptions?: string[];
+  agencyOptions?: string[];
+  requestOriginOptions?: string[];
+  identifierTypeOptions?: string[];
+  agencyNameOptions?: string[];
+  validatingAuthorityOptions?: string[];
+  competentAuthorityOptions?: string[];
 }
 
 const GROUP_ORDER: FilterGroup[] = [
@@ -44,6 +51,8 @@ const GROUP_ORDER: FilterGroup[] = [
   "Workflow",
   "Signals",
   "Tenant",
+  "Escalation",
+  "Intake",
 ];
 
 export function AdvancedFiltersPanel({
@@ -59,6 +68,13 @@ export function AdvancedFiltersPanel({
   requestTypeOptions,
   requestSubTypeOptions = [],
   servicesOptions = [],
+  tenantOptions = [],
+  agencyOptions = [],
+  requestOriginOptions = [],
+  identifierTypeOptions = [],
+  agencyNameOptions = [],
+  validatingAuthorityOptions = [],
+  competentAuthorityOptions = [],
 }: AdvancedFiltersPanelProps) {
   // Local draft — re-seed every time the panel opens so the user
   // starts from the host's current state, not a stale snapshot.
@@ -92,8 +108,16 @@ export function AdvancedFiltersPanel({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[420px] sm:max-w-[420px] flex flex-col">
-        <SheetHeader>
+      {/* 30px side padding throughout — header, status row, list, and
+          footer all align to the same column so the side panel reads
+          as a single padded column. Matches the side padding on the
+          AddFilterMenu popover so the two surfaces feel like one
+          system. */}
+      <SheetContent
+        side="right"
+        className="w-[420px] sm:max-w-[420px] flex flex-col p-0"
+      >
+        <SheetHeader className="px-[30px] pt-[30px] pb-3">
           <SheetTitle>Advanced filters</SheetTitle>
           <SheetDescription>
             Compose a multi-property filter set. Each filter you enable
@@ -102,7 +126,7 @@ export function AdvancedFiltersPanel({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex items-center justify-between py-2 border-b border-[#edebe9]">
+        <div className="flex items-center justify-between px-[30px] py-2 border-b border-[#edebe9]">
           <span className="text-xs text-[#605e5c]">
             {activeCount === 0
               ? "No filters enabled"
@@ -119,70 +143,83 @@ export function AdvancedFiltersPanel({
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto -mx-6 px-6 py-3 space-y-5">
-          {GROUP_ORDER.map((group) => {
-            const items = FILTER_CATALOG.filter((f) => f.group === group);
-            if (items.length === 0) return null;
-            return (
-              <section key={group}>
-                <h3 className="text-[11px] uppercase tracking-wide font-semibold text-[#605e5c] mb-2">
-                  {group}
-                </h3>
-                <div className="space-y-2">
-                  {items.map((def) => {
-                    const enabled = Object.prototype.hasOwnProperty.call(
-                      draft,
-                      def.id,
-                    );
-                    return (
-                      <div
-                        key={def.id}
-                        className={cn(
-                          "border rounded-md p-3",
-                          enabled
-                            ? "border-[#0078d4]/40 bg-[#deecf9]/20"
-                            : "border-[#e1dfdd] bg-white",
-                        )}
-                      >
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <Checkbox
-                            checked={enabled}
-                            onCheckedChange={(c) =>
-                              toggleFilter(def.id, c === true)
-                            }
-                            aria-label={`Enable ${def.label} filter`}
-                          />
-                          <span className="text-sm font-semibold text-[#323130]">
-                            {def.label}
-                          </span>
-                        </label>
-                        {enabled && (
-                          <div className="mt-3 pl-6">
-                            <FilterValueControl
-                              def={def}
-                              value={draft[def.id]}
-                              onChange={(v) => setValue(def.id, v)}
-                              assigneeOptions={assigneeOptions}
-                              crimeOptions={crimeOptions}
-                              caseStatusOptions={caseStatusOptions}
-                              countryOptions={countryOptions}
-                              jurisdictionOptions={jurisdictionOptions}
-                              requestTypeOptions={requestTypeOptions}
-                              requestSubTypeOptions={requestSubTypeOptions}
-                              servicesOptions={servicesOptions}
+        {/* Outer wrapper takes the scroll so the scrollbar sits at the
+            panel edge; inner wrapper carries the 30px side padding so
+            the content aligns with the header/footer column above and
+            below. */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-[30px] py-3 space-y-5">
+            {GROUP_ORDER.map((group) => {
+              const items = FILTER_CATALOG.filter((f) => f.group === group);
+              if (items.length === 0) return null;
+              return (
+                <section key={group}>
+                  <h3 className="text-[11px] uppercase tracking-wide font-semibold text-[#605e5c] mb-2">
+                    {group}
+                  </h3>
+                  <div className="space-y-2">
+                    {items.map((def) => {
+                      const enabled = Object.prototype.hasOwnProperty.call(
+                        draft,
+                        def.id,
+                      );
+                      return (
+                        <div
+                          key={def.id}
+                          className={cn(
+                            "border rounded-md p-3",
+                            enabled
+                              ? "border-[#0078d4]/40 bg-[#deecf9]/20"
+                              : "border-[#e1dfdd] bg-white",
+                          )}
+                        >
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <Checkbox
+                              checked={enabled}
+                              onCheckedChange={(c) =>
+                                toggleFilter(def.id, c === true)
+                              }
+                              aria-label={`Enable ${def.label} filter`}
                             />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            );
-          })}
+                            <span className="text-sm font-semibold text-[#323130]">
+                              {def.label}
+                            </span>
+                          </label>
+                          {enabled && (
+                            <div className="mt-3 pl-6">
+                              <FilterValueControl
+                                def={def}
+                                value={draft[def.id]}
+                                onChange={(v) => setValue(def.id, v)}
+                                assigneeOptions={assigneeOptions}
+                                crimeOptions={crimeOptions}
+                                caseStatusOptions={caseStatusOptions}
+                                countryOptions={countryOptions}
+                                jurisdictionOptions={jurisdictionOptions}
+                                requestTypeOptions={requestTypeOptions}
+                                requestSubTypeOptions={requestSubTypeOptions}
+                                servicesOptions={servicesOptions}
+                                tenantOptions={tenantOptions}
+                                agencyOptions={agencyOptions}
+                                requestOriginOptions={requestOriginOptions}
+                                identifierTypeOptions={identifierTypeOptions}
+                                agencyNameOptions={agencyNameOptions}
+                                validatingAuthorityOptions={validatingAuthorityOptions}
+                                competentAuthorityOptions={competentAuthorityOptions}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         </div>
 
-        <SheetFooter className="border-t border-[#edebe9] pt-3">
+        <SheetFooter className="border-t border-[#edebe9] px-[30px] py-3">
           <Button
             type="button"
             variant="outline"

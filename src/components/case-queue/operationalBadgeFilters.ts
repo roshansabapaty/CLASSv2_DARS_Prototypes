@@ -112,7 +112,9 @@ export const OPERATIONAL_BADGES: OperationalBadgeDef[] = [
     description:
       "Case has an active SP-side escalation (Attorney / Peer / LENS Lead) — not the LE-side escalatedToLE flag.",
     icon: Scale,
-    chipClasses: "bg-[#f3f0fa] text-[#5c2d91] border-[#8764b8]/40",
+    // Audit P2 #9 — migrated from inline hex to semantic tokens.
+    chipClasses:
+      "bg-info-purple-bg text-info-purple-fg border-info-purple-border/40",
     predicate: (c) => Boolean(escalationBadgeLabelForCase(c.caseId)),
   },
   {
@@ -121,7 +123,8 @@ export const OPERATIONAL_BADGES: OperationalBadgeDef[] = [
     description:
       "Pull-model filter — the attorney has done something on this case that needs an RS / TS follow-up: requested more info, requested redirect, marked the case reviewed, completed the escalation (pending acknowledgement), OR there's unread inbound correspondence from the IA / EA waiting to be triaged.",
     icon: HandHelping,
-    chipClasses: "bg-[#fff4e6] text-[#7a3a00] border-[#ca5010]/40",
+    chipClasses:
+      "bg-warn-orange-bg text-warn-orange-fg border-warn-orange-border/40",
     predicate: (c) => caseNeedsSpecialistAttention(c.caseId),
   },
   {
@@ -130,7 +133,8 @@ export const OPERATIONAL_BADGES: OperationalBadgeDef[] = [
     description:
       "Temporary Non-Disclosure Order has a scheduled reminder so the RS re-checks the NDO's status before it expires.",
     icon: BellRing,
-    chipClasses: "bg-[#fff4ce] text-[#7a4f00] border-[#a26a00]/40",
+    chipClasses:
+      "bg-warn-amber-bg text-warn-amber-fg border-warn-amber-border/40",
     predicate: (c) => !!c.nextNdoReminderAt,
   },
 ];

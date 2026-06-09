@@ -16,7 +16,7 @@
  *     this menu and clicking a header are interchangeable.
  */
 import * as React from "react";
-import { ArrowDownUp, Check } from "lucide-react";
+import { ArrowDownUp, Check, SlidersHorizontal } from "lucide-react";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -106,11 +106,16 @@ function findActiveOption(state: SortState | null): SortOption | null {
 export interface CaseQueueSortByMenuProps {
   sortState: SortState | null;
   onChange: (next: SortState | null) => void;
+  /** Deep-link to the unified CustomViewPanel. Pinned at the bottom
+   *  of the menu after a 10-row scroll-capped sort list so users can
+   *  jump straight to the multi-key tiebreaker UI. */
+  onOpenCustomize?: () => void;
 }
 
 export function CaseQueueSortByMenu({
   sortState,
   onChange,
+  onOpenCustomize,
 }: CaseQueueSortByMenuProps) {
   const active = findActiveOption(sortState);
   const activeGroup = active
@@ -139,58 +144,76 @@ export function CaseQueueSortByMenu({
           <span className="truncate max-w-[180px]">{triggerLabel}</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-[#605e5c]">
+      <DropdownMenuContent align="start" className="w-64 p-0">
+        <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-[#605e5c] px-3 pt-2 pb-1">
           Sort cases by
         </DropdownMenuLabel>
-        <DropdownMenuItem
-          onClick={() => onChange(null)}
-          className={cn(
-            "cursor-pointer flex items-center justify-between",
-            !active && "bg-[#f3f2f1]",
-          )}
-        >
-          <span>Default (due-date tiebreaker)</span>
-          {!active && (
-            <Check className="w-3.5 h-3.5 text-[#0078d4]" aria-hidden="true" />
-          )}
-        </DropdownMenuItem>
-        {SORT_GROUPS.map((group) => (
-          <React.Fragment key={group.heading}>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-[#605e5c]">
-              {group.heading}
-            </DropdownMenuLabel>
-            {group.options.map((opt) => {
-              const isActive =
-                active?.columnId === opt.columnId &&
-                active.direction === opt.direction;
-              return (
-                <DropdownMenuItem
-                  key={`${opt.columnId}-${opt.direction}`}
-                  onClick={() =>
-                    onChange({
-                      columnId: opt.columnId,
-                      direction: opt.direction,
-                    })
-                  }
-                  className={cn(
-                    "cursor-pointer flex items-center justify-between",
-                    isActive && "bg-[#f3f2f1]",
-                  )}
-                >
-                  <span>{opt.label}</span>
-                  {isActive && (
-                    <Check
-                      className="w-3.5 h-3.5 text-[#0078d4]"
-                      aria-hidden="true"
-                    />
-                  )}
-                </DropdownMenuItem>
-              );
-            })}
-          </React.Fragment>
-        ))}
+        {/* Scroll-capped list — same 10-row pattern AddFilterMenu
+            uses so heavy sort catalogs stay scannable. The
+            Customize view… CTA below stays pinned outside the
+            scroll region. */}
+        <div className="max-h-[320px] overflow-y-auto">
+          <DropdownMenuItem
+            onClick={() => onChange(null)}
+            className={cn(
+              "cursor-pointer flex items-center justify-between",
+              !active && "bg-[#f3f2f1]",
+            )}
+          >
+            <span>Default (due-date tiebreaker)</span>
+            {!active && (
+              <Check className="w-3.5 h-3.5 text-[#0078d4]" aria-hidden="true" />
+            )}
+          </DropdownMenuItem>
+          {SORT_GROUPS.map((group) => (
+            <React.Fragment key={group.heading}>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[11px] uppercase tracking-wide text-[#605e5c]">
+                {group.heading}
+              </DropdownMenuLabel>
+              {group.options.map((opt) => {
+                const isActive =
+                  active?.columnId === opt.columnId &&
+                  active.direction === opt.direction;
+                return (
+                  <DropdownMenuItem
+                    key={`${opt.columnId}-${opt.direction}`}
+                    onClick={() =>
+                      onChange({
+                        columnId: opt.columnId,
+                        direction: opt.direction,
+                      })
+                    }
+                    className={cn(
+                      "cursor-pointer flex items-center justify-between",
+                      isActive && "bg-[#f3f2f1]",
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    {isActive && (
+                      <Check
+                        className="w-3.5 h-3.5 text-[#0078d4]"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </DropdownMenuItem>
+                );
+              })}
+            </React.Fragment>
+          ))}
+        </div>
+        {onOpenCustomize && (
+          <div className="border-t border-[#edebe9]">
+            <button
+              type="button"
+              onClick={onOpenCustomize}
+              className="w-full text-left px-3 py-2 text-xs text-[#0078d4] font-semibold hover:bg-[#f3f9ff] focus:outline-none focus-visible:bg-[#f3f9ff] flex items-center gap-2"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+              Customize view…
+            </button>
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

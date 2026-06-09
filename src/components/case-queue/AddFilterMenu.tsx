@@ -26,6 +26,11 @@ export interface AddFilterMenuProps {
   activeFilterIds: string[];
   onAdd: (filterId: string) => void;
   onOpenAdvanced: () => void;
+  /** Deep-link to the unified CustomViewPanel. Pinned below the
+   *  scroll-capped list as a secondary CTA next to the existing
+   *  "Advanced filters…" entry, so users can promote a one-shot pick
+   *  into the full view-editor without re-opening the toolbar. */
+  onOpenCustomize?: () => void;
   className?: string;
 }
 
@@ -36,12 +41,15 @@ const GROUP_ORDER: FilterGroup[] = [
   "Workflow",
   "Signals",
   "Tenant",
+  "Escalation",
+  "Intake",
 ];
 
 export function AddFilterMenu({
   activeFilterIds,
   onAdd,
   onOpenAdvanced,
+  onOpenCustomize,
   className,
 }: AddFilterMenuProps) {
   const [open, setOpen] = React.useState(false);
@@ -75,37 +83,45 @@ export function AddFilterMenu({
           <span>Add filter</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-0 z-50" align="start">
+      {/* Widened from w-64 → w-80 so labels can breathe inside the
+          30px side padding that now matches the AdvancedFiltersPanel.
+          The list region caps at ~10 rows via max-h on the inner
+          scroll wrapper so the popover stays compact even with the
+          full catalog (8 groups, 22 filters). Advanced CTA stays
+          outside the scroll region so it's always visible. */}
+      <PopoverContent className="w-80 p-0 z-50" align="start">
         <div className="py-1">
           {available.length === 0 ? (
-            <div className="px-3 py-3 text-xs text-[#605e5c] italic">
+            <div className="px-[30px] py-3 text-xs text-[#605e5c] italic">
               All available filters are already added.
             </div>
           ) : (
-            GROUP_ORDER.map((group) => {
-              const items = byGroup.get(group);
-              if (!items || items.length === 0) return null;
-              return (
-                <div key={group}>
-                  <div className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide font-semibold text-[#605e5c]">
-                    {group}
+            <div className="max-h-[320px] overflow-y-auto">
+              {GROUP_ORDER.map((group) => {
+                const items = byGroup.get(group);
+                if (!items || items.length === 0) return null;
+                return (
+                  <div key={group}>
+                    <div className="px-[30px] pt-2 pb-1 text-[10px] uppercase tracking-wide font-semibold text-[#605e5c]">
+                      {group}
+                    </div>
+                    {items.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => {
+                          onAdd(f.id);
+                          setOpen(false);
+                        }}
+                        className="w-full text-left px-[30px] py-1.5 text-xs text-[#323130] hover:bg-[#f3f2f1] focus:outline-none focus-visible:bg-[#f3f2f1]"
+                      >
+                        {f.label}
+                      </button>
+                    ))}
                   </div>
-                  {items.map((f) => (
-                    <button
-                      key={f.id}
-                      type="button"
-                      onClick={() => {
-                        onAdd(f.id);
-                        setOpen(false);
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs text-[#323130] hover:bg-[#f3f2f1] focus:outline-none focus-visible:bg-[#f3f2f1]"
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
 
           <div className="border-t border-[#edebe9] mt-1 pt-1">
@@ -115,11 +131,24 @@ export function AddFilterMenu({
                 setOpen(false);
                 onOpenAdvanced();
               }}
-              className="w-full text-left px-3 py-2 text-xs text-[#0078d4] font-semibold hover:bg-[#f3f9ff] focus:outline-none focus-visible:bg-[#f3f9ff] flex items-center gap-2"
+              className="w-full text-left px-[30px] py-2 text-xs text-[#0078d4] font-semibold hover:bg-[#f3f9ff] focus:outline-none focus-visible:bg-[#f3f9ff] flex items-center gap-2"
             >
               <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
               Advanced filters…
             </button>
+            {onOpenCustomize && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onOpenCustomize();
+                }}
+                className="w-full text-left px-[30px] py-2 text-xs text-[#0078d4] font-semibold hover:bg-[#f3f9ff] focus:outline-none focus-visible:bg-[#f3f9ff] flex items-center gap-2"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
+                Customize view…
+              </button>
+            )}
           </div>
         </div>
       </PopoverContent>

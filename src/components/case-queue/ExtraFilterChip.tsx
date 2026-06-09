@@ -34,7 +34,22 @@ import type {
   ServicesValue,
   SlaTierValue,
   BadgesValue,
+  EscalationStatusValue,
+  SpecificAttorneyValue,
+  TenantValue,
+  UnreadInboundValue,
+  AgencyValue,
+  RequestOriginValue,
+  IdentifierTypeValue,
+  DueDateRangeValue,
+  AgencyNameValue,
+  ValidatingAuthorityValue,
+  CompetentAuthorityValue,
+  StaleEscalationValue,
+  RecommendRejectionValue,
 } from "./extraFilterCatalog";
+import { ESCALATION_DIRECTORY } from "../../constants/caseConstants";
+import type { AttorneyEscalationStatus } from "../../types/caseTypes";
 import {
   OPERATIONAL_BADGES,
   type BadgeMatchMode,
@@ -58,6 +73,14 @@ export interface ExtraFilterChipProps {
   requestTypeOptions: string[];
   requestSubTypeOptions?: string[];
   servicesOptions?: string[];
+  // Persona-specific filter options.
+  tenantOptions?: string[];
+  agencyOptions?: string[];
+  requestOriginOptions?: string[];
+  identifierTypeOptions?: string[];
+  agencyNameOptions?: string[];
+  validatingAuthorityOptions?: string[];
+  competentAuthorityOptions?: string[];
   /** When true, the popover opens by default (used when a chip was just
    *  added via the menu so the user lands on the value control). */
   defaultOpen?: boolean;
@@ -76,6 +99,13 @@ export function ExtraFilterChip({
   requestTypeOptions,
   requestSubTypeOptions = [],
   servicesOptions = [],
+  tenantOptions = [],
+  agencyOptions = [],
+  requestOriginOptions = [],
+  identifierTypeOptions = [],
+  agencyNameOptions = [],
+  validatingAuthorityOptions = [],
+  competentAuthorityOptions = [],
   defaultOpen = false,
 }: ExtraFilterChipProps) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -133,6 +163,13 @@ export function ExtraFilterChip({
           requestTypeOptions={requestTypeOptions}
           requestSubTypeOptions={requestSubTypeOptions}
           servicesOptions={servicesOptions}
+          tenantOptions={tenantOptions}
+          agencyOptions={agencyOptions}
+          requestOriginOptions={requestOriginOptions}
+          identifierTypeOptions={identifierTypeOptions}
+          agencyNameOptions={agencyNameOptions}
+          validatingAuthorityOptions={validatingAuthorityOptions}
+          competentAuthorityOptions={competentAuthorityOptions}
         />
       </PopoverContent>
     </Popover>
@@ -155,6 +192,13 @@ interface FilterValueControlProps {
   requestTypeOptions: string[];
   requestSubTypeOptions?: string[];
   servicesOptions?: string[];
+  tenantOptions?: string[];
+  agencyOptions?: string[];
+  requestOriginOptions?: string[];
+  identifierTypeOptions?: string[];
+  agencyNameOptions?: string[];
+  validatingAuthorityOptions?: string[];
+  competentAuthorityOptions?: string[];
 }
 
 export function FilterValueControl({
@@ -169,6 +213,13 @@ export function FilterValueControl({
   requestTypeOptions,
   requestSubTypeOptions = [],
   servicesOptions = [],
+  tenantOptions = [],
+  agencyOptions = [],
+  requestOriginOptions = [],
+  identifierTypeOptions = [],
+  agencyNameOptions = [],
+  validatingAuthorityOptions = [],
+  competentAuthorityOptions = [],
 }: FilterValueControlProps) {
   switch (def.id) {
     case "assignee":
@@ -204,6 +255,66 @@ export function FilterValueControl({
     case "dateRange":
       return (
         <DateRangeControl value={value as DateRangeValue} onChange={onChange} />
+      );
+    case "dueDateRange":
+      // Reuses DateRangeControl with the axis dropdown suppressed — the
+      // filter is by definition due-date-only.
+      return (
+        <DateRangeControl
+          value={
+            {
+              field: "due",
+              ...(value as DueDateRangeValue),
+            } as DateRangeValue
+          }
+          onChange={(next) => {
+            const v = next as DateRangeValue;
+            onChange({ start: v.start, end: v.end } satisfies DueDateRangeValue);
+          }}
+          forceField="due"
+        />
+      );
+    case "identifierType":
+      return (
+        <MultiCheckControl
+          label="Identifier Types"
+          value={value as IdentifierTypeValue}
+          onChange={onChange}
+          options={identifierTypeOptions.map((k) => ({ key: k, label: k }))}
+        />
+      );
+    case "agencyName":
+      return (
+        <MultiCheckControl
+          label="Agency Name"
+          value={value as AgencyNameValue}
+          onChange={onChange}
+          options={agencyNameOptions.map((k) => ({ key: k, label: k }))}
+        />
+      );
+    case "validatingAuthority":
+      return (
+        <MultiCheckControl
+          label="Validating Authority"
+          value={value as ValidatingAuthorityValue}
+          onChange={onChange}
+          options={validatingAuthorityOptions.map((k) => ({
+            key: k,
+            label: k,
+          }))}
+        />
+      );
+    case "competentAuthority":
+      return (
+        <MultiCheckControl
+          label="Competent Authority"
+          value={value as CompetentAuthorityValue}
+          onChange={onChange}
+          options={competentAuthorityOptions.map((k) => ({
+            key: k,
+            label: k,
+          }))}
+        />
       );
     case "workflowStage":
       return (
@@ -281,9 +392,89 @@ export function FilterValueControl({
           options={[
             { key: "Emergency", label: "P0 — Emergency (no legal demand)" },
             { key: "Urgent", label: "P1 — Urgent (legal demand attached)" },
-            { key: "Expedite", label: "P2 — Expedite (5 days)" },
-            { key: "Routine", label: "P3 — Routine (10 days)" },
+            { key: "Expedite", label: "P2 — Expedite (3 days)" },
+            { key: "Standard", label: "P3 — Standard (5 days)" },
+            { key: "Routine", label: "P4 — Routine (10 days)" },
           ]}
+        />
+      );
+    // ── Phase 2 persona-specific filter controls ──────────────────────
+    case "escalationStatus":
+      return (
+        <MultiCheckControl<AttorneyEscalationStatus>
+          label="Escalation status"
+          value={value as EscalationStatusValue}
+          onChange={onChange}
+          options={[
+            { key: "Pending", label: "Pending" },
+            { key: "InformationRequested", label: "Info requested" },
+            { key: "RedirectRequested", label: "Redirect requested" },
+            { key: "Reviewed", label: "Reviewed (pickup)" },
+            { key: "ApprovedForDelivery", label: "Approved for delivery" },
+            { key: "ApprovedWithConditions", label: "Approved w/ conditions" },
+            { key: "Blocked", label: "Blocked" },
+          ]}
+        />
+      );
+    case "specificAttorney":
+      return (
+        <SpecificAttorneyControl
+          value={value as SpecificAttorneyValue}
+          onChange={onChange}
+        />
+      );
+    case "tenant":
+      return (
+        <MultiCheckControl
+          label="Tenant"
+          value={value as TenantValue}
+          onChange={onChange}
+          options={tenantOptions.map((t) => ({ key: t, label: t }))}
+        />
+      );
+    case "unreadInbound":
+      return (
+        <TristateControl
+          label="Unread inbound (IA / EA)"
+          value={value as UnreadInboundValue}
+          onChange={onChange}
+          yesLabel="Has unread inbound"
+          noLabel="No unread inbound"
+        />
+      );
+    case "agency":
+      return (
+        <MultiCheckControl
+          label="Issuing Authority"
+          value={value as AgencyValue}
+          onChange={onChange}
+          options={agencyOptions.map((a) => ({ key: a, label: a }))}
+        />
+      );
+    case "requestOrigin":
+      return (
+        <MultiCheckControl
+          label="Request Origin"
+          value={value as RequestOriginValue}
+          onChange={onChange}
+          options={requestOriginOptions.map((o) => ({ key: o, label: o }))}
+        />
+      );
+    case "staleEscalation":
+      return (
+        <StaleEscalationControl
+          value={value as StaleEscalationValue}
+          onChange={onChange}
+        />
+      );
+    case "recommendRejection":
+      return (
+        <TristateControl
+          label="Recommend Rejection"
+          value={value as RecommendRejectionValue}
+          onChange={onChange}
+          yesLabel="Recommended for rejection"
+          noLabel="Not recommended"
         />
       );
     case "badges":
@@ -389,24 +580,45 @@ function MultiCheckControl<T extends string>({
 function DateRangeControl({
   value,
   onChange,
+  forceField,
 }: {
   value: DateRangeValue;
   onChange: (next: unknown) => void;
+  /** When set, the axis dropdown is suppressed and the value's `field`
+   *  is pinned to `forceField`. Used by the dedicated "Due Date Range"
+   *  filter so the user doesn't see a meaningless picker. */
+  forceField?: DateRangeValue["field"];
 }) {
+  // If a field is forced, normalise the value's `field` to it so any
+  // stale value doesn't drift outside the locked axis.
+  const effectiveValue = forceField
+    ? { ...value, field: forceField }
+    : value;
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold text-[#323130]">Date Range</div>
-      <select
-        value={value.field}
-        onChange={(e) =>
-          onChange({ ...value, field: e.target.value as DateRangeValue["field"] })
-        }
-        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#0078d4]"
-        aria-label="Date field to filter by"
-      >
-        <option value="created">Created date</option>
-        <option value="due">Due date</option>
-      </select>
+      <div className="text-xs font-semibold text-[#323130]">
+        {forceField === "due"
+          ? "Due Date Range"
+          : forceField === "created"
+            ? "Created Date Range"
+            : "Date Range"}
+      </div>
+      {!forceField && (
+        <select
+          value={effectiveValue.field}
+          onChange={(e) =>
+            onChange({
+              ...effectiveValue,
+              field: e.target.value as DateRangeValue["field"],
+            })
+          }
+          className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#0078d4]"
+          aria-label="Date field to filter by"
+        >
+          <option value="created">Created date</option>
+          <option value="due">Due date</option>
+        </select>
+      )}
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="text-[10px] uppercase tracking-wide text-[#605e5c] block mb-0.5">
@@ -414,8 +626,10 @@ function DateRangeControl({
           </label>
           <Input
             type="date"
-            value={value.start}
-            onChange={(e) => onChange({ ...value, start: e.target.value })}
+            value={effectiveValue.start}
+            onChange={(e) =>
+              onChange({ ...effectiveValue, start: e.target.value })
+            }
             className="h-8 text-xs"
           />
         </div>
@@ -425,21 +639,180 @@ function DateRangeControl({
           </label>
           <Input
             type="date"
-            value={value.end}
-            onChange={(e) => onChange({ ...value, end: e.target.value })}
+            value={effectiveValue.end}
+            onChange={(e) =>
+              onChange({ ...effectiveValue, end: e.target.value })
+            }
             className="h-8 text-xs"
           />
         </div>
       </div>
-      {(value.start || value.end) && (
+      {(effectiveValue.start || effectiveValue.end) && (
         <button
           type="button"
-          onClick={() => onChange({ ...value, start: "", end: "" })}
+          onClick={() => onChange({ ...effectiveValue, start: "", end: "" })}
           className="text-[10px] text-[#0078d4] hover:underline"
         >
           Clear range
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Specific Attorney (Attorney Dashboard) ─────────────────────────────
+// Single-select dropdown over the Attorney role of ESCALATION_DIRECTORY,
+// plus "Anyone" + "Unassigned attorney" sentinels matching the existing
+// Assignee control's pattern.
+function SpecificAttorneyControl({
+  value,
+  onChange,
+}: {
+  value: SpecificAttorneyValue;
+  onChange: (next: unknown) => void;
+}) {
+  const attorneys = ESCALATION_DIRECTORY.filter((d) => d.role === "Attorney");
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-[#323130]">
+        Assigned attorney
+      </div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as SpecificAttorneyValue)}
+        className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:ring-2 focus:ring-[#0078d4]"
+        aria-label="Specific attorney filter value"
+      >
+        <option value="any">Anyone</option>
+        <option value="unassigned">Unassigned (Any Attorney)</option>
+        {attorneys.length > 0 && (
+          <optgroup label="Attorneys">
+            {attorneys.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </select>
+    </div>
+  );
+}
+
+// ── Tri-state toggle (Unread Inbound, Recommend Rejection) ─────────────
+// Three explicit values — "any" / "yes" / "no" — so the user can both
+// narrow to + negate the predicate. Avoids the ambiguity of a single
+// checkbox where "unchecked" could mean "off" or "no preference."
+function TristateControl<T extends "any" | "yes" | "no">({
+  label,
+  value,
+  onChange,
+  yesLabel,
+  noLabel,
+}: {
+  label: string;
+  value: T;
+  onChange: (next: unknown) => void;
+  yesLabel: string;
+  noLabel: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-[#323130]">{label}</div>
+      <div
+        role="radiogroup"
+        aria-label={`${label} filter value`}
+        className="inline-flex flex-col gap-1 w-full"
+      >
+        {(
+          [
+            { key: "any", label: "Any" },
+            { key: "yes", label: yesLabel },
+            { key: "no", label: noLabel },
+          ] as const
+        ).map((opt) => (
+          <label
+            key={opt.key}
+            className={cn(
+              "flex items-center gap-2 text-xs text-[#323130] py-1 px-1.5 rounded cursor-pointer",
+              value === opt.key ? "bg-[#deecf9]/40" : "hover:bg-[#f3f2f1]",
+            )}
+          >
+            <input
+              type="radio"
+              checked={value === opt.key}
+              onChange={() => onChange(opt.key)}
+              className="accent-[#0078d4]"
+            />
+            <span>{opt.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Stale Escalation (LENS Lead) ───────────────────────────────────────
+// Number input + quick-pick chips. Threshold of 0 (default) is a no-op
+// narrowing — the chip mounts inactive until the lead picks a value.
+function StaleEscalationControl({
+  value,
+  onChange,
+}: {
+  value: StaleEscalationValue;
+  onChange: (next: unknown) => void;
+}) {
+  const QUICK_PICKS = [3, 5, 7, 14];
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold text-[#323130]">
+        Stale escalation
+      </div>
+      <p className="text-[11px] text-[#605e5c] leading-tight">
+        Cases with an active escalation whose most-recent attorney action (or
+        initial escalation timestamp when no actions yet) is older than this
+        threshold. Terminal escalations are excluded.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          min={0}
+          step={1}
+          value={value.days ?? 0}
+          onChange={(e) =>
+            onChange({ days: Math.max(0, Number(e.target.value) || 0) })
+          }
+          className="h-8 text-xs w-20"
+          aria-label="Stale escalation threshold (days)"
+        />
+        <span className="text-xs text-[#605e5c]">days</span>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {QUICK_PICKS.map((d) => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => onChange({ days: d })}
+            className={cn(
+              "px-2 py-0.5 text-[11px] rounded border transition-colors",
+              value.days === d
+                ? "bg-[#0078d4] text-white border-[#0078d4]"
+                : "bg-white text-[#605e5c] border-[#e1dfdd] hover:bg-[#f3f2f1]",
+            )}
+          >
+            {d}d
+          </button>
+        ))}
+        {value.days > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange({ days: 0 })}
+            className="text-[10px] text-[#0078d4] hover:underline px-1"
+          >
+            Clear
+          </button>
+        )}
+      </div>
     </div>
   );
 }

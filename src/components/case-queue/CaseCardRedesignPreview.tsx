@@ -59,7 +59,7 @@ interface PreviewCaseItem {
   jurisdiction: string;
   natureOfCrime: string[];
   isThreatToLife: boolean;
-  casePriority: "Emergency" | "Urgent" | "Routine";
+  casePriority: "Emergency" | "Urgent" | "Expedite" | "Standard" | "Routine";
   dueDate: string;
   assigneeName: string;
   // New fields
