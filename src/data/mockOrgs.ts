@@ -360,7 +360,12 @@ export const MOCK_ORGS: Record<string, EnterpriseOrgContext> = {
     tenantDisplayName: "Globex UK Ltd.",
     hqCountry: "United Kingdom",
     exchangeSeatCount: 1420,
-    isS500: false,
+    // Demo seed — matches the case-level `tenantTierCheck` recorded on
+    // LNS-2025-00125 (S500 + V100 dual-tier). Tier-check CTA writes
+    // through to org, so the OrgPanel badges + queue chip render
+    // post-recording.
+    isS500: true,
+    isV100: true,
     hasDerogation: false,
     customContractLanguage: false,
     accountManager: {
@@ -406,7 +411,10 @@ export const MOCK_ORGS: Record<string, EnterpriseOrgContext> = {
     tenantDisplayName: "ACME IT S.r.l.",
     hqCountry: "Italy",
     exchangeSeatCount: 980,
-    isS500: false,
+    // Demo seed — matches the case-level `tenantTierCheck` recorded
+    // on LNS-2026-00210. The tier-check CTA writes through to the
+    // org so the OrgPanel S500 badge renders post-recording.
+    isS500: true,
     hasDerogation: false,
     customContractLanguage: false,
     accountManager: {

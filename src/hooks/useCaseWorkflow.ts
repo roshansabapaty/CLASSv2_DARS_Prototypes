@@ -29,6 +29,18 @@ interface UseCaseWorkflowOptions {
   setIdentifierViewMode: (v: string) => void;
   expandAllIdentifiers: () => void;
   wizardServiceConfig?: any; // Wizard service config with individualSettings for additional date ranges
+  /** Optional getter for `wizardServiceConfig`. When provided, the
+   *  fulfillment-submit path calls this at handler-invocation time to
+   *  read the LATEST value from the parent's ref — bypassing the stale
+   *  closure that the value-typed `wizardServiceConfig` prop suffers
+   *  from when the parent hasn't re-rendered between the wizard's last
+   *  config change and the user's "Update Collection Plan" click.
+   *
+   *  Without this getter, any additional-job submission that follows
+   *  pure-wizard interactions (no parent renders in between) would
+   *  see a stale `wizardServiceConfig` and skip the new
+   *  `additionalDateRanges` the RS just configured. */
+  getWizardServiceConfig?: () => any;
 }
 
 export function useCaseWorkflow({
@@ -52,6 +64,7 @@ export function useCaseWorkflow({
   setIdentifierViewMode,
   expandAllIdentifiers,
   wizardServiceConfig,
+  getWizardServiceConfig,
 }: UseCaseWorkflowOptions) {
   const [showFulfillmentSummary, setShowFulfillmentSummary] = useState(false);
   const [isSubmittingFulfillment, setIsSubmittingFulfillment] = useState(false);
@@ -265,16 +278,46 @@ export function useCaseWorkflow({
 
     let newJobCount = 0;
 
-    const updatedIdentifiers = formData.identifiers.map((identifier) => {
+    // BUG FIX — Stale-closure on "Update Collection Plan". Two pieces
+    // of state are captured by this handler's closure:
+    //
+    //   1. `formData.identifiers` — used to iterate identifiers + their
+    //      services. By the time this code runs, the wizard's
+    //      `handleFinish` has just queued multiple `setFormData` calls
+    //      (one per identifier via `onUpdateIdentifier`) which React
+    //      hasn't flushed yet. The closure sees the PRE-handleFinish
+    //      identifiers, so any new categories/services the RS enabled
+    //      in the wizard are invisible → no jobIds assigned → nothing
+    //      visible on the Collection page when the identifier expands.
+    //
+    //   2. `wizardServiceConfig` — the parent stores it in a ref and
+    //      updates the ref on every onServiceConfigChange. Ref updates
+    //      don't trigger renders, so the value captured here at hook
+    //      invocation can be older than the user's last wizard change
+    //      (e.g., when ALL their interaction was inside the wizard).
+    //      The closure sees stale `additionalDateRanges` → new
+    //      additional jobs never get created.
+    //
+    // Fixes:
+    //   - Wrap the identifier loop in `setFormData(prev => ...)` so
+    //     `prev.identifiers` reflects the queued handleFinish writes.
+    //   - Call the `getWizardServiceConfig()` getter (if provided) to
+    //     read the latest ref value at invocation time, bypassing the
+    //     stale closure capture.
+    const liveWizardServiceConfig =
+      getWizardServiceConfig?.() ?? wizardServiceConfig;
+    let updatedIdentifiers: any[] = [];
+    setFormData((prev) => {
+      updatedIdentifiers = prev.identifiers.map((identifier) => {
       const updatedServices: Record<string, any> = {};
       let hasEnabledCategories = false;
 
       // Get wizard config for this identifier to resolve date ranges
-      const wizardConfig = wizardServiceConfig?.individualSettings?.[identifier.id];
+      const wizardConfig = liveWizardServiceConfig?.individualSettings?.[identifier.id];
       const wizardAdditionalDateRanges = wizardConfig?.additionalDateRanges || {};
       const wizardCategoryDateRanges = wizardConfig?.categoryDateRanges || {};
       const wizardServiceDateRanges = wizardConfig?.dateRanges || {};
-      const bulkDateRange = wizardServiceConfig?.bulkSettings?.dateRange;
+      const bulkDateRange = liveWizardServiceConfig?.bulkSettings?.dateRange;
 
       // Helper: resolve date range for a category from wizard config
       // categoryKey is compound "groupKey:itemKey"; wizardCategoryDateRanges keyed by "serviceId:groupKey:itemKey"
@@ -399,11 +442,11 @@ export function useCaseWorkflow({
         taskStatus,
       };
     });
-
-    setFormData(prev => ({
-      ...prev,
-      identifiers: updatedIdentifiers,
-    }));
+      return {
+        ...prev,
+        identifiers: updatedIdentifiers,
+      };
+    });
 
     let totalJobs = 0;
     updatedIdentifiers.forEach(identifier => {
