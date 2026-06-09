@@ -210,20 +210,20 @@ export function buildLENS202600240FormData(): FormData {
     notifiedAt: eaNotifiedAt,
     eaReviewWindowExpiresAt,
     ea: {
-      name: "Ministero della Giustizia — Direzione Generale degli Affari Internazionali",
+      name: "Department of Justice (Ireland)",
       referenceNumber: "MIN-GIUST-2026-GFR-0240",
     },
     decision: {
       kind: "Full",
       decidedAt: eaDecidedAt,
-      decidedBy: "Dott.ssa Chiara Lombardi (Magistrato di Collegamento)",
+      decidedBy: "Conor McLoughlin (Central Authority Lead)",
       reasons: ["ImmunitiesOrPrivileges"],
       reasonSummary:
-        "Il soggetto identificato gode di immunità parlamentare ai sensi " +
-        "dell'art. 68 della Costituzione italiana. La produzione richiesta " +
-        "costituisce ostacolo manifesto alla immunità prevista dalla legge " +
-        "dello Stato di esecuzione, ai sensi del Reg. (UE) 2023/1543 " +
-        "Art. 12(1)(a).",
+        "The identified subject benefits from parliamentary immunity " +
+        "under Article 68 of the Italian Constitution. The requested " +
+        "production constitutes a manifest impediment to an immunity " +
+        "recognised by the law of the executing State, within the " +
+        "meaning of Reg. (EU) 2023/1543 Art. 12(1)(a).",
     },
   };
 
@@ -235,7 +235,7 @@ export function buildLENS202600240FormData(): FormData {
       actor: "System (EA inbound)",
       performedAt: eaDecidedAt,
       note:
-        "Italian Enforcing Authority issued Full Grounds for Refusal " +
+        "Irish Enforcing Authority issued Full Grounds for Refusal " +
         "(Art. 12(1)(a) — Immunities or Privileges) on Form 1 review.",
     },
     {
@@ -355,15 +355,6 @@ export function buildLENS202600240FormData(): FormData {
         email: "gip@tribunale.milano.giustizia.it",
         languagesSpoken: "it - Italian, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Ministero della Giustizia — Direzione Generale degli Affari Internazionali",
-      contactName: "Dott.ssa Chiara Lombardi",
-      address:
-        "Via Arenula 70\n00186 Rome\nItaly",
-      tel: "+39 06 6885 1",
-      fax: "+39 06 6885 2",
-      email: "dgia@giustizia.it",
     },
     eevidenceEnterpriseRequest: {
       addressedToController: false,

@@ -365,14 +365,6 @@ export function buildLENS202600220FormData(): FormData {
         languagesSpoken: "nl - Dutch, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Ministerie van Justitie en Veiligheid — Afdeling Internationale Rechtshulp",
-      contactName: "Mw. Sanne Bakker",
-      address: "Turfmarkt 147\n2511 DP Den Haag\nNetherlands",
-      tel: "+31 70 370 7911",
-      fax: "+31 70 370 7912",
-      email: "eevidence@minjenv.nl",
-    },
     // No Enterprise / processor flags — this is a preservation order
     // routed through the standard EPOC-PR envelope. The
     // EnterpriseRequestCard renders Q1 + Q2 as "Not selected".

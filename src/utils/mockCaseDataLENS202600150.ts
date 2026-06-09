@@ -350,14 +350,6 @@ export function buildLENS202600150FormData(): FormData {
       // Central authority contact omitted — IA is itself the contact.
     },
     // VA omitted — IA is a PublicProsecutor, no separate validator needed.
-    eevidenceEnforcingAuthority: {
-      name: "Bundesamt für Justiz (Federal Office of Justice)",
-      contactName: "Dr. Markus Hoffmann",
-      address: "Adenauerallee 99-103\n53113 Bonn\nGermany",
-      tel: "+49 228 99-410-40",
-      fax: "+49 228 99-410-5050",
-      email: "eevidence@bfj.bund.de",
-    },
     // Walks the deepest branch of the UnderlyingConditions tree so the demo
     // shows every cascading layer expanded with realistic prose.
     eevidenceEnterpriseRequest: {

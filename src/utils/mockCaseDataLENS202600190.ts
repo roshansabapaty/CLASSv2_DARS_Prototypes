@@ -296,14 +296,6 @@ export function buildLENS202600190FormData(): FormData {
         languagesSpoken: "de - German, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Bundesamt für Justiz — Internationale Rechtshilfe",
-      contactName: "Frau Dr. Maria Schäfer",
-      address: "Adenauerallee 99-103\n53113 Bonn\nGermany",
-      tel: "+49 228 99-410-40",
-      fax: "+49 228 99-410-5050",
-      email: "eevidence@bfj.bund.de",
-    },
     // IA submitted Q2 = YES on Section g Sub-section D (processor-route
     // Enterprise claim). One processor reason supplied as required when
     // Q2 = YES. Q1 was answered NO. This case is intentionally

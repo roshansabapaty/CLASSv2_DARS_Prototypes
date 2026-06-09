@@ -47,15 +47,23 @@ export function getPriorityConfig(priority: string): PriorityConfig {
     case "Expedite":
       return {
         label: "Expedite",
-        level: "P1.5",
+        level: "P2",
         color: "border-l-yellow-500 border-l-6",
         badge: "bg-yellow-50 text-yellow-700 border-yellow-200",
         icon: AlertTriangle,
       };
+    case "Standard":
+      return {
+        label: "Standard",
+        level: "P3",
+        color: "border-l-teal-500 border-l-4",
+        badge: "bg-teal-50 text-teal-700 border-teal-200",
+        icon: FileText,
+      };
     default:
       return {
         label: "Routine",
-        level: "P2",
+        level: "P4",
         color: "border-l-blue-500 border-l-4",
         badge: "bg-blue-50 text-blue-700 border-blue-200",
         icon: FileText,

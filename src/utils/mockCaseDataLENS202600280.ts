@@ -285,14 +285,6 @@ export function buildLENS202600280FormData(): FormData {
         languagesSpoken: "pt - Portuguese, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Procuradoria-Geral da República — Direção de Cooperação Judiciária Internacional",
-      contactName: "Diretora Inês Carvalho",
-      address: "Rua da Escola Politécnica 140\n1269-269 Lisbon\nPortugal",
-      tel: "+351 21 392 1900",
-      fax: "+351 21 392 1901",
-      email: "cooperacao@pgr.pt",
-    },
     eevidenceEnterpriseRequest: {
       addressedToController: false,
       addressedToProcessor: false,

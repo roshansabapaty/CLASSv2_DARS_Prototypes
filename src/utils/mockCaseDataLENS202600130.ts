@@ -283,15 +283,6 @@ export function buildLENS202600130FormData(): FormData {
         languagesSpoken: "en - English, ga - Irish",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Office of the Director of Public Prosecutions (Ireland)",
-      contactName: "State Solicitor Aoife Ní Bhriain",
-      address:
-        "Infirmary Road\nD07 R6XR Dublin\nIreland",
-      tel: "+353 1 858 8500",
-      fax: "+353 1 858 8501",
-      email: "ea@dppireland.ie",
-    },
     eevidenceEnterpriseRequest: {
       addressedToController: false,
       addressedToProcessor: false,

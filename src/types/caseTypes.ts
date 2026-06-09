@@ -1219,6 +1219,8 @@ export interface Agency {
 
 export type AuthorityRole =
   | "IssuingAuthority"    // The court/body that authorized the legal demand
+  | "ValidatingAuthority" // EU eEvidence: validates EPOCs issued by a non-judicial IA (e.g., judge validating a prosecutor-issued production order for content data)
+  | "CompetentAuthority"  // EU eEvidence: central authority in the enforcing member state responsible for handling the EPOC on the receiving side
   | "EnforcingAuthority"  // The agency executing/serving the demand
   | "RequestingAgency"    // The agency that submitted the request to Microsoft
   | "CooperatingAgency"   // Additional agency (e.g., Interpol coordination)
@@ -1242,6 +1244,8 @@ export interface CaseLegalContext {
 
   // Derived convenience accessors (computed, not stored)
   primaryIssuingAuthority?: Agency;
+  primaryValidatingAuthority?: Agency;
+  primaryCompetentAuthority?: Agency;
   primaryEnforcingAuthority?: Agency;
   primaryRequestingAgency?: Agency;
 

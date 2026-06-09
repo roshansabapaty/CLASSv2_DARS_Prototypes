@@ -172,7 +172,7 @@ export function buildLENS202600247FormData(): FormData {
     notifiedAt: eaNotifiedAt,
     eaReviewWindowExpiresAt,
     ea: {
-      name: "Ministère de la Justice — Direction des Affaires Criminelles et des Grâces",
+      name: "Department of Justice (Ireland)",
       referenceNumber: "DACG-2026-EPOC-EA-0247",
     },
     // decision: undefined → no EA determination ever arrived.
@@ -282,15 +282,6 @@ export function buildLENS202600247FormData(): FormData {
         email: "instruction.j3@justice.fr",
         languagesSpoken: "fr - French, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Ministère de la Justice — Direction des Affaires Criminelles et des Grâces",
-      contactName: "Sous-directrice Margaux Petit",
-      address:
-        "13 Place Vendôme\n75001 Paris\nFrance",
-      tel: "+33 1 44 77 60 60",
-      fax: "+33 1 44 77 60 61",
-      email: "dacg@justice.fr",
     },
     eevidenceEnterpriseRequest: {
       addressedToController: false,

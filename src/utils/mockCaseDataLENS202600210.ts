@@ -154,7 +154,18 @@ export function buildLENS202600210FormData(): FormData {
       },
     ],
     policyReviewRequired: false,
-    execReviewRequired: false,
+    execReviewRequired: true,
+    // Demo seed — prior tenant-tier check on this case so the
+    // TenantTierCheckDialog opens with the "Last recorded" provenance
+    // strip + the OrgPanel badges render with full audit-trail
+    // tooltip ("On S500 list — recorded by …").
+    tenantTierCheck: {
+      isS500: true,
+      isV100: false,
+      checkedAt: new Date("2026-05-21T14:08:00"),
+      checkedBy: "Michael Chen",
+      checkedRole: "Attorney",
+    },
   };
 
   return {
@@ -281,14 +292,6 @@ export function buildLENS202600210FormData(): FormData {
         email: "eevidence@procura.roma.giustizia.it",
         languagesSpoken: "it - Italian, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Ministero della Giustizia — Direzione Generale degli Affari Internazionali",
-      contactName: "Dott.ssa Elena Russo",
-      address: "Via Arenula 70\n00186 Rome\nItaly",
-      tel: "+39 06 6885 1234",
-      fax: "+39 06 6885 1235",
-      email: "eevidence@giustizia.it",
     },
     // IA submitted the envelope with BOTH Enterprise checkboxes
     // explicitly unselected. This is the validation case for the

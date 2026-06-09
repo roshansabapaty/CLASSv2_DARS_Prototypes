@@ -237,17 +237,17 @@ export function buildLENS202600255FormData(): FormData {
     notifiedAt: eaNotifiedAt,
     eaReviewWindowExpiresAt,
     ea: {
-      name: "Service Public Fédéral Justice — Direction Coopération Internationale",
+      name: "Department of Justice (Ireland)",
       referenceNumber: "SPF-CI-2026-NGR-0255",
     },
     decision: {
       kind: "None",
       decidedAt: eaDecidedAt,
-      decidedBy: "Conseiller Sylvie Vandenberghe (EA Coordinator)",
+      decidedBy: "Niamh O'Brien (Central Authority Lead)",
       note:
-        "L'Autorité d'Exécution n'identifie aucun motif de refus au " +
-        "sens de l'art. 12 du Règlement (UE) 2023/1543. La production " +
-        "peut être effectuée selon le calendrier prévu par l'EPOC.",
+        "The Enforcing Authority identifies no grounds for refusal " +
+        "within the meaning of Art. 12 of Regulation (EU) 2023/1543. " +
+        "Production may proceed on the schedule set out in the EPOC.",
     },
   };
 
@@ -259,7 +259,7 @@ export function buildLENS202600255FormData(): FormData {
       actor: "System (EA inbound)",
       performedAt: eaDecidedAt,
       note:
-        "Belgian Enforcing Authority issued an explicit No Grounds for " +
+        "Irish Enforcing Authority issued an explicit No Grounds for " +
         "Refusal decision on Form 1 review. Production may proceed.",
     },
   ];
@@ -367,15 +367,6 @@ export function buildLENS202600255FormData(): FormData {
         email: "instruction@just.fgov.be",
         languagesSpoken: "nl - Dutch, fr - French, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Service Public Fédéral Justice — Direction Coopération Internationale",
-      contactName: "Conseiller Sylvie Vandenberghe",
-      address:
-        "Boulevard de Waterloo 115\n1000 Brussels\nBelgium",
-      tel: "+32 2 542 6511",
-      fax: "+32 2 542 6512",
-      email: "ci@just.fgov.be",
     },
     eevidenceEnterpriseRequest: {
       addressedToController: false,

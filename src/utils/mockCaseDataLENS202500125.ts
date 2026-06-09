@@ -154,7 +154,18 @@ export function buildLENS202500125FormData(): FormData {
       },
     ],
     policyReviewRequired: false,
-    execReviewRequired: false,
+    execReviewRequired: true,
+    // Demo seed — RS-recorded tier check (cross-role demo: this one
+    // shows the RS as the actor in the OrgPanel tooltip; LNS-2026-00210
+    // shows an Attorney-recorded check for contrast). Globex UK is a
+    // S500 + V100 dual-tier tenant.
+    tenantTierCheck: {
+      isS500: true,
+      isV100: true,
+      checkedAt: new Date("2025-12-04T09:33:00"),
+      checkedBy: "Nicole Garcia",
+      checkedRole: "ResponseSpecialist",
+    },
   };
 
   return {

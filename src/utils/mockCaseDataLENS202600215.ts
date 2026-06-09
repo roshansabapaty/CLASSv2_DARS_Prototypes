@@ -224,15 +224,6 @@ export function buildLENS202600215FormData(): FormData {
         languagesSpoken: "es - Spanish, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Ministerio de Justicia — Subdirección General de Cooperación Jurídica Internacional",
-      contactName: "Subdirectora María Soto",
-      address:
-        "Calle de San Bernardo 45\n28015 Madrid\nSpain",
-      tel: "+34 91 390 4500",
-      fax: "+34 91 390 4501",
-      email: "cooperacion@mjusticia.es",
-    },
     eevidenceEnterpriseRequest: {
       addressedToController: false,
       addressedToProcessor: false,

@@ -252,9 +252,14 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     marginRight: tokens.spacingHorizontalXS,
   },
+  // Long-form border properties — Griffel rejects the shorthand
+  // `borderColor` in makeStyles in favour of explicit per-side rules.
   blockButton: {
     color: tokens.colorPaletteRedForeground1,
-    borderColor: tokens.colorPaletteRedBorder2,
+    borderTopColor: tokens.colorPaletteRedBorder2,
+    borderRightColor: tokens.colorPaletteRedBorder2,
+    borderBottomColor: tokens.colorPaletteRedBorder2,
+    borderLeftColor: tokens.colorPaletteRedBorder2,
   },
 });
 

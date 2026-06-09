@@ -2004,6 +2004,12 @@ export function DataEntryForm({
     setIdentifierViewMode,
     expandAllIdentifiers,
     wizardServiceConfig: wizardServiceConfigRef.current,
+    // Bug fix — provide a live getter so handleFulfillmentSubmit reads
+    // the latest ref value at invocation time, not the stale closure
+    // capture from the last render. See useCaseWorkflow.handleFulfillmentSubmit
+    // for the full explanation of why the value-typed prop above is
+    // not enough on its own.
+    getWizardServiceConfig: () => wizardServiceConfigRef.current,
   });
 
   // Emit case-level action state up to App.tsx so the WorkflowListPane
@@ -3167,9 +3173,10 @@ export function DataEntryForm({
                   <TooltipTrigger asChild>
                     <AlertTriangle className={cn(
                       "w-4 h-4 cursor-help",
-                      formData.casePriority === "Emergency" ? "text-[#d13438]" : 
+                      formData.casePriority === "Emergency" ? "text-[#d13438]" :
                       formData.casePriority === "Urgent" ? "text-[#ca5010]" :
                       formData.casePriority === "Expedite" ? "text-[#f59e0b]" :
+                      formData.casePriority === "Standard" ? "text-[#0e7490]" :
                       "text-[#0078d4]"
                     )} />
                   </TooltipTrigger>
@@ -3246,6 +3253,13 @@ export function DataEntryForm({
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#f59e0b]" />
                     <span className="font-medium">Expedite</span>
+                    <span className="text-xs text-[#605e5c] ml-1">3 day SLA</span>
+                  </div>
+                </SelectItem>
+                <SelectItem value="Standard">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-[#0e7490]" />
+                    <span className="font-medium">Standard</span>
                     <span className="text-xs text-[#605e5c] ml-1">5 day SLA</span>
                   </div>
                 </SelectItem>

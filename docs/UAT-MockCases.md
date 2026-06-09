@@ -1,9 +1,9 @@
 # DARS — Mock Case User Acceptance Test (UAT) Document
 
 **Document owner**: DARS Product Team
-**Last updated**: 2026-06-04
+**Last updated**: 2026-06-08
 **Source environment**: DARS eEvidence prototype (`http://localhost:3001`)
-**Scope**: All mock cases shipped with the prototype as of this date — 27 cases covering Triage, Review Case, Collection, and Terminal workflow stages, plus dedicated demos for EU eEvidence Workflows 1 / 2 / 3 / 4 / 6 / 7 / 8 and the GFR-enforcement (informational vs RS-blocked) state distinction (UAT-DARS-028 + 029 reuse LNS-2026-00240 / 00250)
+**Scope**: All mock cases shipped with the prototype as of this date — 29 cases covering Triage, Review Case, Collection, and Terminal workflow stages, plus dedicated demos for EU eEvidence Workflows 1 / 2 / 3 / 4 / 6 / 7 / 8 and the GFR-enforcement (informational vs RS-blocked) state distinction (UAT-DARS-028 + 029 reuse LNS-2026-00240 / 00250)
 
 ---
 
@@ -80,10 +80,6 @@ This document gives Business stakeholders a structured, repeatable way to verify
 | UAT-DARS-012 | LNS-2026-00210 | Italian eEvidence — inverse manifest error | Triage | TS |
 | UAT-DARS-013 | LNS-2026-00220 | Dutch EPOC-PR — preservation-only pipeline | Collection | RS |
 | UAT-DARS-014 | LNS-2026-00230 | Dutch EPOC-ER — linkage to prior EPOC-PR | Triage | TS |
-| UAT-DARS-015 | LNS-2026-00240 | Italian eEvidence — Full GFR informational state (pre-enforcement) | Collection | RS, ATT |
-| UAT-DARS-016 | LNS-2026-00250 | Polish eEvidence — Partial GFR informational state (pre-enforcement) | Collection | RS, ATT |
-| UAT-DARS-028 | LNS-2026-00240 | Italian eEvidence — RS enforces Full GFR via Block Delivery CTA | Collection | RS |
-| UAT-DARS-029 | LNS-2026-00250 | Polish eEvidence — RS enforces Partial GFR via Block Delivery CTA | Collection | RS |
 | UAT-DARS-017 | LNS-2026-00255 | Belgian eEvidence — EA clears + failed-delivery retry | Collection | RS |
 | UAT-DARS-018 | LNS-2026-00265 | Greek eEvidence — EA overrules Form 3 | Collection | RS, ATT |
 | UAT-DARS-019 | LNS-2026-00270 | Swedish eEvidence — manual vs automated jobs | Collection | RS |
@@ -95,7 +91,10 @@ This document gives Business stakeholders a structured, repeatable way to verify
 | UAT-DARS-025 | LNS-2026-00247 | French eEvidence — Workflow 2 EA Window Lapsed + Resume Delivery | Collection | RS |
 | UAT-DARS-026 | LNS-2026-00130 | Irish eEvidence — Workflow 1 Standard Production National (default happy path) | Collection | RS |
 | UAT-DARS-027 | LNS-2026-00140 | German eEvidence — Workflow 3 Emergency Production 8h (Art. 9(2)) | Collection | RS |
+| UAT-DARS-028 | LNS-2026-00240 | Italian eEvidence — RS enforces Full GFR via Block Delivery CTA | Collection | RS |
 | UAT-DARS-028 | LNS-2026-00310 | Romania — eEvidence · EPOC ER (placeholder — please author) | Triage | TBD |
+| UAT-DARS-029 | LNS-2026-00250 | Polish eEvidence — RS enforces Partial GFR via Block Delivery CTA | Collection | RS |
+| UAT-DARS-030 | LNS-2026-00320 | United States — Subpoena (placeholder — please author) | Triage | TBD |
 
 ---
 

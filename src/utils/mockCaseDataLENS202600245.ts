@@ -172,7 +172,7 @@ export function buildLENS202600245FormData(): FormData {
     notifiedAt: eaNotifiedAt,
     eaReviewWindowExpiresAt,
     ea: {
-      name: "Ministero della Giustizia — Ufficio Cooperazione Giudiziaria",
+      name: "Department of Justice (Ireland)",
       referenceNumber: "MGCI-2026-EPOC-EA-0245",
     },
     // decision: undefined → EA is actively reviewing.
@@ -279,15 +279,6 @@ export function buildLENS202600245FormData(): FormData {
         email: "gip.milano@giustizia.it",
         languagesSpoken: "it - Italian, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Ministero della Giustizia — Ufficio Cooperazione Giudiziaria",
-      contactName: "Direttore Generale Antonio Russo",
-      address:
-        "Via Arenula 70\n00186 Rome\nItaly",
-      tel: "+39 06 6885 1234",
-      fax: "+39 06 6885 1235",
-      email: "ucg@giustizia.it",
     },
     eevidenceEnterpriseRequest: {
       addressedToController: false,

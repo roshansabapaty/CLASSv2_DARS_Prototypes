@@ -232,20 +232,20 @@ export function buildLENS202600265FormData(): FormData {
     notifiedAt: eaNotifiedAt,
     eaReviewWindowExpiresAt,
     ea: {
-      name: "Υπουργείο Δικαιοσύνης — Διεύθυνση Διεθνούς Συνεργασίας",
+      name: "Department of Justice (Ireland)",
       referenceNumber: "MIN-DIK-2026-NGR-0265",
     },
     decision: {
       kind: "None",
       decidedAt: eaDecidedAt,
-      decidedBy: "Διευθύντρια Ελένη Κωνσταντίνου (EA Coordinator)",
+      decidedBy: "Brendan Walsh (Central Authority Lead)",
       note:
-        "Η Εκτελούσα Αρχή εξέτασε τη φόρμα μη εκτέλεσης (Form 3) που " +
-        "υπέβαλε ο Πάροχος Υπηρεσίας και διαπιστώνει ότι ο επικαλούμενος " +
-        "λόγος σύγκρουσης με νόμο τρίτης χώρας δεν συνιστά λόγο άρνησης " +
-        "κατά την έννοια του άρθρου 12 του Καν. (ΕΕ) 2023/1543. Ο " +
-        "Πάροχος καλείται να ανακαλέσει τη Φόρμα 3 και να συνεχίσει την " +
-        "παραγωγή.",
+        "The Enforcing Authority has reviewed the non-execution form " +
+        "(Form 3) submitted by the Service Provider and finds that the " +
+        "third-country law conflict cited does not constitute a ground " +
+        "for refusal within the meaning of Art. 12 of Reg. (EU) " +
+        "2023/1543. The Provider is requested to withdraw Form 3 and " +
+        "resume production.",
     },
   };
 
@@ -264,8 +264,7 @@ export function buildLENS202600265FormData(): FormData {
       B_issuingFileNumber: "PR-ATH-2026-EPOC-ER-0265",
       B_dateOfIssue: "2026-05-04",
       B_dateOfReceipt: "2026-05-05",
-      B_enforcingAuthority:
-        "Υπουργείο Δικαιοσύνης — Διεύθυνση Διεθνούς Συνεργασίας",
+      B_enforcingAuthority: "Department of Justice (Ireland)",
       C_addressee: "Microsoft Ireland Operations Limited",
       C_addresseeFileNumber: "LNS-2026-00265",
       D_reasons: ["thirdCountryConflict"],
@@ -478,15 +477,6 @@ export function buildLENS202600265FormData(): FormData {
         email: "anakrites@protodikeio.athens.gr",
         languagesSpoken: "el - Greek, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Υπουργείο Δικαιοσύνης — Διεύθυνση Διεθνούς Συνεργασίας",
-      contactName: "Διευθύντρια Ελένη Κωνσταντίνου",
-      address:
-        "Λεωφόρος Μεσογείων 96\n115 27 Athens\nGreece",
-      tel: "+30 213 130 7000",
-      fax: "+30 213 130 7001",
-      email: "ds@ministryofjustice.gr",
     },
     eevidenceEnterpriseRequest: {
       addressedToController: false,

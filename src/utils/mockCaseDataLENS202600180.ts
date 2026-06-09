@@ -318,14 +318,6 @@ export function buildLENS202600180FormData(): FormData {
         languagesSpoken: "es - Spanish, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Ministerio de Justicia — Subdirección General de Cooperación Jurídica Internacional",
-      contactName: "Dña. Elena Ruiz Pérez",
-      address: "Calle San Bernardo 62\n28015 Madrid\nSpain",
-      tel: "+34 91 837 22 95",
-      fax: "+34 91 837 22 96",
-      email: "eevidence@mjusticia.es",
-    },
     // Enterprise Request walks the controller-only branch (Q1 = YES,
     // Q2 = NO). The card is visible because Q1 = YES. The IA submitted
     // YES to both `processorShallNotInformController` and

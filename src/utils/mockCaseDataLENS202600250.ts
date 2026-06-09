@@ -310,20 +310,21 @@ export function buildLENS202600250FormData(): FormData {
     notifiedAt: eaNotifiedAt,
     eaReviewWindowExpiresAt,
     ea: {
-      name: "Ministerstwo Sprawiedliwości — Departament Współpracy Międzynarodowej",
+      name: "Department of Justice (Ireland)",
       referenceNumber: "MS-WM-2026-GFR-0250",
     },
     decision: {
       kind: "Partial",
       decidedAt: eaDecidedAt,
-      decidedBy: "Dyrektor Marek Wójcik (EA Coordinator)",
+      decidedBy: "Áine Murphy (Central Authority Lead)",
       reasons: ["ManifestBreachOfFundamentalRights"],
       reasonSummary:
-        "Konto dziennikarza objęte jest ochroną przewidzianą w art. 8 " +
-        "Konstytucji RP oraz przepisach prawa prasowego. Wykonanie " +
-        "EPOC w odniesieniu do tego identyfikatora stanowi oczywiste " +
-        "naruszenie praw podstawowych w rozumieniu Reg. (UE) 2023/1543 " +
-        "Art. 12(1)(c). Pozostałe identyfikatory mogą zostać wykonane.",
+        "The journalist's account is subject to source-protection " +
+        "guarantees under Article 8 of the Polish Constitution and " +
+        "Polish press law. Execution of the EPOC against this " +
+        "identifier would constitute a manifest breach of fundamental " +
+        "rights within the meaning of Reg. (EU) 2023/1543 Art. 12(1)(c). " +
+        "The remaining identifiers may be executed.",
       blockedTaskObjectIds: ["LDID-100002"],
     },
   };
@@ -336,7 +337,7 @@ export function buildLENS202600250FormData(): FormData {
       actor: "System (EA inbound)",
       performedAt: eaDecidedAt,
       note:
-        "Polish Enforcing Authority issued Partial Grounds for Refusal " +
+        "Irish Enforcing Authority issued Partial Grounds for Refusal " +
         "(Art. 12(1)(c) — Manifest breach of fundamental rights) on " +
         "Form 1 review. Blocked LDTask: LDID-100002.",
     },
@@ -479,15 +480,6 @@ export function buildLENS202600250FormData(): FormData {
         email: "kancelaria@warszawa.so.gov.pl",
         languagesSpoken: "pl - Polish, en - English",
       },
-    },
-    eevidenceEnforcingAuthority: {
-      name: "Ministerstwo Sprawiedliwości — Departament Współpracy Międzynarodowej",
-      contactName: "Dyrektor Marek Wójcik",
-      address:
-        "Al. Ujazdowskie 11\n00-950 Warsaw\nPoland",
-      tel: "+48 22 521 2888",
-      fax: "+48 22 521 2999",
-      email: "dwm@ms.gov.pl",
     },
     eevidenceEnterpriseRequest: {
       addressedToController: false,

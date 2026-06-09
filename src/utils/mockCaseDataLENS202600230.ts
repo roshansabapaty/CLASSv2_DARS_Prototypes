@@ -294,14 +294,6 @@ export function buildLENS202600230FormData(): FormData {
         languagesSpoken: "nl - Dutch, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Ministerie van Justitie en Veiligheid — Afdeling Internationale Rechtshulp",
-      contactName: "Mw. Sanne Bakker",
-      address: "Turfmarkt 147\n2511 DP Den Haag\nNetherlands",
-      tel: "+31 70 370 7911",
-      fax: "+31 70 370 7912",
-      email: "eevidence@minjenv.nl",
-    },
     eevidenceEnterpriseRequest: {
       addressedToController: false,
       addressedToProcessor: false,

@@ -274,15 +274,6 @@ export function buildLENS202600140FormData(): FormData {
         languagesSpoken: "de - German, en - English",
       },
     },
-    eevidenceEnforcingAuthority: {
-      name: "Generalbundesanwalt beim Bundesgerichtshof",
-      contactName: "Oberstaatsanwalt Markus Brandt",
-      address:
-        "Brauerstraße 30\n76135 Karlsruhe\nGermany",
-      tel: "+49 721 81 91 0",
-      fax: "+49 721 81 91 590",
-      email: "international@generalbundesanwalt.de",
-    },
     eevidenceEnterpriseRequest: {
       addressedToController: false,
       addressedToProcessor: false,
