@@ -1,21 +1,28 @@
 /**
- * SLA Deadline tiers — Phase 1 of the priority → SLA renaming.
+ * SLA Deadline tiers — canonical 5-tier table.
  *
  * The case's `casePriority` field is unchanged in the data model; this module
  * adds:
- *  - A canonical 4-tier table (Emergency / Urgent / Expedite / Routine)
+ *  - A canonical 5-tier table:
+ *      P0 Emergency (3h, no legal demand)
+ *      P1 Urgent    (3h, legal demand attached)
+ *      P2 Expedite  (3 days)
+ *      P3 Standard  (5 days)
+ *      P4 Routine   (10 days)
  *  - Per-tier deadline duration in milliseconds (drives auto due-date set)
  *  - Display metadata (label, P-level, description) used by chips + form
  *  - Pure helpers `computeSlaDueDate` + `computeCountdown`
  *
- * Standard cases (legacy 5th tier on FormData) collapse into Routine for the
- * purposes of countdown/sort. We keep accepting the value for back-compat.
+ * Tier history: `Expedite` previously meant 5 days at P2; the 5-day slot
+ * is now called `Standard` (P3) and `Expedite` has been re-pointed to a
+ * new 3-day slot at P2. Old cases stamped `Expedite` will now resolve to
+ * the faster 3-day SLA — a deliberate semantic shift.
  */
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 
-export type SlaTier = "Emergency" | "Urgent" | "Expedite" | "Routine";
+export type SlaTier = "Emergency" | "Urgent" | "Expedite" | "Standard" | "Routine";
 
 export interface SlaTierConfig {
   /** Tier value as stored on `casePriority`. */
@@ -53,18 +60,37 @@ export const SLA_TIER_CONFIGS: SlaTierConfig[] = [
     durationMs: 3 * HOUR,
     durationLabel: "3 hours",
   },
+  // P2 — Expedite (3 days). Added between Urgent and the legacy 5-day
+  // tier so the queue has a slot for "high-priority production" cases
+  // that aren't true emergencies but need faster turnaround than the
+  // 5-day Standard tier. The `Expedite` identifier was previously bound
+  // to the 5-day duration; that 5-day slot has been renamed to `Standard`
+  // (next config below) and the `Expedite` label now means 3 days.
   {
     tier: "Expedite",
     label: "Expedite",
     pLevel: "P2",
-    description: "Expedite — 5 days",
+    description: "Expedite — 3 days",
+    durationMs: 3 * DAY,
+    durationLabel: "3 days",
+  },
+  // P3 — Standard (5 days). Repurposed from the legacy "Standard" alias
+  // (which previously collapsed to Routine). The 5-day duration was
+  // previously named "Expedite" at P2; the rename + tier shift keeps a
+  // 5-day slot in the table without breaking the new Expedite (3 days)
+  // tier's pLevel.
+  {
+    tier: "Standard",
+    label: "Standard",
+    pLevel: "P3",
+    description: "Standard — 5 days",
     durationMs: 5 * DAY,
     durationLabel: "5 days",
   },
   {
     tier: "Routine",
     label: "Routine",
-    pLevel: "P3",
+    pLevel: "P4",
     description: "Routine — 10 days",
     durationMs: 10 * DAY,
     durationLabel: "10 days",
@@ -123,23 +149,29 @@ export function isEEvidenceEmergency(
  *  that swap the tier for spec-mandated variants like the eEvidence
  *  Emergency 8h window. Legacy callers omit `ctx` and get the static
  *  tier behaviour. */
+/** Default fallback index — Routine sits at the tail of the 5-tier
+ *  table. Computed dynamically so future tier inserts/reorders don't
+ *  silently shift the fallback to the wrong row. */
+const ROUTINE_INDEX = SLA_TIER_CONFIGS.findIndex((c) => c.tier === "Routine");
+
 export function getSlaConfig(
   tier: string | undefined,
   ctx?: SlaContext,
 ): SlaTierConfig {
   if (isEEvidenceEmergency(tier, ctx)) return EEVIDENCE_EMERGENCY_8H;
-  if (!tier) return SLA_TIER_CONFIGS[3]; // default to Routine
-  // Legacy "Standard" collapses to Routine.
-  if (tier === "Standard") return SLA_TIER_CONFIGS[3];
+  if (!tier) return SLA_TIER_CONFIGS[ROUTINE_INDEX]; // default to Routine
+  // "Standard" was historically a legacy alias that collapsed to Routine.
+  // It now refers to the proper 5-day P3 tier (see SLA_TIER_CONFIGS).
+  // The normal find-by-tier below handles it; no special collapse.
   const cfg = SLA_TIER_CONFIGS.find((c) => c.tier === tier);
-  return cfg ?? SLA_TIER_CONFIGS[3];
+  return cfg ?? SLA_TIER_CONFIGS[ROUTINE_INDEX];
 }
 
 /** Sort key — lower = more urgent. Stable ordering for the queue's
- *  "Sort by SLA Deadline" option. */
+ *  "Sort by SLA Deadline" option. "Standard" is now a proper tier
+ *  (P3, 5 days), so the lookup hits the table directly. */
 export function slaTierOrder(tier: string | undefined): number {
   if (!tier) return 99;
-  if (tier === "Standard") return TIER_INDEX["Routine"] ?? 99;
   return TIER_INDEX[tier] ?? 99;
 }
 
