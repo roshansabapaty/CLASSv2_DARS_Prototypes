@@ -22,10 +22,12 @@
 
 import * as React from "react";
 import {
+  Button,
   Tag,
   makeStyles,
   tokens,
 } from "@fluentui/react-components";
+import { ChevronDownRegular, ChevronUpRegular } from "@fluentui/react-icons";
 import type { AccountIdentifier } from "../types/caseTypes";
 import { CopyableIdentifier } from "./CopyableIdentifier";
 
@@ -122,13 +124,22 @@ const useStyles = makeStyles({
   },
   row: {
     display: "grid",
-    gridTemplateColumns: "120px 1fr auto auto",
+    gridTemplateColumns: "120px 1fr auto auto auto",
     alignItems: "center",
     columnGap: tokens.spacingHorizontalS,
     rowGap: "2px",
     fontSize: tokens.fontSizeBase200,
     paddingTop: "2px",
     paddingBottom: "2px",
+  },
+  toggleButton: {
+    minWidth: "auto",
+    height: "20px",
+    paddingLeft: tokens.spacingHorizontalXS,
+    paddingRight: tokens.spacingHorizontalXS,
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorBrandForeground1,
+    fontWeight: tokens.fontWeightSemibold,
   },
   rowLabel: {
     fontSize: tokens.fontSizeBase100,
@@ -160,9 +171,17 @@ interface AliasRowProps {
   type: IdentifierType;
   copyLabel: string;
   accountTypeText?: string;
+  /** Renders an expand/collapse toggle on this row's trailing column.
+   *  Used on the first related-identifier row to disclose the rest of
+   *  the list. Omit for normal rows. */
+  toggle?: {
+    expanded: boolean;
+    hiddenCount: number;
+    onClick: () => void;
+  };
 }
 
-function AliasRow({ label, value, type, copyLabel, accountTypeText }: AliasRowProps) {
+function AliasRow({ label, value, type, copyLabel, accountTypeText, toggle }: AliasRowProps) {
   const styles = useStyles();
   return (
     <div className={styles.row}>
@@ -175,6 +194,34 @@ function AliasRow({ label, value, type, copyLabel, accountTypeText }: AliasRowPr
       </Tag>
       {accountTypeText ? (
         <span className={styles.accountTypeText}>{accountTypeText}</span>
+      ) : (
+        <span aria-hidden />
+      )}
+      {toggle ? (
+        <Button
+          appearance="subtle"
+          size="small"
+          className={styles.toggleButton}
+          icon={
+            toggle.expanded ? (
+              <ChevronUpRegular fontSize={14} />
+            ) : (
+              <ChevronDownRegular fontSize={14} />
+            )
+          }
+          iconPosition="after"
+          onClick={toggle.onClick}
+          aria-expanded={toggle.expanded}
+          aria-label={
+            toggle.expanded
+              ? "Collapse related identifiers"
+              : `Show ${toggle.hiddenCount} more related identifier${toggle.hiddenCount === 1 ? "" : "s"}`
+          }
+        >
+          {toggle.expanded
+            ? "Show less"
+            : `Show ${toggle.hiddenCount} more`}
+        </Button>
       ) : (
         <span aria-hidden />
       )}
@@ -192,6 +239,13 @@ export function IdentifierAliasesPanel({ identifier }: IdentifierAliasesPanelPro
   const primary = ca?.primaryIdentifier;
   const related = ca?.relatedIdentifiers ?? [];
 
+  // Related list is collapsed by default — only the first alias is
+  // visible, with a toggle next to its type chip to disclose the rest.
+  // Keeps the wizard's Step 2 identifier card compact for cases where
+  // CLASS returns 10–20 aliases, while still letting the RS scan the
+  // full list when needed.
+  const [expanded, setExpanded] = React.useState(false);
+
   if (!primary && related.length === 0) return null;
 
   const accountType = ca?.accountType;
@@ -199,6 +253,9 @@ export function IdentifierAliasesPanel({ identifier }: IdentifierAliasesPanelPro
     accountType && accountType !== "N/A" ? accountType : undefined;
 
   const leType = normalizeTypeLabel(identifier.type, identifier.value);
+
+  const hasMore = related.length > 1;
+  const visibleRelated = hasMore && !expanded ? related.slice(0, 1) : related;
 
   return (
     <div className={styles.root}>
@@ -225,7 +282,7 @@ export function IdentifierAliasesPanel({ identifier }: IdentifierAliasesPanelPro
 
       {related.length > 0 && (
         <div className={styles.relatedGroup}>
-          {related.map((alias, i) => (
+          {visibleRelated.map((alias, i) => (
             <AliasRow
               key={`${alias}-${i}`}
               label={i === 0 ? `Related (${related.length})` : ""}
@@ -233,6 +290,19 @@ export function IdentifierAliasesPanel({ identifier }: IdentifierAliasesPanelPro
               type={inferIdentifierType(alias)}
               copyLabel="Copy related identifier"
               accountTypeText={accountTypeText}
+              // Toggle lives on the FIRST related row only — chevron +
+              // count label sits at the row's trailing edge so the RS
+              // sees the disclosure right next to the value/type that
+              // CLASS returned first.
+              toggle={
+                i === 0 && hasMore
+                  ? {
+                      expanded,
+                      hiddenCount: related.length - 1,
+                      onClick: () => setExpanded((v) => !v),
+                    }
+                  : undefined
+              }
             />
           ))}
         </div>

@@ -358,6 +358,18 @@ export interface PlanReviewTableProps {
    *  ignore it. */
   requestType?: string;
 
+  /** Per-identifier pending "additional date ranges" the wizard is
+   *  carrying for already-submitted categories. Shape:
+   *    { [identifierId]: { "svcKey:groupKey:itemKey": [{ start, end }] } }
+   *  Used to emit one extra preview row per pending range so the user
+   *  can review every job that the next submit will spawn — both the
+   *  primary edit AND each net-new additional date range. Optional;
+   *  empty/undefined falls through to the legacy "primary only" view. */
+  additionalDateRangesByIdentifier?: Record<
+    string,
+    Record<string, Array<{ start: string; end: string }>>
+  >;
+
   /** Callback: one RowAction computed per row gets fed here so the parent
    *  can aggregate totals for the banner + submit button. */
   onRowAction?: (action: RowAction) => void;
@@ -376,6 +388,17 @@ type RowInput = {
   collectionStatus?: string;
   isSelected: boolean;
   isRemoved: boolean;
+  /** Mark rows that represent a previously-submitted **additional**
+   *  job (sourced from `category.additionalJobs[]` on the live
+   *  identifier). These rows render alongside the primary so the user
+   *  sees every existing job for this category, not just the first. */
+  isExistingAdditionalJob?: boolean;
+  /** Mark rows that represent a **pending** new job — i.e., the
+   *  current submit will spawn this. Sourced from the wizard's
+   *  `additionalDateRanges` state. Rendered with no existingJobId so
+   *  the "Current Job" column reads as a placeholder dash + the row
+   *  copy reads as "Will create new job". */
+  isPendingNewJob?: boolean;
 };
 
 export function PlanReviewTable({
@@ -391,6 +414,7 @@ export function PlanReviewTable({
   accountCheckResults,
   dataCenterLocations,
   requestType,
+  additionalDateRangesByIdentifier,
   onRowAction,
 }: PlanReviewTableProps) {
   // The per-identifier Authorization Desired Task Status chip in the
@@ -449,6 +473,71 @@ export function PlanReviewTable({
             collectionStatus: live?.collectionStatus,
             isSelected,
             isRemoved,
+          });
+
+          // ── Additional jobs that were already submitted in prior
+          //    "Edit Fulfillment Plan" runs. One row per entry so the
+          //    user sees every job that exists today for this category
+          //    BEFORE the pending edits land. Without this, Step 3
+          //    would understate the surface area the next submit
+          //    operates against.
+          const existingAdditional: any[] = Array.isArray(live?.additionalJobs)
+            ? live.additionalJobs
+            : [];
+          existingAdditional.forEach((aj: any) => {
+            const ajStart = aj?.startDate
+              ? new Date(aj.startDate).toISOString().slice(0, 10)
+              : "";
+            const ajEnd = aj?.endDate
+              ? new Date(aj.endDate).toISOString().slice(0, 10)
+              : "";
+            rows.push({
+              identifierId: idId,
+              serviceKey: svcKey,
+              groupKey: group.key,
+              itemKey: item.key,
+              itemName: item.name,
+              serviceName: serviceName(svcKey),
+              groupName: group.name,
+              dateRange: { start: ajStart, end: ajEnd },
+              existingJobId: aj?.jobId,
+              collectionStatus: aj?.collectionStatus,
+              isSelected: true,
+              isRemoved: false,
+              isExistingAdditionalJob: true,
+            });
+          });
+
+          // ── Pending additional date ranges from the wizard's state.
+          //    One row per range so the user sees each net-new job
+          //    that the next submit will spawn (with its own date
+          //    range, distinct from the primary's). No existingJobId
+          //    yet — the "Current Job" column reads as a dash; the
+          //    aggregator below will count this as a "Create" action.
+          const pendingRanges =
+            additionalDateRangesByIdentifier?.[idId]?.[
+              `${svcKey}:${group.key}:${item.key}`
+            ] ?? [];
+          pendingRanges.forEach((r) => {
+            // Skip blank rows the user added via "+" but hasn't yet
+            // populated — keeps the review screen from listing empty
+            // placeholders.
+            if (!r?.start || !r?.end) return;
+            rows.push({
+              identifierId: idId,
+              serviceKey: svcKey,
+              groupKey: group.key,
+              itemKey: item.key,
+              itemName: item.name,
+              serviceName: serviceName(svcKey),
+              groupName: group.name,
+              dateRange: { start: r.start, end: r.end },
+              existingJobId: undefined,
+              collectionStatus: undefined,
+              isSelected: true,
+              isRemoved: false,
+              isPendingNewJob: true,
+            });
           });
         });
       });

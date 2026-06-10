@@ -84,6 +84,16 @@ const CURATED = [
     script: "verify-export-list.mjs",
     why: "Export list button on Cases + AD produces a CSV with the user's visible columns and a dated filename matching the surface.",
   },
+  {
+    name: "session-autosave",
+    script: "verify-session-autosave.mjs",
+    why: "Phase 0.5 sessionStorage autosave — state survives reload, Reset clears it, fresh tab/context starts pristine.",
+  },
+  {
+    name: "tablist-a11y",
+    script: "verify-tablist-a11y.mjs",
+    why: "Quick-filter tablist a11y on both surfaces — roving tabIndex, ArrowLeft/Right wrap, Home/End jump, panel aria-labelledby tracks active tab.",
+  },
 ];
 
 const args = process.argv.slice(2);

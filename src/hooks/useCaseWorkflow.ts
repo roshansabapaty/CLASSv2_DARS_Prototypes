@@ -367,10 +367,71 @@ export function useCaseWorkflow({
                 const now = new Date();
 
                 if (isExistingJob && isEditingCollectionScope) {
-                  // Already-submitted job: check wizard config for additional date ranges
+                  // Already-submitted job: collect every NEW date range the
+                  // wizard carries for this (service, category, item) and
+                  // spawn one additional job per range with fresh IDs.
+                  //
+                  // Two sources of "new" ranges:
+                  //   1. Explicit wizard `additionalDateRanges[rangeKey]`
+                  //      — populated when the user clicks "Add date range".
+                  //   2. Implicit single new range — when the wizard's
+                  //      effective per-category / per-service / bulk
+                  //      range differs from the primary job's stored
+                  //      startDate/endDate. Catches the case where the
+                  //      user EDITS the existing date range field (or
+                  //      uses the dialog without explicitly clicking
+                  //      "Add date range") — previously silently dropped.
+                  //
+                  // Either way the new entry is treated as a new job:
+                  // fresh `jobId`, fresh `publishJobId` (when status
+                  // simulates eligible), fresh `deliveryJobId` (assigned
+                  // later when the RS submits to delivery). The primary
+                  // job is preserved unchanged so Pipeline retains both.
                   const rangeKey = `${serviceKey}:${categoryKey}`;
-                  const additionalDateRanges = wizardAdditionalDateRanges[rangeKey] || [];
-                  const newAdditionalJobs = additionalDateRanges.map((dr: any) => {
+                  const explicitRanges: Array<{ start: string; end: string }> =
+                    wizardAdditionalDateRanges[rangeKey] || [];
+                  const wizardCatRange =
+                    wizardCategoryDateRanges[`${serviceKey}:${categoryKey}`];
+                  const wizardSvcRange = wizardServiceDateRanges[serviceKey];
+                  const wizardEffectiveRange =
+                    wizardCatRange ??
+                    wizardSvcRange ??
+                    (bulkDateRange?.start && bulkDateRange?.end
+                      ? { start: bulkDateRange.start, end: bulkDateRange.end }
+                      : null);
+                  const sameAsExistingPrimary =
+                    wizardEffectiveRange &&
+                    category.startDate &&
+                    category.endDate &&
+                    new Date(wizardEffectiveRange.start).getTime() ===
+                      new Date(category.startDate).getTime() &&
+                    new Date(wizardEffectiveRange.end).getTime() ===
+                      new Date(category.endDate).getTime();
+                  // Don't double-add if the explicit ranges already cover
+                  // the implicit one (handles the rare path where both
+                  // sources point at the same new range).
+                  const alreadyExplicit = (start: string, end: string) =>
+                    explicitRanges.some(
+                      (r) => r.start === start && r.end === end,
+                    );
+                  const implicitRanges: Array<{ start: string; end: string }> =
+                    wizardEffectiveRange &&
+                    wizardEffectiveRange.start &&
+                    wizardEffectiveRange.end &&
+                    !sameAsExistingPrimary &&
+                    !alreadyExplicit(
+                      wizardEffectiveRange.start,
+                      wizardEffectiveRange.end,
+                    )
+                      ? [
+                          {
+                            start: wizardEffectiveRange.start,
+                            end: wizardEffectiveRange.end,
+                          },
+                        ]
+                      : [];
+                  const allNewRanges = [...explicitRanges, ...implicitRanges];
+                  const newAdditionalJobs = allNewRanges.map((dr) => {
                     const newJobId = generateJobId();
                     const { collectionStatus, updateTimestamp } = simulateNewJobStatus();
                     newJobCount++;

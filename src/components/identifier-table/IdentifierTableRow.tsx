@@ -53,6 +53,7 @@ import {
 } from "./identifier-table-utils";
 import { formatDateToMMM } from "../../utils/fulfillmentWizardHelpers";
 import { CopyableIdentifier } from "../CopyableIdentifier";
+import { inferIdentifierType } from "../IdentifierAliasesPanel";
 import { AttorneyReviewPanel } from "../escalation/AttorneyReviewPanel";
 import {
   getAllSnapshot as getIpHistorySnapshot,
@@ -319,8 +320,22 @@ const useStyles = makeStyles({
     columnGap: tokens.spacingHorizontalM,
     rowGap: tokens.spacingVerticalS,
     "@media (min-width: 768px)": {
-      gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+      // Top metadata strip — 4 small fields. Related Identifiers
+      // moved to its own full-width row below so the type chip + value
+      // pairs have room to render without wrapping or tight scroll.
+      gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
     },
+  },
+  /** Full-width container for the Related Identifiers section below
+   *  the metadata strip. Gets the entire row width so the list of
+   *  (type chip · identifier value) rows can render cleanly even for
+   *  long emails / phones / Skype IDs. */
+  relatedIdentifiersSection: {
+    marginTop: tokens.spacingVerticalM,
+    paddingTop: tokens.spacingVerticalS,
+    borderTopWidth: "1px",
+    borderTopStyle: "solid",
+    borderTopColor: tokens.colorNeutralStroke3,
   },
   accountCheckLabel: {
     fontSize: "10px",
@@ -400,6 +415,68 @@ const useStyles = makeStyles({
     columnGap: "4px",
     rowGap: "4px",
     marginTop: "4px",
+  },
+  /** Container for the Related Identifiers list. Caps the visible height
+   *  to ~5 rows; anything beyond scrolls vertically. The row count is the
+   *  natural break-point on a 32px row × 5 = 160px viewport. */
+  relatedList: {
+    display: "flex",
+    flexDirection: "column",
+    rowGap: "2px",
+    marginTop: "4px",
+    maxHeight: "160px",
+    overflowY: "auto",
+    paddingRight: "4px",
+  },
+  relatedRow: {
+    display: "grid",
+    gridTemplateColumns: "minmax(96px, 120px) 1fr",
+    alignItems: "center",
+    // Shrink grid items to their natural inline width. Otherwise the
+    // CopyableIdentifier's trigger button (the Tooltip anchor) stretches
+    // to fill the 1fr cell, which causes the "Copy related identifier"
+    // tooltip to center far away from the visible copy icon.
+    justifyItems: "start",
+    columnGap: tokens.spacingHorizontalS,
+    paddingTop: "4px",
+    paddingBottom: "4px",
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.colorNeutralStroke3,
+  },
+  relatedRowLast: {
+    borderBottomStyle: "none",
+  },
+  relatedTypeChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    fontSize: "10px",
+    textTransform: "uppercase",
+    letterSpacing: "0.4px",
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground3,
+  },
+  relatedCount: {
+    fontSize: "10px",
+    color: tokens.colorNeutralForeground3,
+    marginLeft: "4px",
+    fontWeight: tokens.fontWeightRegular,
+    textTransform: "none",
+    letterSpacing: "normal",
+  },
+  primaryIdentifierRow: {
+    display: "flex",
+    alignItems: "center",
+    columnGap: tokens.spacingHorizontalXS,
+    marginTop: "2px",
+  },
+  primaryTypeChip: {
+    fontSize: "10px",
+    textTransform: "uppercase",
+    letterSpacing: "0.4px",
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground3,
+    flexShrink: 0,
   },
   ianoteText: {
     fontSize: tokens.fontSizeBase200,
@@ -982,30 +1059,69 @@ export function IdentifierTableRow({
               </div>
               <div>
                 <span className={styles.accountCheckLabel}>Primary Identifier</span>
-                <CopyableIdentifier
-                  value={primaryIdentifier}
-                  variant="inline"
-                  copyLabel="Copy primary identifier"
-                  breakAll
-                />
-              </div>
-              <div>
-                <span className={styles.accountCheckLabel}>Related Identifiers</span>
-                {relatedIdentifiers.length > 0 ? (
-                  <div className={styles.categoryChips}>
-                    {relatedIdentifiers.map((ri: string, i: number) => (
-                      <CopyableIdentifier
-                        key={i}
-                        value={ri}
-                        variant="badge"
-                        copyLabel="Copy related identifier"
-                      />
-                    ))}
+                {primaryIdentifier && primaryIdentifier !== "—" ? (
+                  <div className={styles.primaryIdentifierRow}>
+                    <span className={styles.primaryTypeChip}>
+                      {inferIdentifierType(primaryIdentifier)}
+                    </span>
+                    <CopyableIdentifier
+                      value={primaryIdentifier}
+                      variant="inline"
+                      copyLabel="Copy primary identifier"
+                      breakAll
+                    />
                   </div>
                 ) : (
                   <span className={styles.accountCheckValue}>—</span>
                 )}
               </div>
+            </div>
+            {/* Related Identifiers — full-width row beneath the
+                metadata strip. Gets the entire row so the
+                (type chip · value) pairs render cleanly even for
+                long emails / phone numbers / Skype IDs. */}
+            <div className={styles.relatedIdentifiersSection}>
+              <span className={styles.accountCheckLabel}>
+                Related Identifiers
+                {relatedIdentifiers.length > 0 && (
+                  <span className={styles.relatedCount}>
+                    ({relatedIdentifiers.length}
+                    {relatedIdentifiers.length > 5 ? " · scroll for all" : ""})
+                  </span>
+                )}
+              </span>
+              {relatedIdentifiers.length > 0 ? (
+                <div
+                  className={styles.relatedList}
+                  role="list"
+                  aria-label={`${relatedIdentifiers.length} related identifiers`}
+                >
+                  {relatedIdentifiers.map((ri: string, i: number) => (
+                    <div
+                      key={`${ri}-${i}`}
+                      role="listitem"
+                      className={mergeClasses(
+                        styles.relatedRow,
+                        i === relatedIdentifiers.length - 1
+                          ? styles.relatedRowLast
+                          : undefined,
+                      )}
+                    >
+                      <span className={styles.relatedTypeChip}>
+                        {inferIdentifierType(ri)}
+                      </span>
+                      <CopyableIdentifier
+                        value={ri}
+                        variant="inline"
+                        copyLabel="Copy related identifier"
+                        breakAll
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className={styles.accountCheckValue}>—</span>
+              )}
             </div>
           </td>
         </tr>

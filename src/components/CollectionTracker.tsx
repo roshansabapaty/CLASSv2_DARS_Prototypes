@@ -145,6 +145,7 @@ import {
   ChevronRight,
   Copy,
   ShieldBan,
+  Info,
 } from "lucide-react";
 import {
   Dialog,
@@ -189,8 +190,16 @@ import { ResolveCaseDialog } from "./case-resolution/ResolveCaseDialog";
 // shadcn Select/Textarea/Input/Label replaced by @fluentui/react-components
 
 // Helper to create a composite key for a pipeline job
-const getJobKey = (identifierId: string, serviceKey: string, categoryKey: string, accountType: string) =>
-  `${identifierId}|${serviceKey}|${categoryKey}|${accountType}`;
+const getJobKey = (
+  identifierId: string,
+  serviceKey: string,
+  categoryKey: string,
+  accountType: string,
+  addJobIdx?: number,
+) =>
+  addJobIdx !== undefined && addJobIdx >= 0
+    ? `${identifierId}|${serviceKey}|${categoryKey}|${accountType}|${addJobIdx}`
+    : `${identifierId}|${serviceKey}|${categoryKey}|${accountType}`;
 
 // Format category name — supports compound "groupKey:itemKey" keys from new data model
 const formatCategoryName = (categoryKey: string) => {
@@ -380,12 +389,23 @@ export function CollectionTracker({
   // Not Started → Started (submit) or Failed → Started (retry).
   const [deliveryReviewMode, setDeliveryReviewMode] = useState<"submit" | "retry">("submit");
   const [showPublishReview, setShowPublishReview] = useState(false);
+  // Mirror of `deliveryReviewMode` for the Package stage. The "Review &
+  // Package" dialog doubles as the Retry Package dialog when the RS
+  // clicks a per-row Retry on a publish-failed job. Mode swaps the
+  // title / source list / submit button copy; handlePublishSelected
+  // branches on it to flip either Not Started → Started (submit) or
+  // Failed → Started (retry).
+  const [publishReviewMode, setPublishReviewMode] = useState<"submit" | "retry">("submit");
   const [showDeliveryReview, setShowDeliveryReview] = useState(false);
   // Bug #2: confirmation dialog before bulk-starting collection. The
   // dialog surfaces the job count + identifier count so the RS sees
   // exactly what they're committing to before kicking off the IA's
   // backend processing.
   const [showStartCollectionDialog, setShowStartCollectionDialog] = useState(false);
+  // Mode flips the StartCollection confirm dialog between "start" (the
+  // default bulk-start path) and "retry" (Failed → Started for collect
+  // failures). Same dialog, different copy + handler routing.
+  const [collectionStartMode, setCollectionStartMode] = useState<"start" | "retry">("start");
   // Document viewer state — Collection now uses the same shared
   // `DocumentViewerPanel` (with Verify / Reject / per-document properties)
   // that Triage and Review Case mount. We alias `warrantModalOpen` to
@@ -1291,6 +1311,22 @@ export function CollectionTracker({
     return allPipelineJobs.filter(j => j.deliveryStatus === "Failed");
   }, [allPipelineJobs, formData]);
 
+  // Jobs that hit a publish error. Same shape as retryableJobs but for
+  // the Package stage — drives Retry Package both per-row and bulk via
+  // the same PublishReview dialog under retry mode. EPOC-PR cases never
+  // produce publish jobs at all so the list stays empty there.
+  const retryablePublishJobs = useMemo(() => {
+    if (isEpocPrCase(formData)) return [];
+    return allPipelineJobs.filter(j => j.publishStatus === "Failed");
+  }, [allPipelineJobs, formData]);
+
+  // Jobs that hit a collection error. The Start Collection confirm
+  // dialog reopens in retry mode against this list — same dialog, just
+  // flips Failed → Started instead of Not Started → Started.
+  const retryableCollectionJobs = useMemo(() => {
+    return allPipelineJobs.filter(j => j.collectionStatus === "Failed");
+  }, [allPipelineJobs]);
+
   /** Open the Review dialog in Retry mode, pre-selecting the supplied
    *  jobKeys (or all failed jobs when no subset is passed). Mirrors the
    *  "Submit to Delivery" UX so the RS gets the same familiar pattern
@@ -1312,6 +1348,30 @@ export function CollectionTracker({
   const openDeliveryReviewForSubmit = React.useCallback(() => {
     setDeliveryReviewMode("submit");
     setShowDeliveryReview(true);
+  }, []);
+
+  /** Open the Publish Review dialog in Retry mode, pre-selecting the
+   *  supplied jobKeys (or all publish-failed jobs when no subset is
+   *  passed). Mirrors openDeliveryReviewForRetry so per-row Retry on a
+   *  publish-failed row routes to the same familiar review surface. */
+  const openPublishReviewForRetry = React.useCallback(
+    (jobKeys?: string[]) => {
+      const keys = jobKeys && jobKeys.length > 0
+        ? jobKeys
+        : retryablePublishJobs.map(j => j.jobKey);
+      setPublishReviewMode("retry");
+      setSelectedJobsForPublish(new Set(keys));
+      setShowPublishReview(true);
+    },
+    [retryablePublishJobs],
+  );
+
+  /** Open the StartCollection confirm dialog in retry mode. The single
+   *  dialog instance branches on collectionStartMode for copy + handler
+   *  routing — same UX shape as the publish/delivery dialogs above. */
+  const openCollectionRetryConfirm = React.useCallback(() => {
+    setCollectionStartMode("retry");
+    setShowStartCollectionDialog(true);
   }, []);
 
   // Handler for manual collection status updates
@@ -2029,11 +2089,96 @@ export function CollectionTracker({
     );
   }, [formData, setSharedFormData]);
 
-  // Handle publish selected jobs
+  // Bulk retry every Failed collection job. Confirmation comes from the
+  // StartCollection dialog reopened in retry mode (collectionStartMode).
+  const handleRetryCollectionAll = useCallback(() => {
+    if (!setSharedFormData || !formData) return;
+    let retried = 0;
+    const updatedFormData = { ...formData };
+    updatedFormData.identifiers = updatedFormData.identifiers.map((identifier) => {
+      const updatedServices = { ...identifier.services };
+      Object.entries(updatedServices).forEach(([serviceKey, service]: [string, any]) => {
+        let updatedGroups = { ...service.categoryGroups };
+        iterateServiceCategories(service, (categoryKey, category: any) => {
+          if (!category.enabled) return;
+          if (category.collectionStatus !== "Failed") return;
+          updatedGroups = applyItemUpdate(updatedGroups, categoryKey, {
+            collectionStatus: "Started",
+            collectionError: undefined,
+            collectionStatusUpdatedAt: new Date().toISOString(),
+          });
+          retried++;
+        });
+        updatedServices[serviceKey] = { ...service, categoryGroups: updatedGroups };
+      });
+      return { ...identifier, services: updatedServices };
+    });
+    if (retried === 0) {
+      toast.info("No failed collection jobs to retry", {
+        description: "All collection jobs are either started, complete, or queued.",
+      });
+      return;
+    }
+    const now = new Date();
+    updatedFormData.escalationAuditEvents = [
+      ...(updatedFormData.escalationAuditEvents ?? []),
+      {
+        id: `audit-retry-collection-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+        kind: "Resumed",
+        actor: CURRENT_USER,
+        actorRole: "ResponseSpecialist",
+        performedAt: now,
+        note: `Retried collection on ${retried} job${retried === 1 ? "" : "s"} after collection error.`,
+      },
+    ];
+    setSharedFormData(updatedFormData);
+    toast.success(
+      `Retry queued for ${retried} collection ${retried === 1 ? "job" : "jobs"}`,
+      {
+        description: "Status flipped to Started. Click Refresh to advance the jobs.",
+      },
+    );
+    setReadinessFilter('by-identifier');
+  }, [formData, setSharedFormData, setReadinessFilter]);
+
+  // Retry a single Failed collection job (per-row action). Same patch
+  // as handleRetryCollectionAll but scoped to one (identifier, service,
+  // category) tuple — no confirm needed for single-row.
+  const handleRetryCollectionOne = useCallback(
+    (identifierId: string, serviceKey: string, categoryKey: string) => {
+      if (!setSharedFormData || !formData) return;
+      const updatedFormData = { ...formData };
+      updatedFormData.identifiers = updatedFormData.identifiers.map((identifier) => {
+        if (identifier.id !== identifierId) return identifier;
+        const updatedServices = { ...identifier.services };
+        const service = updatedServices[serviceKey];
+        if (!service) return identifier;
+        const updatedGroups = applyItemUpdate(service.categoryGroups, categoryKey, {
+          collectionStatus: "Started",
+          collectionError: undefined,
+          collectionStatusUpdatedAt: new Date().toISOString(),
+        });
+        updatedServices[serviceKey] = { ...service, categoryGroups: updatedGroups };
+        return { ...identifier, services: updatedServices };
+      });
+      setSharedFormData(updatedFormData);
+      toast.success("Collection retry queued", {
+        description: "Status flipped to Started. Click Refresh to advance the job.",
+      });
+    },
+    [formData, setSharedFormData],
+  );
+
+  // Handle publish selected jobs. Mirrors handleDeliverySelected — the
+  // same dialog routes both Submit (Not Started → Started) and Retry
+  // (Failed → Started + clears publishError) through one handler.
   const handlePublishSelected = () => {
+    const isRetry = publishReviewMode === "retry";
     if (selectedJobsForPublish.size === 0) {
       toast.error("No jobs selected", {
-        description: "Please select at least one completed collection job to submit for publishing",
+        description: isRetry
+          ? "Please select at least one failed package job to retry."
+          : "Please select at least one completed collection job to submit for publishing",
       });
       return;
     }
@@ -2056,19 +2201,33 @@ export function CollectionTracker({
 
           iterateServiceCategories(service, (categoryKey, category: any) => {
             if (!category.enabled || category.collectionStatus !== "Complete") return;
-            if (category.publishStatus && category.publishStatus !== "Not Started") return;
+            // Submit mode acts on Not Started jobs; retry mode acts on
+            // Failed jobs. Anything else is skipped.
+            if (isRetry) {
+              if (category.publishStatus !== "Failed") return;
+            } else {
+              if (category.publishStatus && category.publishStatus !== "Not Started") return;
+            }
 
             const isSelected = accountTypes.some(at =>
               selectedJobsForPublish.has(getJobKey(identifier.id, serviceKey, categoryKey, at))
             );
 
             if (isSelected) {
-              const publishJobId = `PUB-${generateJobId()}`;
-              updatedGroups = applyItemUpdate(updatedGroups, categoryKey, {
-                publishStatus: "Started",
-                publishJobId,
-                publishStatusUpdatedAt: new Date().toISOString(),
-              });
+              if (isRetry) {
+                updatedGroups = applyItemUpdate(updatedGroups, categoryKey, {
+                  publishStatus: "Started",
+                  publishError: undefined,
+                  publishStatusUpdatedAt: new Date().toISOString(),
+                });
+              } else {
+                const publishJobId = `PUB-${generateJobId()}`;
+                updatedGroups = applyItemUpdate(updatedGroups, categoryKey, {
+                  publishStatus: "Started",
+                  publishJobId,
+                  publishStatusUpdatedAt: new Date().toISOString(),
+                });
+              }
               jobCount++;
             }
           });
@@ -2078,18 +2237,46 @@ export function CollectionTracker({
         return { ...identifier, services: updatedServices };
       });
 
+      // Audit-trail event for the retry path mirrors the delivery-retry
+      // handler so operations have a single source for who retried what.
+      if (isRetry && jobCount > 0) {
+        const now = new Date();
+        updatedFormData.escalationAuditEvents = [
+          ...(updatedFormData.escalationAuditEvents ?? []),
+          {
+            id: `audit-retry-publish-${now.getTime().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            kind: "Resumed",
+            actor: CURRENT_USER,
+            actorRole: "ResponseSpecialist",
+            performedAt: now,
+            note: `Retried package on ${jobCount} job${jobCount === 1 ? "" : "s"} after publish error.`,
+          },
+        ];
+      }
+
       setSharedFormData(updatedFormData);
     }
 
+    const sourceList = isRetry ? retryablePublishJobs : publishableJobs;
     const uniqueIdentifiers = new Set(
-      publishableJobs.filter(j => selectedJobsForPublish.has(j.jobKey)).map(j => j.identifierId)
+      sourceList.filter(j => selectedJobsForPublish.has(j.jobKey)).map(j => j.identifierId)
     );
 
-    toast.success(`Preparing ${jobCount} ${jobCount === 1 ? 'job' : 'jobs'} from ${uniqueIdentifiers.size} ${uniqueIdentifiers.size === 1 ? 'identifier' : 'identifiers'}`, {
-      description: "Switched to By Identifier view — package jobs started",
-    });
+    if (isRetry) {
+      toast.success(
+        `Retry queued for ${jobCount} package ${jobCount === 1 ? 'job' : 'jobs'} across ${uniqueIdentifiers.size} ${uniqueIdentifiers.size === 1 ? 'identifier' : 'identifiers'}`,
+        {
+          description: "Status flipped to Started. Next pipeline refresh will surface the new packaging outcome.",
+        },
+      );
+    } else {
+      toast.success(`Preparing ${jobCount} ${jobCount === 1 ? 'job' : 'jobs'} from ${uniqueIdentifiers.size} ${uniqueIdentifiers.size === 1 ? 'identifier' : 'identifiers'}`, {
+        description: "Switched to By Identifier view — package jobs started",
+      });
+    }
 
     setSelectedJobsForPublish(new Set());
+    setPublishReviewMode("submit");
     // Auto-switch to By Identifier tab so the user sees the newly publishing items
     setReadinessFilter('by-identifier');
   };
@@ -3087,48 +3274,111 @@ export function CollectionTracker({
                 scope of what they're starting. Cancel just dismisses;
                 Confirm fires `handleStartCollectionAll` which flips the
                 NotStarted jobs to Started and toasts the count. */}
-            <Dialog open={showStartCollectionDialog} onOpenChange={setShowStartCollectionDialog}>
+            <Dialog
+              open={showStartCollectionDialog}
+              onOpenChange={(open) => {
+                setShowStartCollectionDialog(open);
+                if (!open) setCollectionStartMode("start");
+              }}
+            >
               <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2 text-[#0078d4]">
-                    <Zap className="w-5 h-5" />
-                    Start Collection
-                  </DialogTitle>
-                  <DialogDescription className="text-[#605e5c]">
-                    This will kick off collection on{" "}
-                    <span className="font-semibold text-[#323130]">
-                      {collectionStats.notStarted} queued{" "}
-                      {collectionStats.notStarted === 1 ? "job" : "jobs"}
-                    </span>{" "}
-                    across the case's enabled data categories. The IA's
-                    backend processes the requests; click Refresh to tick
-                    job statuses toward Complete.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="bg-[#deecf9] border border-[#0078d4]/30 rounded-md p-3 text-xs text-[#243a5e] flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>
-                    Started jobs cannot be returned to the queue. Once
-                    Complete, you'll explicitly review + submit them to
-                    the Package phase via "Review &amp; Package".
-                  </span>
-                </div>
-                <div className="flex justify-end gap-2 mt-2">
-                  <Button variant="outline" size="sm" onClick={() => setShowStartCollectionDialog(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-[#0078d4] hover:bg-[#106ebe] text-white"
-                    onClick={() => {
-                      setShowStartCollectionDialog(false);
-                      handleStartCollectionAll();
-                    }}
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    Start Collection
-                  </Button>
-                </div>
+                {(() => {
+                  const isRetry = collectionStartMode === "retry";
+                  const failedCount = retryableCollectionJobs.length;
+                  return (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle
+                          className={cn(
+                            "flex items-center gap-2",
+                            isRetry ? "text-[#a4262c]" : "text-[#0078d4]",
+                          )}
+                        >
+                          {isRetry ? (
+                            <RotateCcw className="w-5 h-5" />
+                          ) : (
+                            <Zap className="w-5 h-5" />
+                          )}
+                          {isRetry ? "Retry Failed Collection" : "Start Collection"}
+                        </DialogTitle>
+                        <DialogDescription className="text-[#605e5c]">
+                          {isRetry ? (
+                            <>
+                              This will requeue{" "}
+                              <span className="font-semibold text-[#323130]">
+                                {failedCount} failed collection{" "}
+                                {failedCount === 1 ? "job" : "jobs"}
+                              </span>{" "}
+                              by flipping their status back to Started.
+                              Click Refresh after to tick statuses toward
+                              Complete.
+                            </>
+                          ) : (
+                            <>
+                              This will kick off collection on{" "}
+                              <span className="font-semibold text-[#323130]">
+                                {collectionStats.notStarted} queued{" "}
+                                {collectionStats.notStarted === 1 ? "job" : "jobs"}
+                              </span>{" "}
+                              across the case's enabled data categories. The
+                              IA's backend processes the requests; click
+                              Refresh to tick job statuses toward Complete.
+                            </>
+                          )}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div
+                        className={cn(
+                          "border rounded-md p-3 text-xs flex items-start gap-2",
+                          isRetry
+                            ? "bg-[#fde7e9] border-[#a4262c]/30 text-[#a4262c]"
+                            : "bg-[#deecf9] border-[#0078d4]/30 text-[#243a5e]",
+                        )}
+                      >
+                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <span>
+                          {isRetry
+                            ? "Retried jobs clear their prior error and start fresh. Failed jobs that succeed will then flow through to Review & Package as usual."
+                            : 'Started jobs cannot be returned to the queue. Once Complete, you\'ll explicitly review + submit them to the Package phase via "Review & Package".'}
+                        </span>
+                      </div>
+                      <div className="flex justify-end gap-2 mt-2">
+                        <Button variant="outline" size="sm" onClick={() => setShowStartCollectionDialog(false)}>
+                          Cancel
+                        </Button>
+                        <Button
+                          size="sm"
+                          className={cn(
+                            "text-white",
+                            isRetry
+                              ? "bg-[#a4262c] hover:bg-[#8a2121]"
+                              : "bg-[#0078d4] hover:bg-[#106ebe]",
+                          )}
+                          onClick={() => {
+                            setShowStartCollectionDialog(false);
+                            if (isRetry) {
+                              handleRetryCollectionAll();
+                            } else {
+                              handleStartCollectionAll();
+                            }
+                          }}
+                        >
+                          {isRetry ? (
+                            <>
+                              <RotateCcw className="w-4 h-4 mr-2" />
+                              Retry Failed Collection
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4 mr-2" />
+                              Start Collection
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </>
+                  );
+                })()}
               </DialogContent>
             </Dialog>
 
@@ -3305,10 +3555,38 @@ export function CollectionTracker({
                       disabled={cancellationLocked}
                       title={cancellationLockedTooltip}
                       className="w-full h-8 bg-[#0078d4] hover:bg-[#106ebe] text-white text-xs"
-                      onClick={() => setShowStartCollectionDialog(true)}
+                      onClick={() => {
+                        setCollectionStartMode("start");
+                        setShowStartCollectionDialog(true);
+                      }}
                     >
                       <Zap className="w-3 h-3 mr-1.5" />
                       Start Collection ({collectionStats.notStarted})
+                    </Button>
+                  </div>
+                )}
+
+                {/* Bulk Retry Collection CTA — surfaces whenever any
+                    enabled data-category job is in the Failed state.
+                    Reuses the StartCollection confirm dialog under
+                    collectionStartMode === "retry". */}
+                {retryableCollectionJobs.length > 0 && (
+                  <div className={cn(
+                    "mt-auto pt-3 mt-3 border-t border-[#a4262c]/40 flex flex-col gap-2",
+                    collectionStats.notStarted > 0 ? "border-t-0 pt-0 mt-0" : "",
+                  )}>
+                    <p className="text-xs text-[#a4262c]">
+                      {retryableCollectionJobs.length} failed collection {retryableCollectionJobs.length === 1 ? "job" : "jobs"} — flip back to Started.
+                    </p>
+                    <Button
+                      size="sm"
+                      disabled={cancellationLocked}
+                      title={cancellationLockedTooltip}
+                      className="w-full h-8 bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] text-xs font-semibold"
+                      onClick={openCollectionRetryConfirm}
+                    >
+                      <RotateCcw className="w-3 h-3 mr-1.5" />
+                      Retry Failed Collection ({retryableCollectionJobs.length})
                     </Button>
                   </div>
                 )}
@@ -3347,6 +3625,7 @@ export function CollectionTracker({
                               : "bg-[#107c10] hover:bg-[#0e6b0e]"
                           )}
                           onClick={() => {
+                            setPublishReviewMode("submit");
                             setSelectedJobsForPublish(new Set(publishableJobs.map((j: PipelineJob) => j.jobKey)));
                             setShowPublishReview(true);
                           }}
@@ -3439,13 +3718,18 @@ export function CollectionTracker({
                   {pipelineStats.publishSubmitted === 0 && <span className="text-[#a19f9d]">No jobs submitted yet</span>}
                 </div>
 
-                {/* Package action footer — jobs ready to deliver. The
-                    Submit-to-Delivery button (the WISP `/eevidence/outcome`
-                    push for eEvidence cases) is gated on the case-level
-                    delivery permission so the EA review window and Full
-                    GFR holds visibly disable it instead of silently
-                    bouncing the click. */}
-                {deliverableJobs.length > 0 && (() => {
+                {/* Package action footer — jobs ready to deliver + bulk retry
+                    for any failed-package jobs. The Retry Failed Package CTA
+                    lives in this stage (not Collection) because retrying a
+                    failed Package job lands the work back in the Package
+                    pipeline — placing the action in the stage it succeeds in
+                    keeps the mental model "fix the failure where it happens."
+                    The Submit-to-Delivery button (the WISP
+                    `/eevidence/outcome` push for eEvidence cases) is gated
+                    on the case-level delivery permission so the EA review
+                    window and Full GFR holds visibly disable it instead of
+                    silently bouncing the click. */}
+                {(deliverableJobs.length > 0 || retryablePublishJobs.length > 0) && (() => {
                   const deliveryGateReason: string | undefined = !canDeliverCase
                     ? isGfrEnforced(formData)
                       ? "Action blocked — GFR enforced by the RS. See the GFR Panel."
@@ -3461,38 +3745,59 @@ export function CollectionTracker({
                       "mt-auto pt-3 mt-3 border-t flex flex-col gap-2",
                       newDeliverAction ? "border-[#ca5010]" : "border-[#c6e0c6]"
                     )}>
-                      <p className="text-xs text-[#605e5c]">
-                        {deliverableJobs.length} {deliverableJobs.length === 1 ? 'job' : 'jobs'} ready to deliver
-                      </p>
-                      <Button
-                        size="sm"
-                        disabled={deliveryDisabled}
-                        title={deliveryGateReason}
-                        className={cn(
-                          "w-full h-8 text-white text-xs",
-                          deliveryDisabled
-                            ? "bg-[#a19f9d] hover:bg-[#a19f9d] cursor-not-allowed"
-                            : newDeliverAction
-                              ? "bg-[#ca5010] ring-2 ring-[#ca5010] ring-offset-1 animate-pulse hover:bg-[#b3480e]"
-                              : "bg-[#ca5010] hover:bg-[#b3480e]"
-                        )}
-                        onClick={() => {
-                          if (deliveryDisabled) return;
-                          setSelectedJobsForDelivery(new Set(deliverableJobs.map((j: PipelineJob) => j.jobKey)));
-                          setShowDeliveryReview(true);
-                        }}
-                      >
-                        <Truck className="w-3 h-3 mr-1.5" />
-                        {!canDeliverCase
-                          ? isGfrEnforced(formData)
-                            ? "Blocked — GFR enforced"
-                            : "Blocked — EA review window"
-                          : `Review & Deliver (${deliverableJobs.length})`}
-                      </Button>
-                      {deliveryGateReason && !canDeliverCase && (
-                        <p className="text-[11px] text-[#a4262c]">
-                          {deliveryGateReason}
-                        </p>
+                      {retryablePublishJobs.length > 0 && (
+                        <>
+                          <p className="text-xs text-[#a4262c]">
+                            {retryablePublishJobs.length} failed package {retryablePublishJobs.length === 1 ? 'job' : 'jobs'} — review and retry.
+                          </p>
+                          <Button
+                            size="sm"
+                            disabled={cancellationLocked}
+                            title={cancellationLockedTooltip}
+                            className="w-full h-8 bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] text-xs font-semibold"
+                            onClick={() => openPublishReviewForRetry()}
+                          >
+                            <RotateCcw className="w-3 h-3 mr-1.5" />
+                            Retry Failed Package ({retryablePublishJobs.length})
+                          </Button>
+                        </>
+                      )}
+                      {deliverableJobs.length > 0 && (
+                        <>
+                          <p className="text-xs text-[#605e5c]">
+                            {deliverableJobs.length} {deliverableJobs.length === 1 ? 'job' : 'jobs'} ready to deliver
+                          </p>
+                          <Button
+                            size="sm"
+                            disabled={deliveryDisabled}
+                            title={deliveryGateReason}
+                            className={cn(
+                              "w-full h-8 text-white text-xs",
+                              deliveryDisabled
+                                ? "bg-[#a19f9d] hover:bg-[#a19f9d] cursor-not-allowed"
+                                : newDeliverAction
+                                  ? "bg-[#ca5010] ring-2 ring-[#ca5010] ring-offset-1 animate-pulse hover:bg-[#b3480e]"
+                                  : "bg-[#ca5010] hover:bg-[#b3480e]"
+                            )}
+                            onClick={() => {
+                              if (deliveryDisabled) return;
+                              setSelectedJobsForDelivery(new Set(deliverableJobs.map((j: PipelineJob) => j.jobKey)));
+                              setShowDeliveryReview(true);
+                            }}
+                          >
+                            <Truck className="w-3 h-3 mr-1.5" />
+                            {!canDeliverCase
+                              ? isGfrEnforced(formData)
+                                ? "Blocked — GFR enforced"
+                                : "Blocked — EA review window"
+                              : `Review & Deliver (${deliverableJobs.length})`}
+                          </Button>
+                          {deliveryGateReason && !canDeliverCase && (
+                            <p className="text-[11px] text-[#a4262c]">
+                              {deliveryGateReason}
+                            </p>
+                          )}
+                        </>
                       )}
                     </div>
                   );
@@ -3576,7 +3881,7 @@ export function CollectionTracker({
                     <Button
                       size="sm"
                       onClick={() => openDeliveryReviewForRetry()}
-                      className="h-7 px-2 text-xs bg-[#a4262c] hover:bg-[#8a2121] text-white border-0 shadow-sm"
+                      className="h-7 px-2 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
                     >
                       <RotateCcw className="w-3 h-3 mr-1" aria-hidden="true" />
                       Retry Delivery
@@ -4151,11 +4456,17 @@ export function CollectionTracker({
                       const showConsumer = service.includeConsumerAccount !== false;
                       const showEnterprise = service.includeEnterpriseAccount === true;
 
-                      // Calculate total job count for this service (automated only)
-                      let serviceJobCount = automatedCats.length;
-                      if (showConsumer && showEnterprise) {
-                        serviceJobCount = automatedCats.length * 2;
-                      }
+                      // Calculate total job count for this service (automated only).
+                      // Each category contributes 1 row for the primary job plus N rows
+                      // for its additionalJobs[] entries; account-type multiplier doubles
+                      // the count when both consumer + enterprise are enabled.
+                      const totalCategoryRows = automatedCats.reduce(
+                        (sum: number, [, cat]: [string, any]) =>
+                          sum + 1 + (cat?.additionalJobs?.length || 0),
+                        0,
+                      );
+                      const accountTypeMultiplier = showConsumer && showEnterprise ? 2 : 1;
+                      let serviceJobCount = totalCategoryRows * accountTypeMultiplier;
 
                       return (
                         <div key={serviceKey} className="mb-6 last:mb-0">
@@ -4216,24 +4527,55 @@ export function CollectionTracker({
                               </span>
                             </div>
                             <div className="space-y-0">
-                            {automatedCats.map(([categoryKey, category]: [string, any]) => {
+                            {automatedCats.map(([categoryKey, originalCategory]: [string, any]) => {
                               // Create array of account types to display
                               const accountTypes: Array<{ type: 'consumer' | 'enterprise'; label: string; icon: any }> = [];
-                              
+
                               if (showConsumer) {
                                 accountTypes.push({ type: 'consumer', label: 'Consumer', icon: User });
                               }
                               if (showEnterprise) {
                                 accountTypes.push({ type: 'enterprise', label: 'Enterprise', icon: Building2 });
                               }
-                              
+
                               // If no specific account type flags, show as default (consumer)
                               if (accountTypes.length === 0) {
                                 accountTypes.push({ type: 'consumer', label: 'Consumer', icon: User });
                               }
 
+                              // Unfurl additionalJobs (duplicate jobs with different date
+                              // ranges) into their own rendered rows. addJobIdx = -1 means
+                              // the original/primary job; 0..N-1 maps to category.additionalJobs[].
+                              const additionalJobs = originalCategory.additionalJobs || [];
+                              const categoryVariants: Array<{ category: any; addJobIdx: number }> = [
+                                { category: originalCategory, addJobIdx: -1 },
+                                ...additionalJobs.map((aj: any, idx: number) => ({
+                                  category: {
+                                    ...originalCategory,
+                                    jobId: aj.jobId,
+                                    publishJobId: aj.publishJobId,
+                                    deliveryJobId: aj.deliveryJobId,
+                                    collectionStatus: aj.collectionStatus,
+                                    publishStatus: aj.publishStatus,
+                                    deliveryStatus: aj.deliveryStatus,
+                                    startDate: aj.startDate,
+                                    endDate: aj.endDate,
+                                    createdOn: aj.createdOn,
+                                    collectionStatusUpdatedAt: aj.collectionStatusUpdatedAt,
+                                    publishStatusUpdatedAt: aj.publishStatusUpdatedAt,
+                                    deliveryStatusUpdatedAt: aj.deliveryStatusUpdatedAt,
+                                    deliveryError: aj.deliveryError,
+                                    collectionError: aj.collectionError,
+                                    publishError: aj.publishError,
+                                  },
+                                  addJobIdx: idx,
+                                })),
+                              ];
+
                               return (
                                 <div key={categoryKey}>
+                                  {categoryVariants.map(({ category, addJobIdx }) => (
+                                  <React.Fragment key={`${categoryKey}-variant-${addJobIdx}`}>
                                   {accountTypes.map((accountType) => {
                                     const Icon = accountType.icon;
                                     const jobIdSuffix = accountType.type === 'enterprise' ? '-ENT' : '';
@@ -4276,13 +4618,14 @@ export function CollectionTracker({
                                     
                                     return (
                                       <div
-                                        key={`${categoryKey}-${accountType.type}`}
+                                        key={`${categoryKey}-${accountType.type}-${addJobIdx}`}
                                         className={cn(
                                           "flex items-center justify-between p-3 bg-white border rounded hover:border-[#c8c6c4] transition-colors",
-                                          // Highlight the row when WISP reported an error so the
-                                          // RS can spot it at a glance across both Identifier
+                                          // Highlight any row that hit a pipeline error
+                                          // (delivery WISP / publish / collection) so the RS
+                                          // can spot it at a glance across both Identifier
                                           // and All views.
-                                          delStatus === "Failed"
+                                          delStatus === "Failed" || pubStatus === "Failed" || colStatus === "Failed"
                                             ? "border-[#a4262c]/40 bg-[#fff5f5]"
                                             : isFullyComplete
                                               ? "border-[#edebe9] bg-[#fcfcfc]"
@@ -4299,18 +4642,63 @@ export function CollectionTracker({
                                           </div>
                                           {/* Account Type */}
                                           <div>
-                                            <Badge
-                                              variant="outline"
-                                              className={cn(
-                                                "text-xs",
-                                                accountType.type === 'enterprise'
-                                                  ? "bg-[#fef9f5] text-[#ca5010] border-[#ca5010]"
-                                                  : "bg-[#f3f2f1] text-[#605e5c] border-[#8a8886]"
-                                              )}
-                                            >
-                                              <Icon className="w-3 h-3 mr-1" />
-                                              {accountType.label}
-                                            </Badge>
+                                            <span className="inline-flex items-center gap-1">
+                                              <Badge
+                                                variant="outline"
+                                                className={cn(
+                                                  "text-xs",
+                                                  accountType.type === 'enterprise'
+                                                    ? "bg-[#fef9f5] text-[#ca5010] border-[#ca5010]"
+                                                    : "bg-[#f3f2f1] text-[#605e5c] border-[#8a8886]"
+                                                )}
+                                              >
+                                                <Icon className="w-3 h-3 mr-1" />
+                                                {accountType.label}
+                                              </Badge>
+                                              {(() => {
+                                                // Resolved identifier — the internal ID the
+                                                // collector uses for this account-type's job.
+                                                // Surfaces in a hover bubble next to the
+                                                // Consumer/Enterprise badge so the RS can
+                                                // reference it during debug sessions with
+                                                // engineering. Falls back to the first entry
+                                                // in `consumerAccounts` / `enterpriseAccounts`
+                                                // when the explicit `*ResolvedIdentifier` field
+                                                // hasn't been seeded.
+                                                const ax = service.accountExistence;
+                                                const resolved = accountType.type === 'enterprise'
+                                                  ? ax?.enterpriseResolvedIdentifier
+                                                    ?? (ax?.enterpriseAccounts?.[0]
+                                                      ? { type: "Resolved ID", value: ax.enterpriseAccounts[0] }
+                                                      : null)
+                                                  : ax?.consumerResolvedIdentifier
+                                                    ?? (ax?.consumerAccounts?.[0]
+                                                      ? { type: "Resolved ID", value: ax.consumerAccounts[0] }
+                                                      : null);
+                                                if (!resolved) return null;
+                                                return (
+                                                  <TooltipProvider delayDuration={200}>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <button
+                                                          type="button"
+                                                          aria-label={`Show resolved identifier for ${accountType.label}`}
+                                                          className="text-[#605e5c] hover:text-[#0078d4] cursor-help leading-none"
+                                                          onClick={(e) => e.stopPropagation()}
+                                                        >
+                                                          <Info className="w-3 h-3" />
+                                                        </button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent side="top" className="text-xs max-w-[320px]">
+                                                        <p className="font-semibold mb-1">Resolved identifier</p>
+                                                        <p className="text-[11px] text-[#a19f9d] mb-0.5">{resolved.type}</p>
+                                                        <p className="font-mono text-[11px] break-all">{resolved.value}</p>
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                );
+                                              })()}
+                                            </span>
                                             {(() => {
                                               const planLoc = (identifier as any).fulfillmentPlan?.services?.[serviceKey]?.dataCenterLocation;
                                               const acctLoc = accountType.type === 'enterprise'
@@ -4363,8 +4751,31 @@ export function CollectionTracker({
                                           <div>
                                             <div className="space-y-0.5">
                                               {(() => {
-                                                const pubJobId = category.publishJobId ? `${category.publishJobId}${jobIdSuffix}` : null;
-                                                const delJobId = category.deliveryJobId ? `${category.deliveryJobId}${jobIdSuffix}` : null;
+                                                // Invariant guard: every job must flow Collection → Package → Delivery,
+                                                // so whenever publishStatus / deliveryStatus indicate work has happened
+                                                // (Started / Complete / Failed / Acknowledged), the corresponding job ID
+                                                // must exist. If the seed forgot to set it, derive a synthetic ID from the
+                                                // collection jobId so the row never displays "C: id · P: — · D: id" which
+                                                // would be structurally impossible.
+                                                const publishRan =
+                                                  category.publishStatus === "Started" ||
+                                                  category.publishStatus === "Complete" ||
+                                                  category.publishStatus === "Failed";
+                                                const deliveryRan =
+                                                  category.deliveryStatus === "Started" ||
+                                                  category.deliveryStatus === "Complete" ||
+                                                  category.deliveryStatus === "Failed" ||
+                                                  category.deliveryStatus === "DeliveryAcknowledged";
+                                                const pubJobId = category.publishJobId
+                                                  ? `${category.publishJobId}${jobIdSuffix}`
+                                                  : publishRan && category.jobId
+                                                    ? `PUB-${category.jobId}${jobIdSuffix}`
+                                                    : null;
+                                                const delJobId = category.deliveryJobId
+                                                  ? `${category.deliveryJobId}${jobIdSuffix}`
+                                                  : deliveryRan && category.jobId
+                                                    ? `DEL-${category.jobId}${jobIdSuffix}`
+                                                    : null;
                                                 // EPOC-PR (preservation) cases never run Package or
                                                 // Delivery — surface only the Collection / Preservation
                                                 // job ID. Production cases retain the full C / P / D
@@ -4499,6 +4910,16 @@ export function CollectionTracker({
                                             !isEpocPr &&
                                             delStatus === "Failed" &&
                                             isEEvidenceDelivery(formData ?? null);
+                                          // Publish-stage failure — parallel to isFailedDelivery
+                                          // but for the Package phase. Routes to the same Publish
+                                          // Review dialog under retry mode.
+                                          const isFailedPublish =
+                                            !isEpocPr &&
+                                            pubStatus === "Failed";
+                                          // Collection-stage failure — parallel branch for the
+                                          // Collection phase. Routes to a per-row retry that
+                                          // flips Failed → Started directly (no review dialog).
+                                          const isFailedCollection = colStatus === "Failed";
 
                                           return (
                                             <div className="w-[140px] flex-shrink-0 ml-3 pl-3 border-l border-[#edebe9] flex items-center gap-2 justify-end">
@@ -4506,7 +4927,7 @@ export function CollectionTracker({
                                                 <Button
                                                   variant="default"
                                                   size="sm"
-                                                  className="h-8 px-3 text-xs bg-[#a4262c] hover:bg-[#8a2121] text-white border-0 shadow-sm"
+                                                  className="h-8 px-3 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
                                                   onClick={(e) => {
                                                     e.stopPropagation();
                                                     // Pre-select THIS row's job key in the
@@ -4518,8 +4939,54 @@ export function CollectionTracker({
                                                       serviceKey,
                                                       categoryKey,
                                                       accountType.type,
+                                                      addJobIdx,
                                                     );
                                                     openDeliveryReviewForRetry([thisJobKey]);
+                                                  }}
+                                                >
+                                                  <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                                                  Retry
+                                                </Button>
+                                              ) : isFailedPublish ? (
+                                                <Button
+                                                  variant="default"
+                                                  size="sm"
+                                                  className="h-8 px-3 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    // Mirror of the delivery-retry path — open
+                                                    // the PublishReview dialog in retry mode with
+                                                    // THIS row pre-selected; RS can extend the
+                                                    // selection there to bulk-retry.
+                                                    const thisJobKey = getJobKey(
+                                                      identifier.id,
+                                                      serviceKey,
+                                                      categoryKey,
+                                                      accountType.type,
+                                                      addJobIdx,
+                                                    );
+                                                    openPublishReviewForRetry([thisJobKey]);
+                                                  }}
+                                                >
+                                                  <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                                                  Retry
+                                                </Button>
+                                              ) : isFailedCollection ? (
+                                                <Button
+                                                  variant="default"
+                                                  size="sm"
+                                                  className="h-8 px-3 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    // Collection retry is a direct mutation — no
+                                                    // review dialog. The bulk equivalent reuses
+                                                    // the StartCollection confirm dialog under
+                                                    // collectionStartMode === "retry".
+                                                    handleRetryCollectionOne(
+                                                      identifier.id,
+                                                      serviceKey,
+                                                      categoryKey,
+                                                    );
                                                   }}
                                                 >
                                                   <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
@@ -4577,6 +5044,8 @@ export function CollectionTracker({
                                       </div>
                                     );
                                   })}
+                                  </React.Fragment>
+                                  ))}
                                 </div>
                               );
                             })}
@@ -4874,10 +5343,15 @@ export function CollectionTracker({
                           const hasManual = manualCatsByID.length > 0;
                           const showConsumer = service.includeConsumerAccount !== false;
                           const showEnterprise = service.includeEnterpriseAccount === true;
-                          let serviceJobCount = automatedCatsByID.length;
-                          if (showConsumer && showEnterprise && automatedCatsByID.length > 0) {
-                            serviceJobCount = automatedCatsByID.length * 2;
-                          }
+                          // Count primary + additionalJobs rows per category; double when
+                          // both account types are enabled (same logic as All view).
+                          const totalAutomatedRows = automatedCatsByID.reduce(
+                            (sum: number, [, cat]: [string, any]) =>
+                              sum + 1 + (cat?.additionalJobs?.length || 0),
+                            0,
+                          );
+                          const accountTypeMultiplier = showConsumer && showEnterprise && automatedCatsByID.length > 0 ? 2 : 1;
+                          let serviceJobCount = totalAutomatedRows * accountTypeMultiplier;
                           serviceJobCount += manualCatsByID.length;
 
                           return (
@@ -4941,14 +5415,44 @@ export function CollectionTracker({
                                       </span>
                                     </div>
                                     <div className="space-y-0">
-                                    {automatedCatsByID.map(([categoryKey, category]: [string, any]) => {
+                                    {automatedCatsByID.map(([categoryKey, originalCategory]: [string, any]) => {
                                       const accountTypes: Array<{ type: 'consumer' | 'enterprise'; label: string; icon: any }> = [];
                                       if (showConsumer) accountTypes.push({ type: 'consumer', label: 'Consumer', icon: User });
                                       if (showEnterprise) accountTypes.push({ type: 'enterprise', label: 'Enterprise', icon: Building2 });
                                       if (accountTypes.length === 0) accountTypes.push({ type: 'consumer', label: 'Consumer', icon: User });
 
+                                      // Unfurl additionalJobs into their own rendered rows.
+                                      // addJobIdx = -1 → primary job; 0..N-1 → additionalJobs[idx].
+                                      const additionalJobs = originalCategory.additionalJobs || [];
+                                      const categoryVariants: Array<{ category: any; addJobIdx: number }> = [
+                                        { category: originalCategory, addJobIdx: -1 },
+                                        ...additionalJobs.map((aj: any, idx: number) => ({
+                                          category: {
+                                            ...originalCategory,
+                                            jobId: aj.jobId,
+                                            publishJobId: aj.publishJobId,
+                                            deliveryJobId: aj.deliveryJobId,
+                                            collectionStatus: aj.collectionStatus,
+                                            publishStatus: aj.publishStatus,
+                                            deliveryStatus: aj.deliveryStatus,
+                                            startDate: aj.startDate,
+                                            endDate: aj.endDate,
+                                            createdOn: aj.createdOn,
+                                            collectionStatusUpdatedAt: aj.collectionStatusUpdatedAt,
+                                            publishStatusUpdatedAt: aj.publishStatusUpdatedAt,
+                                            deliveryStatusUpdatedAt: aj.deliveryStatusUpdatedAt,
+                                            deliveryError: aj.deliveryError,
+                                            collectionError: aj.collectionError,
+                                            publishError: aj.publishError,
+                                          },
+                                          addJobIdx: idx,
+                                        })),
+                                      ];
+
                                       return (
                                         <div key={categoryKey}>
+                                          {categoryVariants.map(({ category, addJobIdx }) => (
+                                          <React.Fragment key={`${categoryKey}-variant-${addJobIdx}`}>
                                           {accountTypes.map((accountType) => {
                                             const Icon = accountType.icon;
                                             const jobIdSuffix = accountType.type === 'enterprise' ? '-ENT' : '';
@@ -4986,18 +5490,29 @@ export function CollectionTracker({
                                             const isFullyComplete = isEpocPr
                                               ? colStatus === "Complete" || colStatus === "No Data" || colStatus === "Failed"
                                               : delStatus === "Complete" || colStatus === "No Data" || colStatus === "Failed";
-                                            const thisJobKey = getJobKey(identifier.id, serviceKey, categoryKey, accountType.type);
+                                            const thisJobKey = getJobKey(identifier.id, serviceKey, categoryKey, accountType.type, addJobIdx);
                                             // EPOC-PR cases never advance past Collection — neither
                                             // Publishable nor Deliverable branches should fire.
                                             const isPublishable = !isEpocPr && colStatus === "Complete" && pubStatus === "Not Started";
                                             const isDeliverable2 = !isEpocPr && pubStatus === "Complete" && delStatus === "Not Started";
+                                            // Pipeline failure branches — same shape as the
+                                            // By Identifier view's action column so the two
+                                            // surfaces stay consistent.
+                                            const isFailedDelivery =
+                                              !isEpocPr &&
+                                              delStatus === "Failed" &&
+                                              isEEvidenceDelivery(formData ?? null);
+                                            const isFailedPublish = !isEpocPr && pubStatus === "Failed";
+                                            const isFailedCollection = colStatus === "Failed";
 
                                             return (
                                               <div
-                                                key={`${categoryKey}-${accountType.type}`}
+                                                key={`${categoryKey}-${accountType.type}-${addJobIdx}`}
                                                 className={cn(
                                                   "flex items-center justify-between px-3 py-2 bg-white border-x border-b hover:border-[#c8c6c4] transition-colors",
-                                                  isFullyComplete ? "border-[#edebe9] bg-[#fcfcfc]" : "border-[#edebe9]"
+                                                  delStatus === "Failed" || pubStatus === "Failed" || colStatus === "Failed"
+                                                    ? "border-[#a4262c]/40 bg-[#fff5f5]"
+                                                    : isFullyComplete ? "border-[#edebe9] bg-[#fcfcfc]" : "border-[#edebe9]"
                                                 )}
                                               >
                                                 <div className="flex-1 grid grid-cols-1 md:grid-cols-[1.2fr_0.6fr_1fr_0.7fr_0.8fr_1.2fr_0.8fr] gap-4 items-start">
@@ -5007,18 +5522,58 @@ export function CollectionTracker({
                                                   </div>
                                                   {/* Account Type */}
                                                   <div>
-                                                    <Badge
-                                                      variant="outline"
-                                                      className={cn(
-                                                        "text-xs",
-                                                        accountType.type === 'enterprise'
-                                                          ? "bg-[#fef9f5] text-[#ca5010] border-[#ca5010]"
-                                                          : "bg-[#f3f2f1] text-[#605e5c] border-[#8a8886]"
-                                                      )}
-                                                    >
-                                                      <Icon className="w-3 h-3 mr-1" />
-                                                      {accountType.label}
-                                                    </Badge>
+                                                    <span className="inline-flex items-center gap-1">
+                                                      <Badge
+                                                        variant="outline"
+                                                        className={cn(
+                                                          "text-xs",
+                                                          accountType.type === 'enterprise'
+                                                            ? "bg-[#fef9f5] text-[#ca5010] border-[#ca5010]"
+                                                            : "bg-[#f3f2f1] text-[#605e5c] border-[#8a8886]"
+                                                        )}
+                                                      >
+                                                        <Icon className="w-3 h-3 mr-1" />
+                                                        {accountType.label}
+                                                      </Badge>
+                                                      {(() => {
+                                                        // Resolved identifier hover bubble —
+                                                        // mirrors the All view's badge tooltip
+                                                        // so both surfaces show the same
+                                                        // engineering-debug info.
+                                                        const ax = service.accountExistence;
+                                                        const resolved = accountType.type === 'enterprise'
+                                                          ? ax?.enterpriseResolvedIdentifier
+                                                            ?? (ax?.enterpriseAccounts?.[0]
+                                                              ? { type: "Resolved ID", value: ax.enterpriseAccounts[0] }
+                                                              : null)
+                                                          : ax?.consumerResolvedIdentifier
+                                                            ?? (ax?.consumerAccounts?.[0]
+                                                              ? { type: "Resolved ID", value: ax.consumerAccounts[0] }
+                                                              : null);
+                                                        if (!resolved) return null;
+                                                        return (
+                                                          <TooltipProvider delayDuration={200}>
+                                                            <Tooltip>
+                                                              <TooltipTrigger asChild>
+                                                                <button
+                                                                  type="button"
+                                                                  aria-label={`Show resolved identifier for ${accountType.label}`}
+                                                                  className="text-[#605e5c] hover:text-[#0078d4] cursor-help leading-none"
+                                                                  onClick={(e) => e.stopPropagation()}
+                                                                >
+                                                                  <Info className="w-3 h-3" />
+                                                                </button>
+                                                              </TooltipTrigger>
+                                                              <TooltipContent side="top" className="text-xs max-w-[320px]">
+                                                                <p className="font-semibold mb-1">Resolved identifier</p>
+                                                                <p className="text-[11px] text-[#a19f9d] mb-0.5">{resolved.type}</p>
+                                                                <p className="font-mono text-[11px] break-all">{resolved.value}</p>
+                                                              </TooltipContent>
+                                                            </Tooltip>
+                                                          </TooltipProvider>
+                                                        );
+                                                      })()}
+                                                    </span>
                                                     {(() => {
                                                       const planLoc = (identifier as any).fulfillmentPlan?.services?.[serviceKey]?.dataCenterLocation;
                                                       const acctLoc = accountType.type === 'enterprise'
@@ -5108,7 +5663,50 @@ export function CollectionTracker({
                                                 </div>
                                                 {/* Action column */}
                                                 <div className="w-[140px] flex-shrink-0 ml-3 pl-3 border-l border-[#edebe9] flex items-center gap-2 justify-end">
-                                                  {isPublishable ? (
+                                                  {isFailedDelivery ? (
+                                                    <Button
+                                                      variant="default"
+                                                      size="sm"
+                                                      className="h-8 px-3 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openDeliveryReviewForRetry([thisJobKey]);
+                                                      }}
+                                                    >
+                                                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                                                      Retry
+                                                    </Button>
+                                                  ) : isFailedPublish ? (
+                                                    <Button
+                                                      variant="default"
+                                                      size="sm"
+                                                      className="h-8 px-3 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openPublishReviewForRetry([thisJobKey]);
+                                                      }}
+                                                    >
+                                                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                                                      Retry
+                                                    </Button>
+                                                  ) : isFailedCollection ? (
+                                                    <Button
+                                                      variant="default"
+                                                      size="sm"
+                                                      className="h-8 px-3 text-xs bg-white hover:bg-[#fde7e9] text-[#a4262c] border-2 border-[#a4262c] shadow-sm font-semibold"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleRetryCollectionOne(
+                                                          identifier.id,
+                                                          serviceKey,
+                                                          categoryKey,
+                                                        );
+                                                      }}
+                                                    >
+                                                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                                                      Retry
+                                                    </Button>
+                                                  ) : isPublishable ? (
                                                     <div className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[#dff6dd] text-[#107c10]">
                                                       <Package className="w-3.5 h-3.5" />
                                                       <span className="text-xs">Ready</span>
@@ -5158,6 +5756,8 @@ export function CollectionTracker({
                                               </div>
                                             );
                                           })}
+                                          </React.Fragment>
+                                          ))}
                                         </div>
                                       );
                                     })}
@@ -5257,21 +5857,46 @@ export function CollectionTracker({
           </DialogContent>
         </Dialog>
 
-        {/* Publish Review Dialog — job-level */}
-        <Dialog open={showPublishReview} onOpenChange={setShowPublishReview}>
+        {/* Publish Review Dialog — job-level. Doubles as the Retry Package
+            dialog when `publishReviewMode === "retry"`. The IIFE below
+            shadows `publishableJobs` with the mode-aware source list so the
+            rest of the body iterates the right pool (Failed jobs in retry
+            mode, Not Started + Collection-Complete jobs in submit mode). */}
+        <Dialog
+          open={showPublishReview}
+          onOpenChange={(open) => {
+            setShowPublishReview(open);
+            if (!open) setPublishReviewMode("submit");
+          }}
+        >
           <DialogContent className={cn(
               "max-h-[calc(100vh-8rem)] overflow-y-auto !top-[5rem] !translate-y-0 !z-[60] transition-all duration-300",
               documentPanelOpen
                 ? "sm:max-w-[calc(90vw-500px)] w-[900px] !left-[calc(50%-250px)] !translate-x-[-50%]"
                 : "sm:max-w-[90vw] w-[1400px]"
             )}>
+            {(() => {
+              const isRetry = publishReviewMode === "retry";
+              // Local shadow: when the dialog runs in retry mode, the rest
+              // of the body — which references `publishableJobs` — resolves
+              // to the Failed-publish-job list instead.
+              const publishableJobs = isRetry
+                ? retryablePublishJobs
+                : allPipelineJobs.filter(j =>
+                    j.collectionStatus === "Complete" &&
+                    (!j.publishStatus || j.publishStatus === "Not Started")
+                  );
+              return (
+                <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl">
-                <Package className="w-5 h-5 text-[#107c10]" />
-                Review & Submit to Package
+                <Package className={cn("w-5 h-5", isRetry ? "text-[#a4262c]" : "text-[#107c10]")} />
+                {isRetry ? "Retry Package — Review & Resubmit" : "Review & Submit to Package"}
               </DialogTitle>
               <DialogDescription>
-                Review the selected collection jobs that will be submitted for packaging. Each job will receive a unique Package Job ID.
+                {isRetry
+                  ? "Confirm the failed package jobs to resubmit. Selected jobs will flip back to Started for the next packaging attempt."
+                  : "Review the selected collection jobs that will be submitted for packaging. Each job will receive a unique Package Job ID."}
               </DialogDescription>
             </DialogHeader>
 
@@ -5341,7 +5966,7 @@ export function CollectionTracker({
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-[#323130] flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-[#107c10]" />
-                      Select Jobs for Preparing ({selectedJobsForPublish.size} of {publishableJobs.length} selected)
+                      {isRetry ? "Select Failed Packages to Retry" : "Select Jobs for Preparing"} ({selectedJobsForPublish.size} of {publishableJobs.length} selected)
                     </h3>
                     <div className="flex items-center gap-3">
                       <Checkbox
@@ -5491,17 +6116,18 @@ export function CollectionTracker({
                 const uniqueIdentifiers = new Set(selectedJobs.map(j => j.identifierId));
                 const manualCount = selectedJobs.filter(j => j.isManual).length;
                 return (
-                  <Card className="bg-[#dff6dd] border-[#107c10]">
+                  <Card className={cn(isRetry ? "bg-[#fde7e9] border-[#a4262c]" : "bg-[#dff6dd] border-[#107c10]")}>
                     <div className="p-4">
                       <div className="flex items-start gap-3">
-                        <Package className="w-5 h-5 text-[#107c10] mt-0.5" />
+                        <Package className={cn("w-5 h-5 mt-0.5", isRetry ? "text-[#a4262c]" : "text-[#107c10]")} />
                         <div className="flex-1">
-                          <h3 className="font-semibold text-[#323130] mb-1">Package Summary</h3>
+                          <h3 className="font-semibold text-[#323130] mb-1">{isRetry ? "Retry Summary" : "Package Summary"}</h3>
                           <p className="text-sm text-[#323130]">
-                            Submitting <strong>{selectedJobs.length}</strong> {selectedJobs.length === 1 ? 'job' : 'jobs'}
+                            {isRetry ? "Retrying" : "Submitting"} <strong>{selectedJobs.length}</strong> {selectedJobs.length === 1 ? 'job' : 'jobs'}
                             {manualCount > 0 ? ` (${manualCount} manual)` : ''} across <strong>{uniqueIdentifiers.size}</strong> {uniqueIdentifiers.size === 1 ? 'identifier' : 'identifiers'} for Case <strong>{formData.caseId}</strong>.
-                            Each job will receive a unique Package Job ID for tracking.
-
+                            {isRetry
+                              ? " Each job will flip from Failed back to Started; the prior error is cleared."
+                              : " Each job will receive a unique Package Job ID for tracking."}
                           </p>
                           {(() => {
                             const regions = new Set(selectedJobs.map(j => j.storageLocation).filter(Boolean));
@@ -5540,14 +6166,21 @@ export function CollectionTracker({
                 className={cn(
                   "h-10",
                   selectedJobsForPublish.size > 0
-                    ? "bg-[#107c10] hover:bg-[#0e6b0e] text-white"
+                    ? isRetry
+                      ? "bg-[#a4262c] hover:bg-[#8a2121] text-white"
+                      : "bg-[#107c10] hover:bg-[#0e6b0e] text-white"
                     : "bg-[#f3f2f1] text-[#a19f9d] cursor-not-allowed"
                 )}
               >
-                <Send className="w-4 h-4 mr-2" />
-                Confirm & Submit to Package ({selectedJobsForPublish.size})
+                {isRetry ? <RotateCcw className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+                {isRetry
+                  ? `Confirm & Retry Package (${selectedJobsForPublish.size})`
+                  : `Confirm & Submit to Package (${selectedJobsForPublish.size})`}
               </Button>
             </div>
+                </>
+              );
+            })()}
           </DialogContent>
         </Dialog>
 

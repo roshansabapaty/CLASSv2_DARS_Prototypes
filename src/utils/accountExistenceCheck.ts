@@ -131,14 +131,45 @@ export async function runAccountExistenceCheck(
                 ? identifier.value
                 : `ent_${identifierBase}@contoso.com`
               : undefined;
+        // Simulated related-identifier pool. CLASS routinely returns
+        // 8–20 aliases per consumer account (email + phone + Skype +
+        // gamertag + recovery addresses), so the pool is deliberately
+        // wide enough to exercise the per-row Related Identifiers
+        // scrollable list (max 5 visible, scroll for the rest). The
+        // type chip is inferred from the value pattern at render time.
+        const consumerRelatedPool = [
+          `${identifierBase}-alias1@outlook.com`,
+          `${identifierBase}-alias2@hotmail.com`,
+          `${identifierBase}-recovery@gmail.com`,
+          `${identifierBase}-old@live.com`,
+          `${identifierBase}.gaming@outlook.com`,
+          `live:.cid.${identifierBase.padEnd(12, "f").slice(0, 12)}`,
+          `+1-206-555-${(1000 + (identifierBase.length * 37) % 9000).toString().padStart(4, "0")}`,
+          `+44-20-7946-${(1000 + (identifierBase.length * 41) % 9000).toString().padStart(4, "0")}`,
+          `${identifierBase}_xbl`,
+          `${identifierBase}.skype@outlook.com`,
+          `${identifierBase}-archive@outlook.com`,
+          `${identifierBase}.work-backup@outlook.com`,
+        ];
+        const enterpriseRelatedPool = [
+          `${identifierBase}.work@company.com`,
+          `${identifierBase}.alt@contoso.com`,
+          `${identifierBase}@fabrikam.onmicrosoft.com`,
+          `${identifierBase}.svc@contoso.com`,
+          `${identifierBase}.aad@contoso.com`,
+        ];
         const identifierRelatedIdentifiers =
           identifierAccountType === "Consumer"
-            ? [
-                `${identifierBase}-alias1@outlook.com`,
-                `${identifierBase}-alias2@hotmail.com`,
-              ].slice(0, Math.floor(Math.random() * 2) + 1)
+            // 6–12 entries — enough to exercise the scroll on most cases.
+            ? consumerRelatedPool.slice(
+                0,
+                6 + Math.floor(Math.random() * 7),
+              )
             : identifierAccountType === "Enterprise"
-              ? [`${identifierBase}.work@company.com`]
+              ? enterpriseRelatedPool.slice(
+                  0,
+                  2 + Math.floor(Math.random() * 4),
+                )
               : undefined;
 
         (Object.keys(updatedServices) as Array<keyof typeof updatedServices>).forEach((serviceName) => {

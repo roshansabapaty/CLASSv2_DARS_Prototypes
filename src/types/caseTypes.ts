@@ -31,6 +31,12 @@ export interface AdditionalJob {
    *  — separate from `deliveryStatusUpdatedAt` so the callback path is
    *  attributable to the WISP wire, not RS edits. */
   deliveryAcknowledgedAt?: Date;
+  /** Free-text error from the IA's collector when the job's Collection
+   *  stage moves to `Failed`. Cleared on retry. */
+  collectionError?: string;
+  /** Free-text error from the packager when the job's Package stage
+   *  moves to `Failed`. Cleared on retry. */
+  publishError?: string;
   deliveryError?: string;
 }
 
@@ -57,6 +63,12 @@ export interface SubCategory {
   deliveryStatusUpdatedAt?: Date;
   /** WISP delivery-status callback fields. eEvidence requests only. */
   deliveryAcknowledgedAt?: Date;
+  /** Free-text error from the IA's collector when Collection moves to
+   *  `Failed`. Cleared on retry via handleRetryCollection*. */
+  collectionError?: string;
+  /** Free-text error from the packager when Package moves to `Failed`.
+   *  Cleared on retry via handlePublishSelected (retry mode). */
+  publishError?: string;
   deliveryError?: string;
   additionalJobs?: AdditionalJob[]; // Duplicate jobs with different date ranges
 }
@@ -973,6 +985,11 @@ export interface ServiceAccountExistence {
     lastLogonLocation?: string;
     provisionedDataLocation?: string;
   };
+  /** The internal identifier the IA's collector resolved this consumer
+   *  account to (e.g. PUID, MSA ID). Surfaces in a hover tooltip next to
+   *  the Consumer badge in the Collection table so the RS can reference
+   *  it during debug sessions with engineering. */
+  consumerResolvedIdentifier?: { type: string; value: string };
   enterpriseExists: boolean;
   enterpriseAccounts?: string[];
   enterpriseStorageLocation?: string;
@@ -981,6 +998,10 @@ export interface ServiceAccountExistence {
     lastLogonLocation?: string;
     provisionedDataLocation?: string;
   };
+  /** The internal identifier the IA's collector resolved this enterprise
+   *  account to (e.g. AAD ObjectId, Tenant ID). Mirror of
+   *  consumerResolvedIdentifier for Enterprise rows. */
+  enterpriseResolvedIdentifier?: { type: string; value: string };
 }
 
 export interface ServiceWithResults {

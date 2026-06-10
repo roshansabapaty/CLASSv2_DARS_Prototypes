@@ -122,6 +122,25 @@ export function buildLENS202600255FormData(): FormData {
     const firstItemKey = itemKeys[0];
     svc.enabled = true;
     svc.includeConsumerAccount = true;
+    // Seed a resolved identifier per service so the Account Type badge's
+    // info bubble has real engineering-debug content to display. Each
+    // consumer-side service surfaces a distinct type label / value to
+    // mimic the per-service identity resolution the IA actually does.
+    if (!svc.accountExistence) {
+      svc.accountExistence = { consumerExists: true, enterpriseExists: false };
+    }
+    if (!svc.accountExistence.consumerResolvedIdentifier) {
+      const resolvedByService: Record<string, { type: string; value: string }> = {
+        msaProfile: { type: "PUID", value: "001A8C42-9F03-4D8E-B6C7-7B1A4E5F8A9D" },
+        exchangeConsumer: { type: "MSA NetID", value: "msa.netid:8A92F1C0E4B7" },
+        skype: { type: "Skype ID", value: "live:.cid.fb2e94d810a3c7" },
+      };
+      svc.accountExistence.consumerResolvedIdentifier =
+        resolvedByService[serviceKey] ?? {
+          type: "Resolved ID",
+          value: `RID-${serviceKey}-${firstItemKey}`,
+        };
+    }
     group[firstItemKey] = {
       ...group[firstItemKey],
       enabled: true,
@@ -147,6 +166,11 @@ export function buildLENS202600255FormData(): FormData {
       jobId: "JOB-MSA-SUB-255-001",
       collectionStatus: "Complete",
       publishStatus: "Complete",
+      // Every Delivery job MUST be preceded by a Package job in this
+      // architecture — Collection → Package → Delivery is enforced
+      // upstream. Without a publishJobId here, the pipeline row would
+      // surface "C: id · P: — · D: id" which is structurally invalid.
+      publishJobId: "PUB-MSA-SUB-255-001",
       deliveryStatus: "Failed",
       deliveryJobId: "DLV-MSA-SUB-255-001",
       deliveryError:
@@ -173,6 +197,7 @@ export function buildLENS202600255FormData(): FormData {
     jobId: "JOB-EXC-CON-255-001",
     collectionStatus: "Complete",
     publishStatus: "Complete",
+    publishJobId: "PUB-EXC-CON-255-001",
     deliveryStatus: "DeliveryAcknowledged",
     deliveryJobId: "DLV-EXC-CON-255-001",
     deliveryAcknowledgedAt: new Date("2026-05-13T15:08:00"),
@@ -189,6 +214,7 @@ export function buildLENS202600255FormData(): FormData {
     jobId: "JOB-MSA-AUTH-255-001",
     collectionStatus: "Complete",
     publishStatus: "Complete",
+    publishJobId: "PUB-MSA-AUTH-255-001",
     deliveryStatus: "Complete",
     deliveryJobId: "DLV-MSA-AUTH-255-001",
     collectionStatusUpdatedAt: new Date("2026-05-13T09:00:00"),
@@ -210,6 +236,40 @@ export function buildLENS202600255FormData(): FormData {
     collectionStatusUpdatedAt: new Date("2026-05-13T10:18:00"),
   });
 
+  // Failed collection job — exercises the per-row Retry button in the
+  // Action column AND the bulk Retry Failed Collection confirm dialog.
+  // msaProfile.contentData is the last free slot on the consumer service.
+  seedJob("msaProfile", "contentData", {
+    taskId: "TSK-MSA-CON-255-001",
+    jobId: "JOB-MSA-CON-255-001",
+    collectionStatus: "Failed",
+    publishStatus: "Not Started",
+    deliveryStatus: "Not Started",
+    collectionError:
+      "Internal collector returned 'IdentityResolutionTimeout' — the " +
+      "MSA Profile microservice did not return a PUID within the 30s " +
+      "SLA. Retry typically clears this on the next attempt.",
+    collectionStatusUpdatedAt: new Date("2026-05-13T10:42:00"),
+  });
+
+  // Failed publish job — exercises the per-row Retry button AND the
+  // bulk Retry Failed Package Review & Retry modal. exchangeConsumer
+  // carries the trafficData group as a free slot for this case.
+  seedJob("exchangeConsumer", "trafficData", {
+    taskId: "TSK-EXC-TRA-255-001",
+    jobId: "JOB-EXC-TRA-255-001",
+    collectionStatus: "Complete",
+    publishStatus: "Failed",
+    deliveryStatus: "Not Started",
+    publishJobId: "PUB-EXC-TRA-255-001",
+    publishError:
+      "Packager service returned 'ManifestSchemaMismatch' — the inbound " +
+      "Collection payload did not match the active eEvidence package " +
+      "schema. Retry after the packager catalog refresh.",
+    collectionStatusUpdatedAt: new Date("2026-05-13T09:00:00"),
+    publishStatusUpdatedAt: new Date("2026-05-13T11:08:00"),
+  });
+
   const id1: AccountIdentifier = {
     id: genId(),
     value: "anonymous.suspect.42@outlook.com",
@@ -220,7 +280,27 @@ export function buildLENS202600255FormData(): FormData {
     geoLocation: "Europe - West Europe",
     createdBy: "LE Agency",
     services,
-    checkAccounts: { accountType: "Consumer" },
+    // Direct seed of primary + related identifiers so the
+    // per-row Account Details strip renders type-aware values
+    // (and the scrollable list when >5 related items exist).
+    // Wide pool — exercises the 5-row visible / scroll-for-rest
+    // pattern in the Related Identifiers panel.
+    checkAccounts: {
+      accountType: "Consumer",
+      primaryIdentifier: "anonymous.suspect.42@outlook.com",
+      relatedIdentifiers: [
+        "asuspect42-recovery@outlook.com",
+        "asuspect42.gaming@outlook.com",
+        "asuspect42-old@live.com",
+        "asuspect42-archive@hotmail.com",
+        "asuspect42.skype@outlook.com",
+        "live:.cid.fb2e94d810a3c7",
+        "+32-2-555-0142",
+        "+44-20-7946-0958",
+        "asuspect42_xbl",
+        "asuspect42.work-backup@outlook.com",
+      ],
+    },
     leExternalServices: ["Email", "Microsoft Account Profile"],
     leExternalServiceDates: {
       Email: leDateRange,

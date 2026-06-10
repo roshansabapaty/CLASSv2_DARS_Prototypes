@@ -1658,6 +1658,19 @@ function Step3SummaryReview({
         accountCheckResults={accountCheckResults}
         dataCenterLocations={dataCenterLocations}
         requestType={formDataRequestType}
+        additionalDateRangesByIdentifier={(() => {
+          // Lift each identifier's pending additionalDateRanges out of
+          // the wizard's individualSettings into the shape PlanReviewTable
+          // wants. Empty/undefined identifiers contribute nothing.
+          const indiv = serviceConfig?.individualSettings || {};
+          const out: Record<string, Record<string, Array<{ start: string; end: string }>>> = {};
+          for (const [identifierId, cfg] of Object.entries(indiv) as Array<[string, any]>) {
+            if (cfg?.additionalDateRanges) {
+              out[identifierId] = cfg.additionalDateRanges;
+            }
+          }
+          return out;
+        })()}
         onRowAction={handleRowAction}
       />
 

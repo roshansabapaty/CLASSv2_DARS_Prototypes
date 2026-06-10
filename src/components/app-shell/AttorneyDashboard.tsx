@@ -73,6 +73,11 @@ import {
   type ColumnVisibility,
   type SortState,
 } from "../case-queue/caseListColumns";
+import {
+  clearSessionViewSnapshot,
+  readSessionViewSnapshot,
+  useSessionViewAutosave,
+} from "../case-queue/useSessionView";
 
 import { useDragAutoScroll } from "../../hooks/useDragAutoScroll";
 
@@ -398,10 +403,16 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   // Search + quick filter state. Mirrors the All Cases page pattern but
   // with a narrower tab set (no Escalated tab — redundant on this view).
   const [searchTerm, setSearchTerm] = React.useState("");
+  // Phase 0.5: session-scoped autosave snapshot. Read once on mount;
+  // every captured useState below uses this as the first fallback in
+  // its lazy initializer. See useSessionView.ts + spec §5.7.
+  const sessionSnapshot = readSessionViewSnapshot("attorneyDashboard");
   // Badges filter moved into the catalog-driven "+ Add filter" menu —
   // its value rides in the `extraFilters` bag below.
   const [quickFilter, setQuickFilterRaw] = React.useState<DashboardQuickFilter>(
-    () => readPersistedQuickFilter(),
+    () =>
+      (sessionSnapshot?.quickFilter as DashboardQuickFilter) ??
+      readPersistedQuickFilter(),
   );
   const setQuickFilter = (next: DashboardQuickFilter) => {
     setQuickFilterRaw(next);
@@ -411,23 +422,69 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
       /* localStorage may be blocked */
     }
   };
+  // ── Quick-filter tablist a11y ──────────────────────────────────────
+  // Mirrors the Cases page's tablist keyboard model: ArrowLeft /
+  // ArrowRight cycle with wrap, Home / End jump, automatic
+  // activation. Roving tabIndex keeps the tablist a single Tab stop.
+  // See WAI-ARIA Practices §3.22 (Tabs pattern).
+  const quickFilterTablistRef = React.useRef<HTMLDivElement | null>(null);
+  const handleQuickFilterKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+  ) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || target.getAttribute("role") !== "tab") return;
+    const currentIdx = DASHBOARD_QUICK_FILTERS.findIndex(
+      (t) => t.key === quickFilter,
+    );
+    if (currentIdx < 0) return;
+    let nextIdx: number | null = null;
+    switch (e.key) {
+      case "ArrowRight":
+        nextIdx = (currentIdx + 1) % DASHBOARD_QUICK_FILTERS.length;
+        break;
+      case "ArrowLeft":
+        nextIdx =
+          (currentIdx - 1 + DASHBOARD_QUICK_FILTERS.length) %
+          DASHBOARD_QUICK_FILTERS.length;
+        break;
+      case "Home":
+        nextIdx = 0;
+        break;
+      case "End":
+        nextIdx = DASHBOARD_QUICK_FILTERS.length - 1;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    const nextTab = DASHBOARD_QUICK_FILTERS[nextIdx];
+    setQuickFilter(nextTab.key);
+    const nextBtn = quickFilterTablistRef.current?.querySelector<HTMLButtonElement>(
+      `#quick-filter-tab-${nextTab.key}`,
+    );
+    nextBtn?.focus();
+  };
 
   // Apply search first, then the quick-filter predicate.
   // 3F (UX-Polish): click-to-sort on Priority / Due Date / Stage.
   // Applied on top of the default escalation-weight ordering produced by
   // `baseCases.sort` above — when a column sort is active, it takes
   // precedence; the escalation order falls back as the tiebreaker.
-  const [sortState, setSortState] = React.useState<SortState | null>(null);
+  const [sortState, setSortState] = React.useState<SortState | null>(
+    () => sessionSnapshot?.primarySort ?? null,
+  );
   // Multi-key tiebreakers managed via the CustomViewPanel. Walked
   // in order when the primary `sortState` ties; falls through to the
   // dashboard's default escalation-weight ordering as the final tier.
-  const [sortTiebreakers, setSortTiebreakers] = React.useState<SortState[]>([]);
+  const [sortTiebreakers, setSortTiebreakers] = React.useState<SortState[]>(
+    () => sessionSnapshot?.sortTiebreakers ?? [],
+  );
   // Page-level scope toggle. "active" hides Resolved cases (the
   // overwhelmingly common attorney workflow — resolved escalations
   // don't need ongoing review); "all" un-hides them. Persisted
   // separately from the Case Queue's scope.
-  const [caseScope, setCaseScopeRaw] = React.useState<CaseScope>(() =>
-    readPersistedCaseScope(),
+  const [caseScope, setCaseScopeRaw] = React.useState<CaseScope>(
+    () => sessionSnapshot?.caseScope ?? readPersistedCaseScope(),
   );
   const setCaseScope = (next: CaseScope) => {
     setCaseScopeRaw(next);
@@ -440,7 +497,12 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   // User-customised column order — persisted per-surface so this
   // dashboard's layout doesn't bleed into the main Case Queue.
   const [columnOrder, setColumnOrder] = React.useState<ColumnOrder>(() =>
-    readPersistedColumnOrder(),
+    sessionSnapshot
+      ? sanitizeColumnOrder(
+          sessionSnapshot.columnOrder,
+          ATTORNEY_DASHBOARD_COLUMNS,
+        )
+      : readPersistedColumnOrder(),
   );
   const handleReorderColumns = (next: ColumnOrder) => {
     setColumnOrder(next);
@@ -453,7 +515,14 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   // Per-user hide-list. Synthesised columns from the filter→column
   // sync work start hidden by default via `defaultColumnVisibility`.
   const [columnHidden, setColumnHiddenState] =
-    React.useState<ColumnVisibility>(() => readPersistedColumnHidden());
+    React.useState<ColumnVisibility>(() =>
+      sessionSnapshot
+        ? sanitizeColumnVisibility(
+            sessionSnapshot.columnHidden,
+            ATTORNEY_DASHBOARD_COLUMNS,
+          )
+        : readPersistedColumnHidden(),
+    );
   const persistColumnHidden = (next: ColumnVisibility) => {
     setColumnHiddenState(next);
     try {
@@ -513,7 +582,9 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
     string | undefined
   >(
     () =>
-      readSelectedViewId("attorneyDashboard") ?? SYSTEM_ATTORNEY_VIEWS[0].id,
+      sessionSnapshot?.appliedViewId ??
+      readSelectedViewId("attorneyDashboard") ??
+      SYSTEM_ATTORNEY_VIEWS[0].id,
   );
   const setCurrentViewId = React.useCallback((id: string | undefined) => {
     setCurrentViewIdRaw(id);
@@ -526,7 +597,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
   //    `extraFilters` into its captured shape. ──────────────────────
   const [extraFilters, setExtraFilters] = React.useState<
     Record<string, unknown>
-  >({});
+  >(() => sessionSnapshot?.extraFilters ?? {});
   const [advancedPanelOpen, setAdvancedPanelOpen] = React.useState(false);
   const [newlyAddedFilterId, setNewlyAddedFilterId] = React.useState<
     string | null
@@ -593,6 +664,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
     caseScope,
     sortTiebreakers: [...sortTiebreakers],
   };
+
   const currentView = [...SYSTEM_ATTORNEY_VIEWS, ...userSavedViews].find(
     (v) => v.id === currentViewId,
   );
@@ -807,8 +879,8 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
 
   // Persisted view mode. Preview-pane is now enabled with an attorney-
   // flavored content variant (Gap 4).
-  const [viewMode, setViewModeRaw] = React.useState<CaseListViewMode>(() =>
-    readPersistedViewMode(),
+  const [viewMode, setViewModeRaw] = React.useState<CaseListViewMode>(
+    () => sessionSnapshot?.viewMode ?? readPersistedViewMode(),
   );
   const setViewMode = (next: CaseListViewMode) => {
     setViewModeRaw(next);
@@ -819,6 +891,22 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
     }
     announceStatus(`Switched to ${VIEW_MODE_LABEL[next]}`);
   };
+
+  // Phase 0.5: debounced autosave to sessionStorage so a reload
+  // restores the current view shape. Sits AFTER viewMode is
+  // declared (the autosave snapshot captures it). Cleared on Reset
+  // and on tab close. See useSessionView.ts and spec §5.7.
+  useSessionViewAutosave("attorneyDashboard", {
+    quickFilter,
+    primarySort: sortState,
+    sortTiebreakers,
+    extraFilters,
+    caseScope,
+    columnOrder,
+    columnHidden,
+    viewMode,
+    appliedViewId: currentViewId ?? null,
+  });
 
   // Preview pane state. Resets to null when the active filter takes
   // the selected case out of the visible set.
@@ -931,8 +1019,10 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
             className="h-6 w-px bg-[#edebe9] shrink-0"
           />
           <div
+            ref={quickFilterTablistRef}
             role="tablist"
             aria-label="Attorney dashboard quick filters"
+            onKeyDown={handleQuickFilterKeyDown}
             className="flex items-center gap-1 flex-wrap flex-1"
           >
             {DASHBOARD_QUICK_FILTERS.map((tab) => {
@@ -942,8 +1032,11 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
               return (
                 <button
                   key={tab.key}
+                  id={`quick-filter-tab-${tab.key}`}
                   role="tab"
                   aria-selected={active}
+                  aria-controls="quick-filter-panel"
+                  tabIndex={active ? 0 : -1}
                   type="button"
                   onClick={() => setQuickFilter(tab.key)}
                   // Bumped ~15% across the board to match the Cases
@@ -1147,6 +1240,17 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
         )}
       </header>
 
+      {/* Tabpanel container — quick-filter tabs' aria-controls points
+          here; aria-labelledby binds back to the active tab so AT
+          announces the pairing. Wraps every render path (empty,
+          preview, list, cards) so identity stays stable across
+          mode swaps. */}
+      <div
+        id="quick-filter-panel"
+        role="tabpanel"
+        aria-labelledby={`quick-filter-tab-${quickFilter}`}
+        tabIndex={0}
+      >
       {filteredCases.length === 0 ? (
         <Card className="p-8 text-center border-dashed border-[#c8c6c4]">
           {quickFilter === "myCases" ? (
@@ -1430,6 +1534,7 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
           })}
         </ul>
       )}
+      </div>
 
       {/* Save current view dialog — same component the main Case
           Queue mounts. Captures the dashboard's filter / sort state
@@ -1512,6 +1617,9 @@ export function AttorneyDashboard({ onOpenCase }: AttorneyDashboardProps) {
             defaultColumnVisibility(ATTORNEY_DASHBOARD_COLUMNS),
           );
           handleReorderColumns(defaultColumnOrder(ATTORNEY_DASHBOARD_COLUMNS));
+          // Phase 0.5: explicit clear so the next reload starts
+          // genuinely pristine. See spec §4.4 + §5.7.5.
+          clearSessionViewSnapshot("attorneyDashboard");
         }}
       />
 

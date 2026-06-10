@@ -76,6 +76,11 @@ import {
   type ColumnWidths,
   type SortState,
 } from "./case-queue/caseListColumns";
+import {
+  clearSessionViewSnapshot,
+  readSessionViewSnapshot,
+  useSessionViewAutosave,
+} from "./case-queue/useSessionView";
 import { CaseQueueBulkActionsBar } from "./case-queue/CaseQueueBulkActionsBar";
 import { BulkAssignDialog } from "./assignee/BulkAssignDialog";
 import { RESPONSE_SPECIALISTS } from "../constants/caseConstants";
@@ -375,9 +380,21 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
     [],
   );
 
+  // ── Phase 0.5: session-scoped autosave snapshot ──────────────────────
+  // Read once on mount. Every captured useState below uses this as
+  // the first fallback in its lazy initializer; if absent or stale,
+  // they fall through to the existing localStorage user defaults,
+  // then to the surface's hardcoded defaults. See spec §5.7.4 and
+  // useSessionView.ts for the read semantics.
+  //
+  // We deliberately do NOT useMemo here — `useState`'s lazy
+  // initializer (`() => ...`) already guarantees the read runs
+  // exactly once per mount.
+  const sessionSnapshot = readSessionViewSnapshot("queue");
+
   // ── Outlook-style view mode (Cards / Detailed list / Preview pane) ────
   const [viewMode, setViewModeRaw] = useState<CaseListViewMode>(() =>
-    readPersistedViewMode(),
+    sessionSnapshot?.viewMode ?? readPersistedViewMode(),
   );
   const [previewPaneWidth, setPreviewPaneWidth] = useState<number>(480);
   // Detailed-list column widths — per-column pixels, persisted to
@@ -403,7 +420,11 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // Detailed-list (full density) and the Preview-pane (dense density)
   // since the user expects one consistent column sequence per surface.
   const [columnOrder, setColumnOrder] = useState<ColumnOrder>(() =>
-    readPersistedColumnOrder(),
+    // Sanitise session-restored order so a stale persisted entry
+    // referencing a removed column doesn't crash the renderer.
+    sessionSnapshot
+      ? sanitizeColumnOrder(sessionSnapshot.columnOrder, CASE_LIST_COLUMNS)
+      : readPersistedColumnOrder(),
   );
   const handleReorderColumns = (next: ColumnOrder) => {
     setColumnOrder(next);
@@ -417,7 +438,12 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // Locked columns (Case ID) are never hidden — see
   // `sanitizeColumnVisibility` / `setColumnHidden` in caseListColumns.ts.
   const [columnHidden, setColumnHiddenState] = useState<ColumnVisibility>(() =>
-    readPersistedColumnHidden(),
+    sessionSnapshot
+      ? sanitizeColumnVisibility(
+          sessionSnapshot.columnHidden,
+          CASE_LIST_COLUMNS,
+        )
+      : readPersistedColumnHidden(),
   );
   const persistColumnHidden = (next: ColumnVisibility) => {
     setColumnHiddenState(next);
@@ -525,7 +551,50 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
 
   // Single active quick-filter tab. Default "all" applies no narrowing.
   // Tabs are mutually exclusive — picking another replaces the active view.
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(
+    () => (sessionSnapshot?.quickFilter as QuickFilter) ?? "all",
+  );
+  // ── Quick-filter tablist a11y ──────────────────────────────────────
+  // ARIA Authoring Practices for the Tabs pattern with automatic
+  // activation: ArrowLeft / ArrowRight cycle with wrap, Home / End
+  // jump to first / last, and the newly-focused tab IS the active
+  // tab (no separate Enter to commit). Roving tabIndex (active = 0,
+  // others = -1) means the tablist takes one Tab stop rather than
+  // QUICK_FILTERS.length stops. See WAI-ARIA Practices §3.22.
+  const quickFilterTablistRef = useRef<HTMLDivElement | null>(null);
+  const handleQuickFilterKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || target.getAttribute("role") !== "tab") return;
+    const currentIdx = QUICK_FILTERS.findIndex((t) => t.key === quickFilter);
+    if (currentIdx < 0) return;
+    let nextIdx: number | null = null;
+    switch (e.key) {
+      case "ArrowRight":
+        nextIdx = (currentIdx + 1) % QUICK_FILTERS.length;
+        break;
+      case "ArrowLeft":
+        nextIdx =
+          (currentIdx - 1 + QUICK_FILTERS.length) % QUICK_FILTERS.length;
+        break;
+      case "Home":
+        nextIdx = 0;
+        break;
+      case "End":
+        nextIdx = QUICK_FILTERS.length - 1;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    const nextTab = QUICK_FILTERS[nextIdx];
+    setQuickFilter(nextTab.key);
+    // Move focus to the newly-active tab so the roving tabIndex
+    // hands off and screen-reader announces the new selection.
+    const nextBtn = quickFilterTablistRef.current?.querySelector<HTMLButtonElement>(
+      `#quick-filter-tab-${nextTab.key}`,
+    );
+    nextBtn?.focus();
+  };
   // Badges filter moved into the catalog-driven "+ Add filter" menu —
   // its value now lives in the `extraFilters` bag below.
   // Note: the four formerly-standalone toolbar dropdown filters
@@ -536,12 +605,16 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // 3F (UX-Polish): click-to-sort on Priority / Due Date / Stage column
   // headers. Layered on top of the Sort dropdown so the dropdown remains
   // the tiebreaker when no column sort is active.
-  const [sortState, setSortState] = useState<SortState | null>(null);
+  const [sortState, setSortState] = useState<SortState | null>(
+    () => sessionSnapshot?.primarySort ?? null,
+  );
   // Up to 2 tiebreakers driven from the CustomViewPanel. When the
   // primary `sortState` ties, the comparator falls through these in
   // order, then to the case-id stable sort. Toolbar Sort dropdown
   // only manages `sortState`; tiebreakers are panel-only.
-  const [sortTiebreakers, setSortTiebreakers] = useState<SortState[]>([]);
+  const [sortTiebreakers, setSortTiebreakers] = useState<SortState[]>(
+    () => sessionSnapshot?.sortTiebreakers ?? [],
+  );
   const handleColumnSort = (columnId: ColumnId) => {
     setSortState((prev) => {
       if (!prev || prev.columnId !== columnId) {
@@ -567,7 +640,10 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
     SavedView<QueueViewFilters>[]
   >(() => loadUserSavedViews<QueueViewFilters>("queue"));
   const [currentViewId, setCurrentViewIdRaw] = useState<string | undefined>(
-    () => readSelectedViewId("queue") ?? SYSTEM_QUEUE_VIEWS[0].id,
+    () =>
+      sessionSnapshot?.appliedViewId ??
+      readSelectedViewId("queue") ??
+      SYSTEM_QUEUE_VIEWS[0].id,
   );
   const setCurrentViewId = useCallback((id: string | undefined) => {
     setCurrentViewIdRaw(id);
@@ -581,8 +657,8 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   // Page-level scope toggle. "active" hides Resolved cases (the
   // overwhelmingly common need); "all" un-hides them. Persisted so a
   // user who flips to "all" doesn't have to re-flip every load.
-  const [caseScope, setCaseScopeRaw] = useState<CaseScope>(() =>
-    readPersistedCaseScope(),
+  const [caseScope, setCaseScopeRaw] = useState<CaseScope>(
+    () => sessionSnapshot?.caseScope ?? readPersistedCaseScope(),
   );
   const setCaseScope = (next: CaseScope) => {
     setCaseScopeRaw(next);
@@ -594,7 +670,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
   };
 
   const [extraFilters, setExtraFilters] = useState<Record<string, unknown>>(
-    {},
+    () => sessionSnapshot?.extraFilters ?? {},
   );
   const [advancedPanelOpen, setAdvancedPanelOpen] = useState(false);
   const [newlyAddedFilterId, setNewlyAddedFilterId] = useState<string | null>(
@@ -671,6 +747,24 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
     caseScope,
     sortTiebreakers: [...sortTiebreakers],
   };
+
+  // Phase 0.5: debounced autosave to sessionStorage so a reload,
+  // in-app navigation, or browser back/forward in the same tab
+  // restores the current view shape. Cleared on Reset (below) and
+  // on tab close (browser-managed). See useSessionView.ts and spec
+  // §5.7 for the full semantics.
+  useSessionViewAutosave("queue", {
+    quickFilter,
+    primarySort: sortState,
+    sortTiebreakers,
+    extraFilters,
+    caseScope,
+    columnOrder,
+    columnHidden,
+    viewMode,
+    appliedViewId: currentViewId ?? null,
+  });
+
   const currentView = [...SYSTEM_QUEUE_VIEWS, ...userSavedViews].find(
     (v) => v.id === currentViewId,
   );
@@ -1099,8 +1193,10 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           className="h-6 w-px bg-[#edebe9] shrink-0"
         />
         <div
+          ref={quickFilterTablistRef}
           role="tablist"
           aria-label="Quick filters"
+          onKeyDown={handleQuickFilterKeyDown}
           className="flex items-center gap-1 flex-wrap flex-1"
         >
           {QUICK_FILTERS.map((tab, idx) => {
@@ -1126,8 +1222,14 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
                   />
                 )}
                 <button
+                  id={`quick-filter-tab-${tab.key}`}
                   role="tab"
                   aria-selected={active}
+                  aria-controls="quick-filter-panel"
+                  // Roving tabIndex: the active tab is the single
+                  // keyboard-reachable element in the tablist; arrow
+                  // keys move focus + activation between tabs.
+                  tabIndex={active ? 0 : -1}
                   aria-label={`${tab.label}, ${count} ${count === 1 ? "case" : "cases"}`}
                   type="button"
                   onClick={() => setQuickFilter(tab.key)}
@@ -1385,6 +1487,18 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           rich layout; Detailed list = compact rows + bulk-actions bar;
           Preview pane = dense rows on the left + resizable preview on
           the right. */}
+      {/* Tabpanel container — the active quick-filter tab's
+          `aria-controls` points at this id, and `aria-labelledby`
+          binds back to the active tab so assistive tech announces
+          the right pairing. The container wraps every render path
+          (empty state, list mode, preview mode, cards mode) so
+          identity stays stable across mode swaps. */}
+      <div
+        id="quick-filter-panel"
+        role="tabpanel"
+        aria-labelledby={`quick-filter-tab-${quickFilter}`}
+        tabIndex={0}
+      >
       {sortedCases.length === 0 ? (
         <Card className="p-16 text-center bg-white/80 backdrop-blur-sm shadow-sm border-slate-200/60">
           <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1598,6 +1712,7 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           })}
         </ul>
       )}
+      </div>
 
       {/* Wireframes + Redesign Preview modals moved to App.tsx so they
           can fire from any route via the App header Help & Resources
@@ -1669,6 +1784,11 @@ export function CaseQueue({ onCaseSelect }: CaseQueueProps) {
           setSortTiebreakers([]);
           persistColumnHidden(defaultColumnVisibility(CASE_LIST_COLUMNS));
           handleReorderColumns(defaultColumnOrder(CASE_LIST_COLUMNS));
+          // Phase 0.5: explicit clear so the next reload starts
+          // genuinely pristine rather than restoring the just-reset
+          // state via the debounced autosave that will fire 200ms
+          // after these setters land. See spec §4.4 + §5.7.5.
+          clearSessionViewSnapshot("queue");
         }}
       />
 
