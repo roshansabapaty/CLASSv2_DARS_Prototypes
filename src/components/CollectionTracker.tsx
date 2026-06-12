@@ -3197,6 +3197,14 @@ export function CollectionTracker({
                   <Download className="w-4 h-4 mr-2" />
                   Export Report
                 </Button>
+                {/* Block Delivery — hidden on EPOC-PR (preservation).
+                    Preservation requests never reach a delivery stage
+                    (the pipeline collapses to Collection-only), so a
+                    delivery-block control is irrelevant. Matches the
+                    `!isEpocPr` gating used for the Package/Delivery
+                    stages below. The GFR-panel "Block Delivery" CTA is
+                    already self-hidden for preservation via gfrApplies(). */}
+                {!isEpocPr && (
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>
                   <TooltipTrigger asChild>
@@ -3257,6 +3265,7 @@ export function CollectionTracker({
                   )}
                   </Tooltip>
                 </TooltipProvider>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
