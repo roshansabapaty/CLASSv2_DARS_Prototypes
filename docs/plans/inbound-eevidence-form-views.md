@@ -45,6 +45,27 @@ For eEvidence cases these EPOC forms ARE the legal-demand equivalent (vs. the wa
 
 `src/components/DocumentViewerPanel.tsx` takes a new `legalDemandFormData` prop (threaded from `DataEntryForm` as `legalDemandFormData={formData}`). When `hasLegalDemandForm(...)`, the panel's content area renders `<LegalDemandFormView>` instead of the static document tabs/selector; the header subtitle adapts. Opened via the Docs toggle / Ctrl+Shift+D. Non-eEvidence cases keep the existing verify/reject document flow.
 
+## Integration plan — remaining inbound forms → a Documents register
+
+Decided 2026-06-15. The Legal Document Review Panel generalizes from "the single legal demand (Form 1/2)" into a per-case **Documents received register** — a selectable list of every inbound formal document, each rendered with the boxed read-only style + raw-input framing + PDF attachment (the conventions below). The action layer (banners, GFR panel, audit, handlers) stays; it gains deep-links into the register.
+
+**Sources the register aggregates (per case):**
+- **Form 1 / Form 2** — the legal demand, built from `FormData` ETSI fields (`buildLegalDemandInstance`).
+- **Form 5 / Form 6 / End-of-Preservation / Withdrawal** — arrive as inbound correspondence items carrying `structuredForm { templateId, values }`; render via `getTemplateById` + those values.
+- **EA Grounds for Refusal** — built from `FormData.eevidenceGroundsForRefusal` (needs a new read-only template + builder; it isn't a fill-in form).
+
+**Per-form handling (decided):**
+- Preservation set (Form 6, End-of-Preservation, Withdrawal): **document in register + keep banner**; banner gets a "View document →" deep-link.
+- Form 5 (Confirmation of Issuance): **document in register + cross-case link** to the spawned EPOC-ER case.
+- GFR (EA decision): **keep GroundsForRefusalPanel (action) AND add a GFR document** to the register.
+- RFI / PAI: **stay in Correspondence** (conversation, not documents).
+
+**Build phases:**
+- **A — Register foundation.** `buildCaseLegalDocuments(formData, correspondenceItems)` aggregator → list of `{ id, label, sublabel, template, instance, linkedCaseId? }`. Generalize `LegalDemandFormView` into a register (document list/tabs + selected doc with PDF strip + boxed form). Covers Form 1/2 + the correspondence `structuredForm` docs (5/6/End/Withdrawal). Mount in both surfaces.
+- **B — GFR document.** New `EPOC_GROUNDS_FOR_REFUSAL` template + builder from `eevidenceGroundsForRefusal`; add to the register.
+- **C — Banner deep-links.** Wire "View document →" on the preservation/withdrawal/extension banners to open the panel at that document.
+- **D — Form 5 cross-case link.** Surface the linked EPOC-ER case from the Form 5 document.
+
 ## Rendering conventions — apply to ALL inbound EPOC form types
 
 These are standing rules for every inbound IA/EA form we render (today Form 1 + Form 2; **apply the same to Form 5, Form 6, Withdrawal, End-of-Preservation, and any future inbound EPOC form** as those types are built):

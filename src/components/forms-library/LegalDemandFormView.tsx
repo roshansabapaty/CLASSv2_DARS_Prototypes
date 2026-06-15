@@ -1,18 +1,15 @@
 /**
- * LegalDemandFormView — renders the inbound IA legal-demand form (EPOC
- * Form 1 for production / EPOC Form 2 for preservation) for an eEvidence
- * case, read-only, via <FormPreviewPanel>.
+ * LegalDemandFormView — the per-case "Documents received" register for the
+ * Legal Document Review Panel. Lists every inbound formal document on an
+ * eEvidence case (Form 1/2 legal demand + Form 5/6/End/Withdrawal as they
+ * arrive via correspondence) and renders the selected one read-only via
+ * <FormPreviewPanel variant="legalDemand">.
  *
- * Two artifacts are surfaced together (the IA submits both):
- *   1. A "PDF attachment" strip at the top — the IA's submitted PDF copy
- *      of the form, with a Download action.
+ * Each document surfaces two artifacts the IA submits together:
+ *   1. A "PDF attachment" strip with a Download action (generateFormPdf →
+ *      browser Save-as-PDF; prototype stand-in for the real IA PDF, which
+ *      production retrieves from LENS-CMS).
  *   2. The raw input below — the form rebuilt from the ETSI API fields.
- *
- * PROTOTYPE NOTE: there is no real IA-submitted PDF binary on the case, so
- * the Download action generates a faithful copy from the same form
- * instance (generateFormPdf → browser Save-as-PDF). In production the real
- * IA PDF would be retrieved from LENS-CMS alongside the raw fields — see
- * docs/plans/inbound-eevidence-form-views.md.
  *
  * Shared surface: mounted in both the RS open-docs DocumentViewerPanel and
  * the attorney LegalDemandSnapshot pane. Returns an empty-state for
@@ -21,14 +18,22 @@
  * Fluent v9 + Griffel.
  */
 
-import { Button, makeStyles, tokens, Text } from "@fluentui/react-components";
+import { useState, useSyncExternalStore } from "react";
+import {
+  Button,
+  makeStyles,
+  mergeClasses,
+  tokens,
+  Text,
+} from "@fluentui/react-components";
 import {
   DocumentRegular,
   DocumentPdfRegular,
   ArrowDownloadRegular,
 } from "@fluentui/react-icons";
 import type { FormData } from "../../types/caseTypes";
-import { buildLegalDemandInstance } from "../../utils/legalDemandForm";
+import { buildCaseLegalDocuments } from "../../utils/legalDemandForm";
+import * as correspondenceStore from "../../state/correspondenceStore";
 import { FormPreviewPanel } from "./FormPreviewPanel";
 import { generateFormPdf } from "./pdfGenerator";
 
@@ -37,6 +42,48 @@ const useStyles = makeStyles({
     height: "100%",
     overflowY: "auto",
     backgroundColor: tokens.colorNeutralBackground2,
+  },
+  docTabs: {
+    display: "flex",
+    flexWrap: "wrap",
+    columnGap: "2px",
+    rowGap: "2px",
+    paddingTop: tokens.spacingVerticalS,
+    paddingLeft: tokens.spacingHorizontalL,
+    paddingRight: tokens.spacingHorizontalL,
+    backgroundColor: tokens.colorNeutralBackground2,
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+    borderBottomColor: tokens.colorNeutralStroke2,
+  },
+  docTab: {
+    cursor: "pointer",
+    paddingTop: "6px",
+    paddingBottom: "6px",
+    paddingLeft: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalM,
+    fontSize: tokens.fontSizeBase200,
+    fontFamily: "inherit",
+    borderTopStyle: "none",
+    borderRightStyle: "none",
+    borderBottomStyle: "none",
+    borderLeftStyle: "none",
+    borderTopLeftRadius: tokens.borderRadiusMedium,
+    borderTopRightRadius: tokens.borderRadiusMedium,
+    backgroundColor: tokens.colorNeutralBackground3,
+    color: tokens.colorNeutralForeground2,
+    whiteSpace: "nowrap",
+    ":hover": {
+      backgroundColor: tokens.colorNeutralBackground1Hover,
+    },
+  },
+  docTabActive: {
+    backgroundColor: tokens.colorNeutralBackground1,
+    color: tokens.colorNeutralForeground1,
+    fontWeight: tokens.fontWeightSemibold,
+    borderBottomStyle: "solid",
+    borderBottomWidth: "2px",
+    borderBottomColor: tokens.colorBrandStroke1,
   },
   pdfStrip: {
     display: "flex",
@@ -50,9 +97,6 @@ const useStyles = makeStyles({
     borderBottomStyle: "solid",
     borderBottomWidth: "1px",
     borderBottomColor: tokens.colorNeutralStroke2,
-    position: "sticky",
-    top: 0,
-    zIndex: 1,
   },
   pdfIcon: {
     fontSize: "28px",
@@ -111,26 +155,60 @@ export interface LegalDemandFormViewProps {
 
 export function LegalDemandFormView({ formData }: LegalDemandFormViewProps) {
   const styles = useStyles();
-  const demand = buildLegalDemandInstance(formData);
+  const caseId = formData?.caseId ?? "";
 
-  if (!demand) {
+  // Subscribe to the case's correspondence so newly-arrived inbound
+  // documents (Form 5/6/End/Withdrawal) appear in the register live.
+  const items = useSyncExternalStore(
+    correspondenceStore.subscribe,
+    () => correspondenceStore.get(caseId),
+  );
+  const docs = buildCaseLegalDocuments(formData, items);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const activeDoc = docs.find((d) => d.id === selectedId) ?? docs[0];
+
+  if (!activeDoc) {
     return (
       <div className={styles.empty}>
         <DocumentRegular fontSize={32} />
         <Text size={300}>
-          No inbound eEvidence form to render for this case.
+          No inbound eEvidence document to render for this case.
         </Text>
       </div>
     );
   }
 
-  const fileName = pdfFileName(demand.template.name, demand.instance.caseId);
+  const fileName = pdfFileName(activeDoc.template.name, activeDoc.instance.caseId);
 
   return (
     <div className={styles.scroll}>
+      {/* Document register — one tab per inbound formal document on the
+          case. Hidden when there's only the single legal demand. */}
+      {docs.length > 1 && (
+        <div className={styles.docTabs} role="tablist" aria-label="Documents received">
+          {docs.map((doc) => (
+            <button
+              key={doc.id}
+              type="button"
+              role="tab"
+              aria-selected={doc.id === activeDoc.id}
+              className={mergeClasses(
+                styles.docTab,
+                doc.id === activeDoc.id && styles.docTabActive,
+              )}
+              onClick={() => setSelectedId(doc.id)}
+              title={`${doc.label} — ${doc.sublabel}`}
+            >
+              {doc.shortLabel}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* IA PDF attachment — the issuing authority's submitted PDF copy of
-          the same form. Download generates a faithful copy from the form
-          instance (prototype stand-in for the real IA PDF). */}
+          the selected document. Download generates a faithful copy from the
+          form instance (prototype stand-in for the real IA PDF). */}
       <div className={styles.pdfStrip}>
         <DocumentPdfRegular className={styles.pdfIcon} aria-hidden="true" />
         <div className={styles.pdfMeta}>
@@ -141,20 +219,19 @@ export function LegalDemandFormView({ formData }: LegalDemandFormViewProps) {
           appearance="primary"
           size="small"
           icon={<ArrowDownloadRegular />}
-          onClick={() => generateFormPdf(demand.template, demand.instance)}
+          onClick={() => generateFormPdf(activeDoc.template, activeDoc.instance)}
         >
           Download PDF
         </Button>
       </div>
 
-      {/* Raw input — the form rebuilt from the ETSI API fields the IA
-          transmitted. */}
+      {/* Raw input — the document rebuilt from the ETSI API fields. */}
       <div className={styles.rawLabel}>
         Raw input — rebuilt from the issuing authority's ETSI fields
       </div>
       <FormPreviewPanel
-        template={demand.template}
-        instance={demand.instance}
+        template={activeDoc.template}
+        instance={activeDoc.instance}
         variant="legalDemand"
       />
     </div>

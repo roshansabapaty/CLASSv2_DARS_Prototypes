@@ -22,6 +22,7 @@
 import { format, isValid } from "date-fns";
 import type { AccountIdentifier, FormData } from "../types/caseTypes";
 import type { CaseFormInstance, FormTemplate } from "../types/formTemplate";
+import type { CorrespondenceItem } from "../types/correspondence";
 import { getTemplateById } from "../config/formTemplates";
 
 export interface LegalDemandForm {
@@ -290,4 +291,101 @@ export function buildLegalDemandInstance(
   };
 
   return { template, instance };
+}
+
+// ── Documents register ──────────────────────────────────────────────────
+
+/** A single reviewable inbound document on the case, rendered (boxed +
+ *  PDF) in the Legal Document Review Panel register. */
+export interface LegalDemandDoc {
+  /** Stable id for tab selection. */
+  id: string;
+  /** Short tab label, e.g. "Form 1", "Withdrawal". */
+  shortLabel: string;
+  /** Full document name (the template name). */
+  label: string;
+  /** Secondary line, e.g. "Legal demand" or "Received Jun 9, 2026". */
+  sublabel: string;
+  template: FormTemplate;
+  instance: CaseFormInstance;
+}
+
+const DOC_SHORT_LABEL: Record<string, string> = {
+  EPOC_FORM_1: "Form 1",
+  EPOC_FORM_2: "Form 2",
+  EPOC_FORM_5: "Form 5",
+  EPOC_FORM_6: "Form 6",
+  EPOC_END_PRESERVATION: "End preservation",
+  EPOC_WITHDRAWAL: "Withdrawal",
+  EPOC_PRESERVATION_ACK: "Preservation ack",
+};
+
+function shortLabelFor(template: FormTemplate): string {
+  return DOC_SHORT_LABEL[template.id] ?? template.name;
+}
+
+/**
+ * Aggregate every inbound formal document on an eEvidence case for the
+ * Legal Document Review Panel register:
+ *   - the primary legal demand (Form 1 / Form 2) from the ETSI envelope, and
+ *   - each inbound correspondence item carrying a `structuredForm`
+ *     (Form 5 / Form 6 / End-of-Preservation / Withdrawal, …).
+ * Returns [] for non-eEvidence cases.
+ */
+export function buildCaseLegalDocuments(
+  formData: FormData | null | undefined,
+  items: ReadonlyArray<CorrespondenceItem>,
+): LegalDemandDoc[] {
+  const docs: LegalDemandDoc[] = [];
+
+  // 1. Primary legal demand (Form 1 / Form 2).
+  const primary = buildLegalDemandInstance(formData);
+  if (primary) {
+    docs.push({
+      id: `primary-${primary.instance.caseId}`,
+      shortLabel: shortLabelFor(primary.template),
+      label: primary.template.name,
+      sublabel: "Legal demand",
+      template: primary.template,
+      instance: primary.instance,
+    });
+  }
+
+  // 2. Inbound structured-form documents from correspondence. Skip any that
+  //    reuse the primary's template (e.g. an EPOC-PR also arrives as a
+  //    PreservationOrder item) so the legal demand isn't listed twice.
+  const primaryTemplateId = primary?.template.id;
+  for (const item of items) {
+    if (item.direction !== "Inbound") continue;
+    if (!item.structuredForm) continue;
+    if (item.structuredForm.templateId === primaryTemplateId) continue;
+    const template = getTemplateById(item.structuredForm.templateId);
+    if (!template) continue;
+    const createdAt = new Date(item.createdAt);
+    const validDate = isValid(createdAt);
+    const when = validDate ? createdAt : new Date();
+    docs.push({
+      id: `inbound-${item.id}`,
+      shortLabel: shortLabelFor(template),
+      label: template.name,
+      sublabel: validDate ? `Received ${format(createdAt, "MMM d, yyyy")}` : "Received",
+      template,
+      instance: {
+        instanceId: `inbound-${item.id}`,
+        templateId: template.id,
+        caseId: formData?.caseId ?? "",
+        status: "Signed",
+        values: item.structuredForm.values,
+        createdAt: when,
+        updatedAt: when,
+        signature: {
+          signerName: "Issuing Authority",
+          signedAt: when,
+          attestation: true,
+        },
+      },
+    });
+  }
+
+  return docs;
 }
