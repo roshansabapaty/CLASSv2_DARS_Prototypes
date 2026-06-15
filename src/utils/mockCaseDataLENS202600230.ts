@@ -100,22 +100,22 @@ export function buildLENS202600230FormData(): FormData {
   // values as the parent EPOC-PR but fresh task IDs — the EPOC-ER stands
   // on its own as a production order.
   // The IA's production order adds a NEW data category that was NOT in the
-  // preservation scope (OneDrive content) — it needs fresh collection. This
-  // demonstrates a mixed case: linked preserved jobs (overlaid at case-open
-  // by applySubsequentProduction) ready to package, alongside a new job to
-  // collect.
+  // preservation scope — MSA Basic Subscriber Data, an AUTOMATED data type
+  // so the Start-Collection flow applies. Demonstrates a mixed case: linked
+  // preserved jobs (overlaid at case-open by applySubsequentProduction)
+  // ready to package, alongside a new automated job to collect.
   const id1Services = createDefaultIdentifierServices() as Record<string, any>;
   {
-    const svc = id1Services["oneDriveConsumer"];
-    const item = svc?.categoryGroups?.["contentData"]?.["genericAttributes"];
+    const svc = id1Services["msaProfile"];
+    const item = svc?.categoryGroups?.["subscriberData"]?.["genericAttributes"];
     if (svc && item) {
       svc.enabled = true;
       svc.includeConsumerAccount = true;
-      svc.categoryGroups["contentData"]["genericAttributes"] = {
+      svc.categoryGroups["subscriberData"]["genericAttributes"] = {
         ...item,
         enabled: true,
-        taskId: "TSK-ODB-CON-230-NEW",
-        jobId: "JOB-ODB-CON-230-NEW",
+        taskId: "TSK-MSA-SUB-230-NEW",
+        jobId: "JOB-MSA-SUB-230-NEW",
         collectionStatus: "Not Started",
         startDate: new Date("2026-01-01"),
         endDate: new Date("2026-05-20"),
