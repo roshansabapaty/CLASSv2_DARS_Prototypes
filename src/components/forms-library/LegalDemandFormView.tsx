@@ -19,8 +19,10 @@
  */
 
 import { useState, useSyncExternalStore } from "react";
+import { format, isValid } from "date-fns";
 import {
   Button,
+  Link,
   makeStyles,
   mergeClasses,
   tokens,
@@ -30,6 +32,7 @@ import {
   DocumentRegular,
   DocumentPdfRegular,
   ArrowDownloadRegular,
+  LinkRegular,
 } from "@fluentui/react-icons";
 import type { FormData } from "../../types/caseTypes";
 import { buildCaseLegalDocuments } from "../../utils/legalDemandForm";
@@ -125,6 +128,27 @@ const useStyles = makeStyles({
     letterSpacing: "0.04em",
     color: tokens.colorNeutralForeground3,
   },
+  linkStrip: {
+    display: "flex",
+    alignItems: "center",
+    columnGap: tokens.spacingHorizontalS,
+    flexWrap: "wrap",
+    paddingTop: tokens.spacingVerticalSNudge,
+    paddingBottom: tokens.spacingVerticalSNudge,
+    paddingLeft: tokens.spacingHorizontalL,
+    paddingRight: tokens.spacingHorizontalL,
+    backgroundColor: tokens.colorNeutralBackground3,
+    borderBottomStyle: "solid",
+    borderBottomWidth: "1px",
+    borderBottomColor: tokens.colorNeutralStroke2,
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground2,
+  },
+  linkIcon: {
+    fontSize: "16px",
+    color: tokens.colorBrandForeground1,
+    flexShrink: 0,
+  },
   empty: {
     display: "flex",
     flexDirection: "column",
@@ -151,11 +175,28 @@ function pdfFileName(templateName: string, caseId: string): string {
 
 export interface LegalDemandFormViewProps {
   formData: FormData | null | undefined;
+  /** Navigate to a related case (e.g. the prior EPOC-PR a subsequent
+   *  production follows). When omitted, the related-order link renders as
+   *  read-only text. */
+  onOpenCase?: (caseId: string) => void;
 }
 
-export function LegalDemandFormView({ formData }: LegalDemandFormViewProps) {
+/** Format an ISO date string for the related-order strip. */
+function fmtIsoDate(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isValid(d) ? format(d, "MMM d, yyyy") : "";
+}
+
+export function LegalDemandFormView({ formData, onOpenCase }: LegalDemandFormViewProps) {
   const styles = useStyles();
   const caseId = formData?.caseId ?? "";
+
+  // Prior EPOC-PR this production order follows (subsequent production). The
+  // preserved snapshot from that case feeds package + delivery here.
+  const relatedPreservation = (formData?.eevidenceRelatedCases ?? []).find(
+    (rc) => (rc.requestSubType ?? "").toUpperCase().includes("PR"),
+  );
 
   // Subscribe to the case's correspondence so newly-arrived inbound
   // documents (Form 5/6/End/Withdrawal) appear in the register live.
@@ -203,6 +244,30 @@ export function LegalDemandFormView({ formData }: LegalDemandFormViewProps) {
               {doc.shortLabel}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Related preservation order — when this is a subsequent production
+          (EPOC-ER following an earlier EPOC-PR), surface the link so the RS
+          sees the two cases are connected and the preserved data feeds
+          package + delivery here. Case-level context, shown once. */}
+      {relatedPreservation && (
+        <div className={styles.linkStrip}>
+          <LinkRegular className={styles.linkIcon} aria-hidden="true" />
+          <span>
+            Follows preservation order{" "}
+            {onOpenCase ? (
+              <Link as="button" onClick={() => onOpenCase(relatedPreservation.darsCaseNumber)}>
+                {relatedPreservation.darsCaseNumber}
+              </Link>
+            ) : (
+              <Text weight="semibold">{relatedPreservation.darsCaseNumber}</Text>
+            )}
+            {relatedPreservation.preservationEndDate &&
+              ` · preserved until ${fmtIsoDate(relatedPreservation.preservationEndDate)}`}
+            {relatedPreservation.dataDestructionDate &&
+              ` · delete by ${fmtIsoDate(relatedPreservation.dataDestructionDate)}`}
+          </span>
         </div>
       )}
 

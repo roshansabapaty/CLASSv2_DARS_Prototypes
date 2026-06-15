@@ -61,10 +61,12 @@ Decided 2026-06-15. The Legal Document Review Panel generalizes from "the single
 - RFI / PAI: **stay in Correspondence** (conversation, not documents).
 
 **Build phases:**
-- **A — Register foundation.** `buildCaseLegalDocuments(formData, correspondenceItems)` aggregator → list of `{ id, label, sublabel, template, instance, linkedCaseId? }`. Generalize `LegalDemandFormView` into a register (document list/tabs + selected doc with PDF strip + boxed form). Covers Form 1/2 + the correspondence `structuredForm` docs (5/6/End/Withdrawal). Mount in both surfaces.
-- **B — GFR document.** New `EPOC_GROUNDS_FOR_REFUSAL` template + builder from `eevidenceGroundsForRefusal`; add to the register.
-- **C — Banner deep-links.** Wire "View document →" on the preservation/withdrawal/extension banners to open the panel at that document.
-- **D — Form 5 cross-case link.** Surface the linked EPOC-ER case from the Form 5 document.
+- **A — Register foundation. ✅ done.** `buildCaseLegalDocuments(formData, items)` aggregator → `LegalDemandDoc[]`. `LegalDemandFormView` is a register (document tab strip + selected doc with PDF strip + boxed form), subscribed to the correspondence store. Covers Form 1/2 + correspondence `structuredForm` docs (5/6/End/Withdrawal). Mounted in both surfaces.
+- **B — GFR document. ✅ done.** `EPOC_GROUNDS_FOR_REFUSAL` template + `buildGfrDocument` from `eevidenceGroundsForRefusal`; appended to the register. Docs carry a `source` (Issuing vs Enforcing authority).
+- **D — Subsequent-production link. ✅ done (core).** The register surfaces a "Follows preservation order LNS-… · preserved until … · delete by …" strip when the case (an EPOC-ER) has an `eevidenceRelatedCases` entry of subtype `EPOC-PR`. `LegalDemandFormView` takes an optional `onOpenCase` — the strip is read-only text until that's wired (next increment threads it through DocumentViewerPanel/LegalDemandSnapshot → App).
+- **C — Banner deep-links. ⏸ deferred.** Wire "View document →" on the preservation/withdrawal/extension banners to open the panel at that document.
+
+**Follow-up (separate workflow feature, logged):** *preserved data → package & delivery.* When a subsequent-production EPOC-ER follows an EPOC-PR, the new disclosure case should seed its Collection jobs from the **preserved snapshot** of the linked EPOC-PR (no fresh collection) and enable package + delivery. This is Collection-stage behaviour (CollectionTracker + job seeding), distinct from the document-register work above. Also closes the Workflow-5 end-to-end gap flagged in `docs/eEvidence-Workflow-Validation.md`.
 
 ## Rendering conventions — apply to ALL inbound EPOC form types
 
