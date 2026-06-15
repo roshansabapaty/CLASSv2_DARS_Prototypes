@@ -1406,8 +1406,49 @@ const PROVIDE_ADDITIONAL_INFORMATION: FormTemplate = {
 // Library + helpers
 // ─────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────
+// EA Grounds for Refusal — the enforcing authority's decision document
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Inbound from the ENFORCING authority (not the IA). Not a fill-in form —
+// it's the EA's None / Full / Partial decision under Reg 2023/1543 Art. 12.
+// Rendered read-only in the Documents register (full skeleton); built from
+// FormData.eevidenceGroundsForRefusal by buildGfrDocument in
+// src/utils/legalDemandForm.ts. The actionable surface stays the
+// GroundsForRefusalPanel.
+
+const EPOC_GROUNDS_FOR_REFUSAL: FormTemplate = {
+  id: "EPOC_GROUNDS_FOR_REFUSAL",
+  name: "EA Grounds for Refusal",
+  category: "Notice",
+  description:
+    "The enforcing authority's Grounds-for-Refusal decision on the EPOC under Regulation (EU) 2023/1543 Article 12 — None, Full, or Partial. Read-only; rendered from the EA's decision payload.",
+  regulatoryAnchor: "EU Regulation 2023/1543, Article 12 (ETSI 5.5)",
+  sections: [
+    { id: "A", title: "Section A: Enforcing authority" },
+    { id: "B", title: "Section B: Decision" },
+    { id: "C", title: "Section C: Grounds for refusal" },
+    { id: "D", title: "Section D: Blocked target identifiers" },
+    { id: "E", title: "Section E: Review window" },
+  ],
+  fields: [
+    { id: "A_enforcingAuthority", sectionId: "A", label: "Enforcing authority", type: "text", span: "full" },
+    { id: "A_referenceNumber", sectionId: "A", label: "EA reference number", type: "text", span: "half" },
+    { id: "B_trigger", sectionId: "B", label: "Trigger", type: "text", span: "half" },
+    { id: "B_decision", sectionId: "B", label: "Decision", type: "text", span: "half" },
+    { id: "B_decidedAt", sectionId: "B", label: "Decided on", type: "date", span: "half" },
+    { id: "B_decidedBy", sectionId: "B", label: "Decided by", type: "text", span: "half" },
+    { id: "C_reasons", sectionId: "C", label: "Reason(s) for refusal", type: "textarea", span: "full" },
+    { id: "C_reasonSummary", sectionId: "C", label: "Summary", type: "textarea", span: "full" },
+    { id: "D_blockedIdentifiers", sectionId: "D", label: "Blocked target identifiers", type: "textarea", span: "full" },
+    { id: "E_notifiedAt", sectionId: "E", label: "EA notified on", type: "date", span: "half" },
+    { id: "E_windowExpiresAt", sectionId: "E", label: "Review window expires", type: "date", span: "half" },
+  ],
+};
+
 export const FORM_TEMPLATES: FormTemplate[] = [
   EPOC_FORM_1,
+  EPOC_GROUNDS_FOR_REFUSAL,
   EPOC_FORM_2,
   EPOC_FORM_3,
   EPOC_FORM_5,

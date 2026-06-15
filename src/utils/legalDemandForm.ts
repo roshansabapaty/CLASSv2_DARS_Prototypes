@@ -306,6 +306,9 @@ export interface LegalDemandDoc {
   label: string;
   /** Secondary line, e.g. "Legal demand" or "Received Jun 9, 2026". */
   sublabel: string;
+  /** Submitting authority — drives the PDF/raw-input labels, e.g.
+   *  "Issuing authority" (IA forms) or "Enforcing authority" (GFR). */
+  source: string;
   template: FormTemplate;
   instance: CaseFormInstance;
 }
@@ -346,6 +349,7 @@ export function buildCaseLegalDocuments(
       shortLabel: shortLabelFor(primary.template),
       label: primary.template.name,
       sublabel: "Legal demand",
+      source: "Issuing authority",
       template: primary.template,
       instance: primary.instance,
     });
@@ -369,6 +373,7 @@ export function buildCaseLegalDocuments(
       shortLabel: shortLabelFor(template),
       label: template.name,
       sublabel: validDate ? `Received ${format(createdAt, "MMM d, yyyy")}` : "Received",
+      source: "Issuing authority",
       template,
       instance: {
         instanceId: `inbound-${item.id}`,
@@ -387,5 +392,108 @@ export function buildCaseLegalDocuments(
     });
   }
 
+  // 3. EA Grounds for Refusal decision (when present) — from the EA, not IA.
+  const gfrDoc = buildGfrDocument(formData);
+  if (gfrDoc) docs.push(gfrDoc);
+
   return docs;
+}
+
+// ── EA Grounds for Refusal document ─────────────────────────────────────
+
+const REFUSAL_REASON_LABEL: Record<string, string> = {
+  ImmunitiesOrPrivileges: "Immunities or privileges (Art. 12(1)(a))",
+  ConflictWithThirdCountryLaw: "Conflict with third-country law (Art. 12(1)(b))",
+  ManifestBreachOfFundamentalRights: "Manifest breach of fundamental rights (Art. 12(1)(c))",
+  ManifestlyDisproportionate: "Manifestly disproportionate (Art. 12(1)(d))",
+};
+
+function gfrDecisionLabel(
+  decision: NonNullable<FormData["eevidenceGroundsForRefusal"]>["decision"],
+): string {
+  if (!decision) return "Under EA review";
+  switch (decision.kind) {
+    case "None":
+      return "No grounds for refusal";
+    case "Full":
+      return "Full refusal";
+    case "Partial":
+      return "Partial refusal";
+    default:
+      return "Under EA review";
+  }
+}
+
+/** Build the read-only EA Grounds-for-Refusal document, or null when the
+ *  case has no GFR record. */
+function buildGfrDocument(
+  formData: FormData | null | undefined,
+): LegalDemandDoc | null {
+  const gfr = formData?.eevidenceGroundsForRefusal;
+  if (!formData || !gfr) return null;
+  const template = getTemplateById("EPOC_GROUNDS_FOR_REFUSAL");
+  if (!template) return null;
+
+  const decision = gfr.decision;
+  const reasons =
+    decision && (decision.kind === "Full" || decision.kind === "Partial")
+      ? decision.reasons.map((r) => REFUSAL_REASON_LABEL[r] ?? r)
+      : [];
+  const reasonSummary =
+    decision && (decision.kind === "Full" || decision.kind === "Partial")
+      ? decision.reasonSummary ?? ""
+      : "";
+  const blocked =
+    decision && decision.kind === "Partial"
+      ? decision.blockedTaskObjectIds.map((taskId) => {
+          const match = (formData.identifiers ?? []).find(
+            (i) => i.taskId === taskId,
+          );
+          return match ? `${match.value} (${taskId})` : taskId;
+        })
+      : [];
+
+  const when = decision?.decidedAt ?? gfr.notifiedAt;
+  const whenDate = when instanceof Date ? when : new Date(when);
+  const safeWhen = isValid(whenDate) ? whenDate : new Date();
+
+  const values: Record<string, unknown> = {
+    A_enforcingAuthority: gfr.ea?.name ?? "",
+    A_referenceNumber: gfr.ea?.referenceNumber ?? "",
+    B_trigger:
+      gfr.trigger === "Form3Response"
+        ? "Form 3 response"
+        : "Form 1 review (pre-execution)",
+    B_decision: gfrDecisionLabel(decision),
+    B_decidedAt: toIso(decision?.decidedAt),
+    B_decidedBy: decision?.decidedBy ?? "",
+    C_reasons: reasons,
+    C_reasonSummary: reasonSummary,
+    D_blockedIdentifiers: blocked,
+    E_notifiedAt: toIso(gfr.notifiedAt),
+    E_windowExpiresAt: toIso(gfr.eaReviewWindowExpiresAt),
+  };
+
+  return {
+    id: `gfr-${formData.caseId}`,
+    shortLabel: "Grounds for refusal",
+    label: template.name,
+    sublabel: gfrDecisionLabel(decision),
+    source: "Enforcing authority",
+    template,
+    instance: {
+      instanceId: `gfr-${formData.caseId}`,
+      templateId: template.id,
+      caseId: formData.caseId,
+      status: "Signed",
+      values,
+      createdAt: safeWhen,
+      updatedAt: safeWhen,
+      signature: {
+        signerName: gfr.ea?.name ?? "Enforcing Authority",
+        signedAt: safeWhen,
+        attestation: true,
+      },
+    },
+  };
 }

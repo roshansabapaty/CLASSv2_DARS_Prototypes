@@ -212,7 +212,7 @@ export function LegalDemandFormView({ formData }: LegalDemandFormViewProps) {
       <div className={styles.pdfStrip}>
         <DocumentPdfRegular className={styles.pdfIcon} aria-hidden="true" />
         <div className={styles.pdfMeta}>
-          <Text weight="semibold">Issuing authority PDF attachment</Text>
+          <Text weight="semibold">{activeDoc.source} PDF attachment</Text>
           <Text className={styles.pdfFile}>{fileName}</Text>
         </div>
         <Button
@@ -227,7 +227,7 @@ export function LegalDemandFormView({ formData }: LegalDemandFormViewProps) {
 
       {/* Raw input — the document rebuilt from the ETSI API fields. */}
       <div className={styles.rawLabel}>
-        Raw input — rebuilt from the issuing authority's ETSI fields
+        Raw input — rebuilt from the {activeDoc.source.toLowerCase()}'s ETSI fields
       </div>
       <FormPreviewPanel
         template={activeDoc.template}
