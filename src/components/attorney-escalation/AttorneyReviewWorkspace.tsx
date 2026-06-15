@@ -184,6 +184,9 @@ export interface AttorneyReviewWorkspaceProps {
    *  DARS Request View snapshot. Routes to the activeApp="queue" RS
    *  case form. */
   onOpenDarsRequestView: () => void;
+  /** Open a related case (e.g. the prior EPOC-PR) from the Documents
+   *  register in the Legal Demand pane. */
+  onOpenCase?: (caseId: string) => void;
 }
 
 const RIGHT_PANE_DEFAULT_WIDTH = 560;
@@ -198,6 +201,7 @@ export function AttorneyReviewWorkspace({
   caseId,
   onBackToDashboard,
   onOpenDarsRequestView,
+  onOpenCase,
 }: AttorneyReviewWorkspaceProps) {
   const styles = useStyles();
 
@@ -727,6 +731,7 @@ export function AttorneyReviewWorkspace({
               <LegalDemandSnapshot
                 case={formData}
                 onOpenInFullEditor={onOpenDarsRequestView}
+                onOpenCase={onOpenCase}
               />
             )}
           </Resizable>

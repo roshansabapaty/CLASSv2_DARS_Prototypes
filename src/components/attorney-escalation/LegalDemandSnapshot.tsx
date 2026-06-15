@@ -266,9 +266,11 @@ interface Props {
   /** Routes the attorney to the full editable case form where the
    *  DocumentViewerPanel verification flow lives. */
   onOpenInFullEditor: () => void;
+  /** Open a related case (e.g. the prior EPOC-PR) from the Documents register. */
+  onOpenCase?: (caseId: string) => void;
 }
 
-export function LegalDemandSnapshot({ case: caseData, onOpenInFullEditor }: Props) {
+export function LegalDemandSnapshot({ case: caseData, onOpenInFullEditor, onOpenCase }: Props) {
   const styles = useStyles();
   const documents = DEFAULT_AVAILABLE_DOCUMENTS;
   const [activeDocId, setActiveDocId] = useState<string>(
@@ -300,7 +302,7 @@ export function LegalDemandSnapshot({ case: caseData, onOpenInFullEditor }: Prop
           </Button>
         </div>
         <div style={{ flex: 1, minHeight: 0 }}>
-          <LegalDemandFormView formData={caseData} />
+          <LegalDemandFormView formData={caseData} onOpenCase={onOpenCase} />
         </div>
       </div>
     );

@@ -534,6 +534,7 @@ export default function App() {
                     caseId={selectedCaseId ?? ""}
                     onBackToDashboard={() => setActiveApp("attorneyDashboard")}
                     onOpenDarsRequestView={() => setActiveApp("queue")}
+                    onOpenCase={(id) => { setActiveApp("queue"); handleCaseSelect(id); }}
                   />
                 ) : activeApp === "notifications" ? (
                   <NotificationsPage
@@ -603,6 +604,7 @@ export default function App() {
               caseId={selectedCaseId}
               onBackToDashboard={() => setActiveApp("attorneyDashboard")}
               onOpenDarsRequestView={() => setActiveApp("queue")}
+              onOpenCase={(id) => { setActiveApp("queue"); handleCaseSelect(id); }}
             />
           </main>
         ) : activeApp === "notifications" ? (
@@ -729,6 +731,7 @@ export default function App() {
                   onNavigateToCollection={handleNavigateToCollection}
                   onNavigateToReadySubmit={handleNavigateToReadySubmit}
                   onNavigateToQueue={handleNavigateToQueue}
+                  onOpenCase={(id) => handleCaseSelect(id)}
                   sharedFormData={sharedFormData}
                   setSharedFormData={setSharedFormData}
                   selectedCaseId={selectedCaseId}
@@ -765,6 +768,7 @@ export default function App() {
                       onEditFulfillmentScope={handleEditFulfillmentScope}
                       onNavigateToTriage={handleNavigateToTriage}
                       onNavigateToQueue={handleNavigateToQueue}
+                      onOpenCase={(id) => handleCaseSelect(id)}
                       sharedFormData={sharedFormData}
                       setSharedFormData={setSharedFormData}
                       readinessFilter={collectionReadinessFilter}

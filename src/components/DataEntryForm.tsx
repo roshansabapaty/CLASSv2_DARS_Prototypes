@@ -314,6 +314,8 @@ interface DataEntryFormProps {
   onNavigateToCollection?: () => void;
   onNavigateToQueue?: () => void;
   onNavigateToReadySubmit?: () => void;
+  /** Open a related case (e.g. the prior EPOC-PR) from the Documents register. */
+  onOpenCase?: (caseId: string) => void;
   sharedFormData?: FormData | null;
   setSharedFormData?: (data: FormData) => void;
   selectedCaseId?: string | null;
@@ -360,6 +362,7 @@ export function DataEntryForm({
   onNavigateToCollection,
   onNavigateToReadySubmit,
   onNavigateToQueue,
+  onOpenCase,
   sharedFormData,
   setSharedFormData,
   selectedCaseId,
@@ -2748,6 +2751,7 @@ export function DataEntryForm({
       {warrantModalOpen && (
         <DocumentViewerPanel
           legalDemandFormData={formData}
+          onOpenCase={onOpenCase}
           showFulfillmentSummary={showFulfillmentSummary}
           documentPanelWidth={documentPanelWidth}
           documentPanelMaxWidth={documentPanelMaxWidth}

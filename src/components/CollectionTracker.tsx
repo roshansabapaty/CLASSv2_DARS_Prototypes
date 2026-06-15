@@ -315,6 +315,8 @@ interface CollectionTrackerProps {
   onEditFulfillmentScope?: () => void;
   onNavigateToTriage?: () => void;
   onNavigateToQueue?: () => void;
+  /** Open a related case (e.g. the prior EPOC-PR) from the Documents register. */
+  onOpenCase?: (caseId: string) => void;
   onToggleDocumentPanel?: () => void;
   sharedFormData?: FormData | null;
   setSharedFormData?: (data: FormData) => void;
@@ -353,6 +355,7 @@ export function CollectionTracker({
   onEditFulfillmentScope,
   onNavigateToTriage,
   onNavigateToQueue,
+  onOpenCase,
   onToggleDocumentPanel,
   sharedFormData,
   setSharedFormData,
@@ -6787,6 +6790,7 @@ export function CollectionTracker({
       {documentPanelOpen && (
         <DocumentViewerPanel
           legalDemandFormData={formData}
+          onOpenCase={onOpenCase}
           showFulfillmentSummary={showPublishReview || showDeliveryReview}
           documentPanelWidth={documentPanelWidth}
           documentPanelMaxWidth={documentPanelMaxWidth}

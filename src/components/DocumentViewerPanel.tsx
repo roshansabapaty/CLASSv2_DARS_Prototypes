@@ -62,6 +62,9 @@ interface DocumentViewerPanelProps {
    *  renders the inbound EPOC legal-demand form (Form 1 / Form 2) from the
    *  ETSI envelope instead of the static warrant / subpoena / NDO docs. */
   legalDemandFormData?: FormData | null;
+  /** Navigate to a related case (e.g. the prior EPOC-PR a subsequent
+   *  production follows) from the Documents register. */
+  onOpenCase?: (caseId: string) => void;
   showFulfillmentSummary: boolean;
   documentPanelWidth: number;
   documentPanelMaxWidth: number;
@@ -100,6 +103,7 @@ interface DocumentViewerPanelProps {
 
 export function DocumentViewerPanel({
   legalDemandFormData,
+  onOpenCase,
   showFulfillmentSummary,
   documentPanelWidth,
   documentPanelMaxWidth,
@@ -295,7 +299,7 @@ export function DocumentViewerPanel({
               read-only from the ETSI envelope in place of the static docs. */}
           {showLegalDemandForm ? (
             <div className="flex-1 min-h-0">
-              <LegalDemandFormView formData={legalDemandFormData} />
+              <LegalDemandFormView formData={legalDemandFormData} onOpenCase={onOpenCase} />
             </div>
           ) : (
           /* Scrollable Content with Tabs */
