@@ -5196,6 +5196,7 @@ export function CollectionTracker({
                 let totalEnabledCount = 0;
                 let manualCount = 0;
                 let automatedCount = 0;
+                let preservedCount = 0;
                 Object.entries(identifier.services).forEach(([svcKey, service]: [string, any]) => {
                   const showConsumer = service.includeConsumerAccount !== false;
                   const showEnterprise = service.includeEnterpriseAccount === true;
@@ -5208,6 +5209,8 @@ export function CollectionTracker({
                       } else {
                         automatedCount += multiplier;
                       }
+                      // Subsequent Production (Workflow 5) — preserved jobs.
+                      if (category.preservedFromCaseId) preservedCount += multiplier;
                     }
                   });
                 });
@@ -5297,6 +5300,11 @@ export function CollectionTracker({
                           <div>
                             <p className="text-xs text-[#605e5c] mb-1">Identifier</p>
                             <CopyableIdentifier value={identifier.value || "N/A"} variant="block" copyLabel="Copy identifier" />
+                            {preservedCount > 0 && (
+                              <Badge variant="outline" className="mt-1 bg-[#f3faf3] text-[#107c10] border-[#107c10]/40 text-xs">
+                                <ShieldCheck className="w-2.5 h-2.5 mr-0.5" />Preserved
+                              </Badge>
+                            )}
                           </div>
                           <div>
                             <p className="text-xs text-[#605e5c] mb-1">Type</p>
@@ -6525,6 +6533,11 @@ export function CollectionTracker({
                                             onClick={(e) => e.stopPropagation()}
                                           />
                                           <span className="flex-1 text-[#323130]">{job.categoryName}</span>
+                                          {job.preserved && (
+                                            <Badge variant="outline" className="text-xs bg-[#f3faf3] text-[#107c10] border-[#107c10]/40">
+                                              Preserved
+                                            </Badge>
+                                          )}
                                           <Badge variant="outline" className="text-xs bg-[#f3f2f1] text-[#605e5c] border-[#8a8886]">
                                             {job.accountType === 'enterprise' ? 'Ent' : 'Con'}
                                           </Badge>
@@ -6791,6 +6804,11 @@ export function CollectionTracker({
                             </td>
                             <td className="px-4 py-2.5">
                               <span className="text-[#323130]">{job.categoryName}</span>
+                              {job.preserved && (
+                                <Badge variant="outline" className="ml-2 text-xs bg-[#f3faf3] text-[#107c10] border-[#107c10]/40">
+                                  Preserved
+                                </Badge>
+                              )}
                             </td>
                             <td className="px-4 py-2.5">
                               <Badge variant="outline" className={cn(
