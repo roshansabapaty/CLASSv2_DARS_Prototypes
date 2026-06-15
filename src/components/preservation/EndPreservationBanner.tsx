@@ -22,10 +22,13 @@ import { getRetentionStatus } from "../../utils/retentionClock";
 
 interface EndPreservationBannerProps {
   formData: FormData | null | undefined;
+  /** Opens the Documents register focused on the end-of-preservation notice. */
+  onViewDocument?: () => void;
 }
 
 export function EndPreservationBanner({
   formData,
+  onViewDocument,
 }: EndPreservationBannerProps): React.ReactElement | null {
   const [dismissed, setDismissed] = React.useState(false);
   if (!formData) return null;
@@ -80,6 +83,15 @@ export function EndPreservationBanner({
           <div className="text-xs text-[#605e5c] truncate" title={latest.note}>
             {latest.note}
           </div>
+        )}
+        {onViewDocument && (
+          <button
+            type="button"
+            onClick={onViewDocument}
+            className="inline-flex items-center gap-1 text-xs font-semibold underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded"
+          >
+            View document →
+          </button>
         )}
       </div>
       <button

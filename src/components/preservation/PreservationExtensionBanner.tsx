@@ -22,10 +22,13 @@ import { isEpocPrCase } from "../../utils/eEvidenceHelpers";
 
 interface PreservationExtensionBannerProps {
   formData: FormData | null | undefined;
+  /** Opens the Documents register focused on the Form 6 extension. */
+  onViewDocument?: () => void;
 }
 
 export function PreservationExtensionBanner({
   formData,
+  onViewDocument,
 }: PreservationExtensionBannerProps): React.ReactElement | null {
   const [dismissed, setDismissed] = React.useState(false);
   if (!formData) return null;
@@ -81,6 +84,15 @@ export function PreservationExtensionBanner({
           <div className="text-xs text-[#605e5c] truncate" title={latest.note}>
             {latest.note}
           </div>
+        )}
+        {onViewDocument && (
+          <button
+            type="button"
+            onClick={onViewDocument}
+            className="inline-flex items-center gap-1 text-xs font-semibold underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded"
+          >
+            View document →
+          </button>
         )}
       </div>
       <button

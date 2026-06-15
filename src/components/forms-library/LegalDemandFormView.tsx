@@ -18,7 +18,7 @@
  * Fluent v9 + Griffel.
  */
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { format, isValid } from "date-fns";
 import {
   Button,
@@ -179,6 +179,9 @@ export interface LegalDemandFormViewProps {
    *  production follows). When omitted, the related-order link renders as
    *  read-only text. */
   onOpenCase?: (caseId: string) => void;
+  /** "templateId#nonce" — when it changes, select the document for that
+   *  template (workflow-banner "View document →" deep-link). */
+  focusDocRequest?: string;
 }
 
 /** Format an ISO date string for the related-order strip. */
@@ -188,7 +191,7 @@ function fmtIsoDate(iso?: string): string {
   return isValid(d) ? format(d, "MMM d, yyyy") : "";
 }
 
-export function LegalDemandFormView({ formData, onOpenCase }: LegalDemandFormViewProps) {
+export function LegalDemandFormView({ formData, onOpenCase, focusDocRequest }: LegalDemandFormViewProps) {
   const styles = useStyles();
   const caseId = formData?.caseId ?? "";
 
@@ -208,6 +211,17 @@ export function LegalDemandFormView({ formData, onOpenCase }: LegalDemandFormVie
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const activeDoc = docs.find((d) => d.id === selectedId) ?? docs[0];
+
+  // Workflow-banner deep-link: when a "View document →" fires, select the
+  // document for the requested template id.
+  useEffect(() => {
+    if (!focusDocRequest) return;
+    const templateId = focusDocRequest.split("#")[0];
+    const target = docs.find((d) => d.template.id === templateId);
+    if (target) setSelectedId(target.id);
+    // docs intentionally omitted — re-run only when a new focus is requested.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusDocRequest]);
 
   if (!activeDoc) {
     return (

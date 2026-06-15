@@ -34,11 +34,14 @@ interface PreservationOrderActiveBannerProps {
    *  it, and a forgotten wire-up at a future mount site would silently
    *  hide the CTA. Make every consumer pass it explicitly. */
   onAcknowledgeReceipt: () => void;
+  /** Opens the Documents register focused on the Form 2 preservation order. */
+  onViewDocument?: () => void;
 }
 
 export function PreservationOrderActiveBanner({
   formData,
   onAcknowledgeReceipt,
+  onViewDocument,
 }: PreservationOrderActiveBannerProps): React.ReactElement | null {
   const [dismissed, setDismissed] = React.useState(false);
   if (!formData) return null;
@@ -101,6 +104,15 @@ export function PreservationOrderActiveBanner({
             <>Preservation obligation active per Reg 2023/1543 Art. 6</>
           )}
         </div>
+        {onViewDocument && (
+          <button
+            type="button"
+            onClick={onViewDocument}
+            className="inline-flex items-center gap-1 text-xs font-semibold underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded"
+          >
+            View document →
+          </button>
+        )}
         {!acknowledged && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button

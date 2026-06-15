@@ -443,6 +443,16 @@ export function CollectionTracker({
     handleRejectDocument,
     handleUndoVerifyDocument,
   } = useDocumentViewer({ sidebarCollapsed: false });
+
+  // Phase C: deep-link from a workflow banner to its document in the
+  // Documents register. Opens the doc panel and asks LegalDemandFormView to
+  // select the document for the given template. The `#nonce` suffix lets a
+  // repeat click re-focus even if the template id is unchanged.
+  const [docFocusRequest, setDocFocusRequest] = useState<string | undefined>(undefined);
+  const viewDocumentInRegister = (templateId: string) => {
+    setDocFocusRequest(`${templateId}#${Date.now()}`);
+    setDocumentPanelOpen(true);
+  };
   // Correspondence Hub side panel — same parent-controlled flag pattern as
   // DataEntryForm. CorrespondenceBanner / UnreadAlert "Open Hub" CTAs flip
   // this open; the panel itself uses re-resizable so the user can widen
@@ -3041,7 +3051,10 @@ export function CollectionTracker({
         {/* Workflow 8 — IA withdrawal terminal banner. Top of the stack
             because it supersedes every other state. Applies to both
             EPOC-PR and EPOC-ER. Self-hides when the case isn't withdrawn. */}
-        <WithdrawalBanner formData={formData} />
+        <WithdrawalBanner
+          formData={formData}
+          onViewDocument={() => viewDocumentInRegister("EPOC_WITHDRAWAL")}
+        />
 
         {/* Workflow 3 — Emergency Production (8h SLA). Surfaces the IA's
             stated emergency justification. Self-hides on non-emergency
@@ -3055,19 +3068,26 @@ export function CollectionTracker({
         <PreservationOrderActiveBanner
           formData={formData}
           onAcknowledgeReceipt={openAcknowledgeReceiptComposer}
+          onViewDocument={() => viewDocumentInRegister("EPOC_FORM_2")}
         />
 
         {/* Preservation extension banner (EPOC-PR only) — surfaces the
             most recent Form 6 the IA has sent. Self-hides on non-PR
             cases and on cases that never received a Form 6. */}
-        <PreservationExtensionBanner formData={formData} />
+        <PreservationExtensionBanner
+          formData={formData}
+          onViewDocument={() => viewDocumentInRegister("EPOC_FORM_6")}
+        />
 
         {/* End-preservation banner (EPOC-PR only) — surfaces the IA's
             end-of-preservation notice. Renders when the audit log
             contains a PreservationEnded event; the 45-day retention
             clock chip in the sticky header carries the day-by-day
             count, this banner gives the why-it-started context. */}
-        <EndPreservationBanner formData={formData} />
+        <EndPreservationBanner
+          formData={formData}
+          onViewDocument={() => viewDocumentInRegister("EPOC_END_PRESERVATION")}
+        />
 
         {/* Failed-delivery banner — pinned above the GFR panel because
             the RS needs to act on it immediately (Retry). Self-hides
@@ -6791,6 +6811,7 @@ export function CollectionTracker({
         <DocumentViewerPanel
           legalDemandFormData={formData}
           onOpenCase={onOpenCase}
+          focusDocRequest={docFocusRequest}
           showFulfillmentSummary={showPublishReview || showDeliveryReview}
           documentPanelWidth={documentPanelWidth}
           documentPanelMaxWidth={documentPanelMaxWidth}

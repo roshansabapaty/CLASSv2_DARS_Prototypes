@@ -65,6 +65,9 @@ interface DocumentViewerPanelProps {
   /** Navigate to a related case (e.g. the prior EPOC-PR a subsequent
    *  production follows) from the Documents register. */
   onOpenCase?: (caseId: string) => void;
+  /** "templateId#nonce" — when set, the Documents register selects the
+   *  document for that template (used by workflow-banner deep-links). */
+  focusDocRequest?: string;
   showFulfillmentSummary: boolean;
   documentPanelWidth: number;
   documentPanelMaxWidth: number;
@@ -104,6 +107,7 @@ interface DocumentViewerPanelProps {
 export function DocumentViewerPanel({
   legalDemandFormData,
   onOpenCase,
+  focusDocRequest,
   showFulfillmentSummary,
   documentPanelWidth,
   documentPanelMaxWidth,
@@ -299,7 +303,11 @@ export function DocumentViewerPanel({
               read-only from the ETSI envelope in place of the static docs. */}
           {showLegalDemandForm ? (
             <div className="flex-1 min-h-0">
-              <LegalDemandFormView formData={legalDemandFormData} onOpenCase={onOpenCase} />
+              <LegalDemandFormView
+                formData={legalDemandFormData}
+                onOpenCase={onOpenCase}
+                focusDocRequest={focusDocRequest}
+              />
             </div>
           ) : (
           /* Scrollable Content with Tabs */
