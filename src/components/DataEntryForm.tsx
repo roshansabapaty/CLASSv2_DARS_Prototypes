@@ -2747,6 +2747,7 @@ export function DataEntryForm({
       {/* Warrant Attachment Side Panel */}
       {warrantModalOpen && (
         <DocumentViewerPanel
+          legalDemandFormData={formData}
           showFulfillmentSummary={showFulfillmentSummary}
           documentPanelWidth={documentPanelWidth}
           documentPanelMaxWidth={documentPanelMaxWidth}

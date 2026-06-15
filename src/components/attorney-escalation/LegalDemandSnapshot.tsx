@@ -32,6 +32,8 @@ import warrantPage1 from "figma:asset/50d813e5f37746f1ef3e42d999b8ed8fffbea835.p
 import warrantPage2 from "figma:asset/a5fd7a3dff0a4ab9df9e009981241eee452a1664.png";
 import { DEFAULT_AVAILABLE_DOCUMENTS } from "../../data/documentViewerData";
 import type { FormData } from "../../types/caseTypes";
+import { LegalDemandFormView } from "../forms-library/LegalDemandFormView";
+import { hasLegalDemandForm } from "../../utils/legalDemandForm";
 
 /** Image URLs keyed by document id — mirrors the same table in
  *  DocumentViewerPanel so document → page mapping stays consistent. */
@@ -266,12 +268,43 @@ interface Props {
   onOpenInFullEditor: () => void;
 }
 
-export function LegalDemandSnapshot({ onOpenInFullEditor }: Props) {
+export function LegalDemandSnapshot({ case: caseData, onOpenInFullEditor }: Props) {
   const styles = useStyles();
   const documents = DEFAULT_AVAILABLE_DOCUMENTS;
   const [activeDocId, setActiveDocId] = useState<string>(
     documents[0]?.id ?? "",
   );
+
+  // eEvidence cases: the inbound EPOC form (Form 1 production / Form 2
+  // preservation) IS the legal demand — render it read-only from the ETSI
+  // envelope via the shared LegalDemandFormView instead of the static
+  // warrant / subpoena / NDO seed documents.
+  if (hasLegalDemandForm(caseData)) {
+    return (
+      <div className={styles.root}>
+        <div className={styles.topBar}>
+          <div className={styles.topBarTitle}>
+            <DocumentRegular fontSize={18} />
+            <Text weight="semibold">Legal Demand Preview</Text>
+            <Badge color="subtle" appearance="tint" size="small">
+              Read-only
+            </Badge>
+          </div>
+          <Button
+            appearance="primary"
+            size="small"
+            icon={<OpenRegular />}
+            onClick={onOpenInFullEditor}
+          >
+            Open in full editor
+          </Button>
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <LegalDemandFormView formData={caseData} />
+        </div>
+      </div>
+    );
+  }
 
   if (documents.length === 0) {
     return (

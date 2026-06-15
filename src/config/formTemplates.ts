@@ -617,6 +617,96 @@ const EMERGENCY_DISCLOSURE_NOTICE: FormTemplate = {
 // match the `structuredForm.values` keys produced by mock seeds + the
 // PreservationOrder handler in utils/preservationOrderReceipt.ts.
 
+// ─────────────────────────────────────────────────────────────────────────
+// EPOC Form 1 — Production Order (the legal demand for EPOC-ER cases)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Inbound from the Issuing Authority. Unlike Forms 2/5/6 (which arrive as
+// correspondence items carrying a `structuredForm.values` bag), the Form 1
+// IS the case-creation envelope — its data lives directly on FormData. The
+// `buildLegalDemandInstance` helper in src/utils/legalDemandForm.ts hydrates
+// a read-only instance of this template from those ETSI envelope fields.
+//
+// Full-skeleton render: EVERY section and field is always visible so the
+// document shows the complete EPOC form. Anything the issuing authority
+// left blank renders as "—" (absence) rather than vanishing — see
+// buildForm1Values, which sets every field (undefined/"" → "—").
+
+const EPOC_FORM_1: FormTemplate = {
+  id: "EPOC_FORM_1",
+  name: "EPOC Form 1 — Production Order",
+  category: "Notice",
+  description:
+    "Issuing authority's European Production Order Certificate (EPOC) under Regulation (EU) 2023/1543. Rendered read-only from the ETSI envelope the IA transmitted — the authorities, target identifiers, requested data + date ranges, offence, and deadlines. This is the legal demand for an eEvidence production (EPOC-ER) case.",
+  regulatoryAnchor: "EU Regulation 2023/1543, Annex I",
+  sections: [
+    { id: "A", title: "Section A: Issuing authority" },
+    { id: "B", title: "Section B: Validating authority" },
+    { id: "C", title: "Section C: Competent authority" },
+    { id: "D", title: "Section D: Enforcing authority" },
+    { id: "E", title: "Section E: Target identifiers" },
+    { id: "F", title: "Section F: Requested data & date ranges" },
+    { id: "G", title: "Section G: Offence under investigation" },
+    { id: "H", title: "Section H: Key dates & deadlines" },
+    { id: "I", title: "Section I: Enterprise request" },
+    { id: "J", title: "Section J: Emergency justification (Art. 9(2))" },
+    { id: "K", title: "Section K: Additional information from the issuing authority" },
+  ],
+  fields: [
+    // Section A — Issuing authority
+    { id: "A_issuingAuthority", sectionId: "A", label: "Issuing authority", type: "text", span: "full" },
+    { id: "A_issuingAuthorityRole", sectionId: "A", label: "Type of authority", type: "text", span: "half" },
+    { id: "A_issuingAuthorityCountry", sectionId: "A", label: "Country", type: "text", span: "half" },
+    { id: "A_issuingApprovalRole", sectionId: "A", label: "Approval role", type: "text", span: "half" },
+    { id: "A_issuingFileNumbers", sectionId: "A", label: "File / reference number(s)", type: "text", span: "half" },
+    { id: "A_issuingContact", sectionId: "A", label: "Issuing-authority contact", type: "textarea", span: "full" },
+    // Section B — Validating authority (conditional)
+    { id: "B_validatingAuthority", sectionId: "B", label: "Validating authority", type: "text", span: "full" },
+    { id: "B_validatingAuthorityRole", sectionId: "B", label: "Type of authority", type: "text", span: "half" },
+    { id: "B_validatingAuthorityCountry", sectionId: "B", label: "Country", type: "text", span: "half" },
+    { id: "B_validatingFileNumbers", sectionId: "B", label: "File / reference number(s)", type: "text", span: "full" },
+    // Section C — Competent authority (conditional)
+    { id: "C_competentAuthority", sectionId: "C", label: "Competent authority", type: "text", span: "full" },
+    { id: "C_competentAuthorityCountry", sectionId: "C", label: "Country", type: "text", span: "half" },
+    { id: "C_competentFileNumbers", sectionId: "C", label: "File / reference number(s)", type: "text", span: "half" },
+    // Section D — Enforcing authority
+    { id: "D_enforcingAuthority", sectionId: "D", label: "Enforcing authority", type: "text", span: "full" },
+    { id: "D_enforcingContact", sectionId: "D", label: "Enforcing-authority contact", type: "textarea", span: "full" },
+    // Section E — Target identifiers
+    { id: "E_targetIdentifiers", sectionId: "E", label: "Target identifiers", type: "textarea", span: "full" },
+    // Section F — Requested data & date ranges
+    { id: "F_requestedData", sectionId: "F", label: "Requested data, by identifier", type: "textarea", span: "full" },
+    // Section G — Offence
+    { id: "G_offence", sectionId: "G", label: "Offence(s) under investigation", type: "textarea", span: "full" },
+    // Section H — Key dates & deadlines
+    { id: "H_dateOfIssuance", sectionId: "H", label: "Date of issuance", type: "date", span: "half" },
+    { id: "H_dateOfTransmission", sectionId: "H", label: "Date of transmission", type: "date", span: "half" },
+    { id: "H_dateServed", sectionId: "H", label: "Date served on Microsoft", type: "date", span: "half" },
+    { id: "H_dateReceived", sectionId: "H", label: "Date received", type: "date", span: "half" },
+    { id: "H_authorizationStartDate", sectionId: "H", label: "Authorization start", type: "date", span: "half" },
+    { id: "H_authorizationExpirationDate", sectionId: "H", label: "Authorization expiry", type: "date", span: "half" },
+    { id: "H_dueDate", sectionId: "H", label: "Response deadline (SLA)", type: "date", span: "half" },
+    { id: "H_priority", sectionId: "H", label: "Priority", type: "text", span: "half" },
+    // Section I — Enterprise request. Each ETSI UnderlyingConditions
+    // answer is its own labeled field; all render (full skeleton), with
+    // "—" for anything the IA left blank.
+    { id: "I_addressedToController", sectionId: "I", label: "Addressed to controller", type: "checkbox", span: "half" },
+    { id: "I_addressedToProcessor", sectionId: "I", label: "Addressed to processor", type: "checkbox", span: "half" },
+    { id: "I_processorControllerUnidentified", sectionId: "I", label: "Reason: controller cannot be identified", type: "checkbox", span: "half" },
+    { id: "I_processorDetrimental", sectionId: "I", label: "Reason: contacting the controller would harm the investigation", type: "checkbox", span: "half" },
+    { id: "I_processorShallInformController", sectionId: "I", label: "Processor shall inform the controller", type: "checkbox", span: "half" },
+    { id: "I_processorShallNotInformController", sectionId: "I", label: "Processor shall NOT inform the controller", type: "checkbox", span: "half" },
+    { id: "I_permissionToNotifyUser", sectionId: "I", label: "Permission to notify the user", type: "checkbox", span: "half" },
+    { id: "I_justification", sectionId: "I", label: "Justification", type: "textarea", span: "full" },
+    { id: "I_relevantInformation", sectionId: "I", label: "Additional relevant information", type: "textarea", span: "full" },
+    // Section J — Emergency justification (conditional)
+    { id: "J_emergencyCategory", sectionId: "J", label: "Emergency category", type: "text", span: "half" },
+    { id: "J_emergencyNote", sectionId: "J", label: "Justification", type: "textarea", span: "full" },
+    // Section K — Additional information (conditional)
+    { id: "K_additionalInformation", sectionId: "K", label: "Additional information", type: "textarea", span: "full" },
+  ],
+};
+
 const EPOC_FORM_2: FormTemplate = {
   id: "EPOC_FORM_2",
   name: "EPOC Form 2 — Preservation Order",
@@ -1317,6 +1407,7 @@ const PROVIDE_ADDITIONAL_INFORMATION: FormTemplate = {
 // ─────────────────────────────────────────────────────────────────────────
 
 export const FORM_TEMPLATES: FormTemplate[] = [
+  EPOC_FORM_1,
   EPOC_FORM_2,
   EPOC_FORM_3,
   EPOC_FORM_5,

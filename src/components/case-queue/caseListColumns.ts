@@ -118,16 +118,27 @@ export interface ColumnDef {
 // Track order matches DENSE_COLUMN_IDS:
 //   (checkbox) | Case ID | Priority | Due Date | Stage | Assigned To |
 //   Internal Escalation | Escalated To.
+// Applied as an inline `gridTemplateColumns` style (real CSS, space-
+// separated) by both the dense header and its rows.
+//
+// We deliberately do NOT use a Tailwind `grid-cols-[…]` arbitrary class
+// here. The previous version assembled the class via template-literal
+// interpolation (`grid-cols-[auto_${DENSE_TRACKS}]`), so the full class
+// string never appeared as a literal token in source — Tailwind's content
+// scanner couldn't see it and emitted no CSS for it. The class landed on
+// the element but `grid-template-columns` stayed unset, so the grid
+// collapsed to a single implicit column and every header/row cell stacked
+// vertically (preview-pane "stacked headers" bug). An inline style bypasses
+// Tailwind entirely and keeps the header + rows in lockstep.
 const DENSE_TRACKS =
-  "minmax(0,1.1fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)";
+  "minmax(0,1.1fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,0.9fr) minmax(0,1fr) minmax(0,1.2fr) minmax(0,1.2fr)";
 
-export const DENSE_GRID_COLS_WITH_CHECKBOX = `grid-cols-[auto_${DENSE_TRACKS}]`;
-export const DENSE_GRID_COLS_NO_CHECKBOX = `grid-cols-[${DENSE_TRACKS}]`;
-
-export function getDenseGridColsClass(bulkSelectable: boolean): string {
-  return bulkSelectable
-    ? DENSE_GRID_COLS_WITH_CHECKBOX
-    : DENSE_GRID_COLS_NO_CHECKBOX;
+/** Inline `gridTemplateColumns` value for the dense (preview-pane) list.
+ *  `withCheckbox` prepends a leading `auto` track for the select-all
+ *  column. MUST be applied identically to the dense header and its rows
+ *  so the columns line up. */
+export function getDenseGridTemplate(withCheckbox: boolean): string {
+  return withCheckbox ? `auto ${DENSE_TRACKS}` : DENSE_TRACKS;
 }
 
 export const CASE_LIST_COLUMNS: ColumnDef[] = [

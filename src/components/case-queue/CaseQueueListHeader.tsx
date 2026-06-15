@@ -30,7 +30,7 @@ import { ColumnResizer } from "./ColumnResizer";
 import { cn } from "../ui/utils";
 import {
   CASE_LIST_COLUMNS,
-  getDenseGridColsClass,
+  getDenseGridTemplate,
   type ColumnDef,
   type ColumnId,
   type ColumnWidths,
@@ -257,9 +257,9 @@ export function CaseQueueListHeader({
 
   // Dense template — single source of truth lives in
   // `caseListColumns.ts` so the header and row CAN'T drift apart.
-  // See the contract comment at `DENSE_TRACKS` for the two rules
-  // every fr track must follow.
-  const denseGridCols = getDenseGridColsClass(bulkSelectable);
+  // Applied as an inline `gridTemplateColumns` style (NOT a Tailwind
+  // class) — see the contract comment at `DENSE_TRACKS`.
+  const denseGridTemplate = getDenseGridTemplate(bulkSelectable);
 
   // Columns to render labels for. Dense mode drops everything except
   // DENSE_COLUMN_IDS to mirror the row.
@@ -273,11 +273,10 @@ export function CaseQueueListHeader({
       aria-rowindex={1}
       className={cn(
         "grid items-stretch bg-[#faf9f8] border-b border-[#edebe9] sticky top-0 z-10 text-[11px] uppercase tracking-wide font-semibold text-[#605e5c]",
-        isDense && denseGridCols,
       )}
       style={
         isDense
-          ? undefined
+          ? { gridTemplateColumns: denseGridTemplate }
           : {
               gridTemplateColumns: buildGridTemplate(
                 columnWidths ?? ({} as ColumnWidths),

@@ -6786,6 +6786,7 @@ export function CollectionTracker({
           cards (no verify/reject, no tabs, no image viewer) is retired. */}
       {documentPanelOpen && (
         <DocumentViewerPanel
+          legalDemandFormData={formData}
           showFulfillmentSummary={showPublishReview || showDeliveryReview}
           documentPanelWidth={documentPanelWidth}
           documentPanelMaxWidth={documentPanelMaxWidth}

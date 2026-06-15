@@ -28,6 +28,9 @@ import { toast } from "sonner@2.0.3";
 import { cn } from "./ui/utils";
 import warrantPage1 from "figma:asset/50d813e5f37746f1ef3e42d999b8ed8fffbea835.png";
 import warrantPage2 from "figma:asset/a5fd7a3dff0a4ab9df9e009981241eee452a1664.png";
+import type { FormData } from "../types/caseTypes";
+import { LegalDemandFormView } from "./forms-library/LegalDemandFormView";
+import { hasLegalDemandForm } from "../utils/legalDemandForm";
 
 /** Shape of a document in the viewer */
 export interface ViewerDocument {
@@ -55,6 +58,10 @@ const DOCUMENT_IMAGES: Record<string, string[]> = {
 };
 
 interface DocumentViewerPanelProps {
+  /** The open case's FormData. When the case is eEvidence, the panel
+   *  renders the inbound EPOC legal-demand form (Form 1 / Form 2) from the
+   *  ETSI envelope instead of the static warrant / subpoena / NDO docs. */
+  legalDemandFormData?: FormData | null;
   showFulfillmentSummary: boolean;
   documentPanelWidth: number;
   documentPanelMaxWidth: number;
@@ -92,6 +99,7 @@ interface DocumentViewerPanelProps {
 }
 
 export function DocumentViewerPanel({
+  legalDemandFormData,
   showFulfillmentSummary,
   documentPanelWidth,
   documentPanelMaxWidth,
@@ -120,6 +128,9 @@ export function DocumentViewerPanel({
   modalCloseButtonRef,
   modalTriggerButtonRef,
 }: DocumentViewerPanelProps) {
+  // eEvidence cases: render the inbound EPOC legal-demand form (Form 1 /
+  // Form 2) from the ETSI envelope instead of the static seed documents.
+  const showLegalDemandForm = hasLegalDemandForm(legalDemandFormData);
   return (
     <div
       className={cn(
@@ -199,7 +210,9 @@ export function DocumentViewerPanel({
               <div>
                 <h2 id="document-viewer-title" className="text-gray-900">Legal Document Review Panel</h2>
                 <p id="document-viewer-description" className="text-gray-600 mt-1">
-                  {openDocumentIds.length} of {availableDocuments.length} documents open • Press ESC to close
+                  {showLegalDemandForm
+                    ? "Inbound eEvidence legal demand • read-only • Press ESC to close"
+                    : `${openDocumentIds.length} of ${availableDocuments.length} documents open • Press ESC to close`}
                 </p>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge
@@ -278,7 +291,19 @@ export function DocumentViewerPanel({
             </div>
           </div>
 
-          {/* Scrollable Content with Tabs */}
+          {/* eEvidence: the inbound EPOC form IS the legal demand — render it
+              read-only from the ETSI envelope in place of the static docs. */}
+          {showLegalDemandForm ? (
+            <div className="flex-1 min-h-0 flex flex-col">
+              <div className="px-6 py-2 border-b border-gray-200 flex-shrink-0 text-xs text-gray-600">
+                Rendered read-only from the issuing authority's ETSI envelope.
+              </div>
+              <div className="flex-1 min-h-0">
+                <LegalDemandFormView formData={legalDemandFormData} />
+              </div>
+            </div>
+          ) : (
+          /* Scrollable Content with Tabs */
           <div className="flex-1 overflow-y-auto overscroll-contain [&::-webkit-scrollbar]:w-3 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-thumb]:bg-[#0078d4] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-gray-100">
             <Tabs value={activeDocumentId} onValueChange={setActiveDocumentId} className="h-full flex flex-col">
               {/* Document Selector */}
@@ -473,6 +498,7 @@ export function DocumentViewerPanel({
               </>
             </Tabs>
           </div>
+          )}
         </div>
       </Resizable>
     </div>

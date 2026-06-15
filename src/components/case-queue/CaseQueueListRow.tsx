@@ -62,7 +62,7 @@ import {
 } from "./case-queue-types";
 import {
   CASE_LIST_COLUMNS,
-  getDenseGridColsClass,
+  getDenseGridTemplate,
   type ColumnDef,
   type ColumnWidths,
   buildGridTemplate,
@@ -204,9 +204,10 @@ export function CaseQueueListRow({
     : "grid-cols-[1.1fr_0.6fr_0.8fr_0.8fr_0.9fr_1fr_0.9fr_auto_1fr_0.9fr_auto_1.3fr_0.9fr_1fr_1.1fr_1.3fr]";
   // Dense template — single source of truth lives in
   // `caseListColumns.ts` (see the `DENSE_TRACKS` contract comment
-  // there). Lifted out so the header and row CAN'T drift apart on
-  // future edits.
-  const denseGridCols = getDenseGridColsClass(bulkSelectable);
+  // there). Applied as an inline `gridTemplateColumns` style (NOT a
+  // Tailwind class) so the header and row CAN'T drift apart and the
+  // template actually reaches the DOM.
+  const denseGridTemplate = getDenseGridTemplate(bulkSelectable);
 
   // When the caller supplies `columnWidths` (Detailed-list mode in the
   // queue), switch to an inline grid template that matches the
@@ -1061,7 +1062,13 @@ export function CaseQueueListRow({
       tabIndex={0}
       onClick={handleActivate}
       onKeyDown={handleKeyDown}
-      style={inlineGridTemplate ? { gridTemplateColumns: inlineGridTemplate } : undefined}
+      style={
+        inlineGridTemplate
+          ? { gridTemplateColumns: inlineGridTemplate }
+          : isDense
+            ? { gridTemplateColumns: denseGridTemplate }
+            : undefined
+      }
       className={cn(
         "grid bg-white border-b border-[#edebe9] cursor-pointer transition-colors",
         // Inline-grid mode owns its own padding + rail (per-cell)
@@ -1079,7 +1086,9 @@ export function CaseQueueListRow({
             ? "bg-[#deecf9] hover:bg-[#deecf9]"
             : "bg-[#deecf9] hover:bg-[#deecf9] border-l-[6px]"),
         caseItem.caseStage === "Resolved" && "opacity-60",
-        !useInlineGrid && (isDense ? denseGridCols : fullGridCols),
+        // Dense uses the inline `gridTemplateColumns` style above; only
+        // the non-inline full fallback still relies on a Tailwind class.
+        !useInlineGrid && !isDense && fullGridCols,
       )}
     >
       {/* Priority rail — first grid column when using the inline grid.

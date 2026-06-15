@@ -103,6 +103,51 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     fontStyle: "italic",
   },
+  // ── Read-only "document" variant (legal-demand Form 1 / Form 2) ────────
+  // Label reads as a muted caption (the form's question); the answer sits
+  // in a subtly filled, hairline-bordered box so it reads as data the IA
+  // filled into a form field. Mirrors the app's ReadOnlyValue pattern
+  // (authority-details/AuthorityDetailsBlocks.tsx) translated to Fluent
+  // tokens.
+  fieldLabelDoc: {
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground3,
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    marginBottom: tokens.spacingVerticalXXS,
+  },
+  fieldValueDoc: {
+    fontSize: tokens.fontSizeBase300,
+    color: tokens.colorNeutralForeground1,
+    whiteSpace: "pre-wrap",
+    backgroundColor: tokens.colorNeutralBackground3,
+    minHeight: "1.25rem",
+    paddingTop: tokens.spacingVerticalSNudge,
+    paddingBottom: tokens.spacingVerticalSNudge,
+    paddingLeft: tokens.spacingHorizontalM,
+    paddingRight: tokens.spacingHorizontalM,
+    borderTopStyle: "solid",
+    borderRightStyle: "solid",
+    borderBottomStyle: "solid",
+    borderLeftStyle: "solid",
+    borderTopWidth: "1px",
+    borderRightWidth: "1px",
+    borderBottomWidth: "1px",
+    borderLeftWidth: "1px",
+    borderTopColor: tokens.colorNeutralStroke2,
+    borderRightColor: tokens.colorNeutralStroke2,
+    borderBottomColor: tokens.colorNeutralStroke2,
+    borderLeftColor: tokens.colorNeutralStroke2,
+    borderTopLeftRadius: tokens.borderRadiusMedium,
+    borderTopRightRadius: tokens.borderRadiusMedium,
+    borderBottomRightRadius: tokens.borderRadiusMedium,
+    borderBottomLeftRadius: tokens.borderRadiusMedium,
+  },
+  fieldValueDocEmpty: {
+    color: tokens.colorNeutralForeground4,
+    fontStyle: "italic",
+  },
   optionList: {
     listStyle: "none",
     paddingLeft: 0,
@@ -144,6 +189,12 @@ const useStyles = makeStyles({
 export interface FormPreviewPanelProps {
   template: FormTemplate;
   instance: CaseFormInstance;
+  /** "legalDemand" applies the read-only document styling — caption labels
+   *  + boxed answers — used for the inbound EPOC Form 1 / Form 2 render so
+   *  the IA's answers read clearly as filled-in form fields. Defaults to
+   *  the lighter "default" preview used by the editable-form Preview tab
+   *  and the PDF generator. */
+  variant?: "default" | "legalDemand";
 }
 
 function formatValue(field: FormField, value: unknown): React.ReactNode {
@@ -176,16 +227,32 @@ function formatValue(field: FormField, value: unknown): React.ReactNode {
   return String(value);
 }
 
-function FieldRow({ field, value }: { field: FormField; value: unknown }) {
+function FieldRow({
+  field,
+  value,
+  variant,
+}: {
+  field: FormField;
+  value: unknown;
+  variant: "default" | "legalDemand";
+}) {
   const styles = useStyles();
   const formatted = formatValue(field, value);
-  const empty = formatted === null || formatted === undefined;
+  // Treat an empty array (a list field with no items, e.g. a case with no
+  // target identifiers) as absent too — otherwise it renders as a blank
+  // box instead of the "—" absence marker.
+  const empty =
+    formatted === null ||
+    formatted === undefined ||
+    (Array.isArray(formatted) && formatted.length === 0);
+  const isDoc = variant === "legalDemand";
+  const labelClass = isDoc ? styles.fieldLabelDoc : styles.fieldLabel;
 
   if (field.type === "multi-checkbox" && field.options) {
     const selected: string[] = Array.isArray(value) ? (value as string[]) : [];
     return (
       <div className={field.span === "half" ? undefined : styles.fieldFull}>
-        <div className={styles.fieldLabel}>{field.label}</div>
+        <div className={labelClass}>{field.label}</div>
         <ul className={styles.optionList}>
           {field.options.map((opt) => {
             const checked = selected.includes(opt.value);
@@ -203,10 +270,14 @@ function FieldRow({ field, value }: { field: FormField; value: unknown }) {
     );
   }
 
+  const valueClass = isDoc
+    ? `${styles.fieldValueDoc}${empty ? " " + styles.fieldValueDocEmpty : ""}`
+    : `${styles.fieldValue}${empty ? " " + styles.fieldEmpty : ""}`;
+
   return (
     <div className={field.span === "half" ? undefined : styles.fieldFull}>
-      <div className={styles.fieldLabel}>{field.label}</div>
-      <div className={`${styles.fieldValue}${empty ? " " + styles.fieldEmpty : ""}`}>
+      <div className={labelClass}>{field.label}</div>
+      <div className={valueClass}>
         {empty
           ? "—"
           : Array.isArray(formatted)
@@ -217,7 +288,7 @@ function FieldRow({ field, value }: { field: FormField; value: unknown }) {
   );
 }
 
-export function FormPreviewPanel({ template, instance }: FormPreviewPanelProps) {
+export function FormPreviewPanel({ template, instance, variant = "default" }: FormPreviewPanelProps) {
   const styles = useStyles();
   const triggers = collectEscalations(template, instance.values);
 
@@ -250,7 +321,12 @@ export function FormPreviewPanel({ template, instance }: FormPreviewPanelProps) 
               )}
               <div className={styles.fieldGrid}>
                 {fields.map((field) => (
-                  <FieldRow key={field.id} field={field} value={instance.values[field.id]} />
+                  <FieldRow
+                    key={field.id}
+                    field={field}
+                    value={instance.values[field.id]}
+                    variant={variant}
+                  />
                 ))}
               </div>
             </section>
