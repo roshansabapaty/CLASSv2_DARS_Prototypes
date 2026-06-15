@@ -342,7 +342,9 @@ export const MOCK_CASES: CaseQueueItem[] = [
     requestType: "eEvidence",
     requestSubType: "EPOC ER",
     requestOrigin: "LEAPI",
-    caseStage: "Waiting on Triage",
+    // Subsequent Production (Workflow 5) — opens on Collection with the
+    // preserved jobs from LNS-2026-00220 seeded, ready for package/delivery.
+    caseStage: "In Progress",
     country: "Netherlands",
     jurisdiction: "National",
     natureOfCrime: ["OtherFinancialCrimeOrFraud", "Cybercrime"],

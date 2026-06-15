@@ -182,7 +182,11 @@ export function buildLENS202600230FormData(): FormData {
     requestOrigin: "LEAPI",
     requestOriginOther: "",
     otherRequestTypeDescription: "",
-    caseStage: "Waiting on Triage",
+    // Subsequent Production (Workflow 5): this EPOC-ER follows the preserved
+    // data under LNS-2026-00220. It opens on Collection with the preserved
+    // jobs seeded (via applySubsequentProduction) ready for package + delivery.
+    eevidenceWorkflow: 5,
+    caseStage: "In Progress",
     rejectionReason: "",
     caseEscalated: false,
     escalationNotes: "",

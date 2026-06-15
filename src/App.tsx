@@ -25,6 +25,7 @@ import { FluentProvider, webLightTheme } from "@fluentui/react-components";
 import { cn } from "./components/ui/utils";
 import { CASE_DATA_BUILDERS } from "./utils/caseDataRegistry";
 import { buildFormDataFromQueueItem } from "./utils/mockCaseDataFactory";
+import { applySubsequentProduction } from "./utils/subsequentProduction";
 import { MOCK_CASES } from "./components/case-queue/case-queue-types";
 import type { SidebarNavState } from "./types/sidebarNav";
 import { useOutboundAutoSim } from "./hooks/useOutboundAutoSim";
@@ -376,7 +377,11 @@ export default function App() {
     const queueItem = MOCK_CASES.find(c => c.caseId === caseId);
     if (queueItem) {
       const builder = CASE_DATA_BUILDERS[caseId];
-      setSharedFormData(builder ? builder() : buildFormDataFromQueueItem(queueItem));
+      const built = builder ? builder() : buildFormDataFromQueueItem(queueItem);
+      // Subsequent Production (Workflow 5): seed Collection jobs from the
+      // linked parent EPOC-PR's preserved data so the case goes straight to
+      // package + delivery. No-op for non-subsequent-production cases.
+      setSharedFormData(applySubsequentProduction(built));
     }
 
     // Set appropriate stage completion based on where we're opening

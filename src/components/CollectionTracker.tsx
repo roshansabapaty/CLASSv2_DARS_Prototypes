@@ -145,6 +145,7 @@ import {
   ChevronRight,
   Copy,
   ShieldBan,
+  ShieldCheck,
   Info,
 } from "lucide-react";
 import {
@@ -182,6 +183,7 @@ import type {
 } from "../types/caseTypes";
 import { RESOLUTION_REASON_TO_STAGE, CURRENT_USER, RESPONSE_SPECIALISTS } from "../constants/caseConstants";
 import { isEpocPrCase } from "../utils/eEvidenceHelpers";
+import { isSubsequentProduction, getPreservationParentRef } from "../utils/subsequentProduction";
 import {
   AuthorizationStatusBanner,
   isAuthorizationStatusTerminal,
@@ -257,6 +259,11 @@ interface PipelineJob {
   collectionStatusUpdatedAt?: Date;
   publishStatusUpdatedAt?: Date;
   deliveryStatusUpdatedAt?: Date;
+  /** Subsequent Production (Workflow 5): this job's data was sourced from a
+   *  prior EPOC-PR's preserved snapshot. `preservedFromCaseId` is the parent
+   *  case number; the Collection page badges it "Preserved". */
+  preserved?: boolean;
+  preservedFromCaseId?: string;
 }
 
 // ── Fluent UI makeStyles — badge and button color variants ───────────────────
@@ -676,6 +683,8 @@ export function CollectionTracker({
               collectionStatusUpdatedAt: category.collectionStatusUpdatedAt,
               publishStatusUpdatedAt: category.publishStatusUpdatedAt,
               deliveryStatusUpdatedAt: category.deliveryStatusUpdatedAt,
+              preserved: !!category.preservedFromCaseId,
+              preservedFromCaseId: category.preservedFromCaseId,
             });
 
             // Additional jobs (duplicate jobs with different date ranges)
@@ -708,6 +717,8 @@ export function CollectionTracker({
                   collectionStatusUpdatedAt: addJob.collectionStatusUpdatedAt,
                   publishStatusUpdatedAt: addJob.publishStatusUpdatedAt,
                   deliveryStatusUpdatedAt: addJob.deliveryStatusUpdatedAt,
+                  preserved: !!category.preservedFromCaseId,
+                  preservedFromCaseId: category.preservedFromCaseId,
                 });
               });
             }
@@ -3060,6 +3071,41 @@ export function CollectionTracker({
             stated emergency justification. Self-hides on non-emergency
             cases and when withdrawal has fired. */}
         <EmergencyEEvidenceBanner formData={formData} />
+
+        {/* Subsequent Production (Workflow 5) — this EPOC-ER follows a prior
+            EPOC-PR; its production scope is the preserved data. Tells the RS
+            no fresh collection is needed; proceed to Package & Delivery. */}
+        {isSubsequentProduction(formData) && (() => {
+          const parentRef = getPreservationParentRef(formData);
+          return (
+            <div
+              role="status"
+              className="flex items-start gap-3 rounded-lg border border-[#107c10]/40 bg-[#f3faf3] px-4 py-3 text-sm text-[#0b3d0b]"
+            >
+              <ShieldCheck className="w-5 h-5 mt-0.5 flex-none text-[#107c10]" aria-hidden="true" />
+              <div className="flex-1 min-w-0 space-y-1">
+                <div className="font-semibold text-[#0b3d0b]">
+                  Subsequent production — data already preserved
+                </div>
+                <div>
+                  Production scope sourced from preserved data under{" "}
+                  {parentRef && onOpenCase ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCase(parentRef.darsCaseNumber)}
+                      className="font-semibold underline underline-offset-2 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current rounded"
+                    >
+                      {parentRef.darsCaseNumber}
+                    </button>
+                  ) : (
+                    <strong>{parentRef?.darsCaseNumber ?? "the preservation order"}</strong>
+                  )}
+                  . No fresh collection needed — review the preserved jobs and proceed to Package &amp; Delivery.
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Preservation-order-active banner (EPOC-PR only) — top of the
             preservation banner stack. Surfaces the earliest expiry +
@@ -6105,7 +6151,23 @@ export function CollectionTracker({
                                       className="border-[#107c10] data-[state=checked]:bg-[#107c10] data-[state=checked]:border-[#107c10]"
                                       onClick={(e) => e.stopPropagation()}
                                     />
-                                    <span className="text-sm text-[#323130] flex-1">{job.categoryName}</span>
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm text-[#323130]">{job.categoryName}</span>
+                                      {job.preserved && (
+                                        <div className="text-[11px] text-[#605e5c]">
+                                          Preserved from {job.preservedFromCaseId}
+                                          {job.startDate && job.endDate &&
+                                            ` · ${new Date(job.startDate).toLocaleDateString()} – ${new Date(job.endDate).toLocaleDateString()}`}
+                                          {job.collectionStatusUpdatedAt &&
+                                            ` · collected ${new Date(job.collectionStatusUpdatedAt).toLocaleDateString()}`}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {job.preserved && (
+                                      <Badge variant="outline" className="bg-[#f3faf3] text-[#107c10] border-[#107c10]/40 text-xs">
+                                        Preserved
+                                      </Badge>
+                                    )}
                                     <Badge variant="outline" className="bg-[#deecf9] text-[#0078d4] border-[#0078d4] text-xs">
                                       {job.serviceName}
                                     </Badge>

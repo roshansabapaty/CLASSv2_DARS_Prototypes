@@ -70,6 +70,12 @@ export interface SubCategory {
    *  Cleared on retry via handlePublishSelected (retry mode). */
   publishError?: string;
   deliveryError?: string;
+  /** Subsequent production (Workflow 5): when this job's data was sourced
+   *  from a prior EPOC-PR's preserved snapshot rather than freshly
+   *  collected, this holds the parent EPOC-PR's case number. The
+   *  Collection page badges these jobs "Preserved" and the case skips
+   *  fresh collection (the job lands collection-`Complete`). */
+  preservedFromCaseId?: string;
   additionalJobs?: AdditionalJob[]; // Duplicate jobs with different date ranges
 }
 
