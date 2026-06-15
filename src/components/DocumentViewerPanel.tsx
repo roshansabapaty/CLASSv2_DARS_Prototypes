@@ -294,13 +294,8 @@ export function DocumentViewerPanel({
           {/* eEvidence: the inbound EPOC form IS the legal demand — render it
               read-only from the ETSI envelope in place of the static docs. */}
           {showLegalDemandForm ? (
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div className="px-6 py-2 border-b border-gray-200 flex-shrink-0 text-xs text-gray-600">
-                Rendered read-only from the issuing authority's ETSI envelope.
-              </div>
-              <div className="flex-1 min-h-0">
-                <LegalDemandFormView formData={legalDemandFormData} />
-              </div>
+            <div className="flex-1 min-h-0">
+              <LegalDemandFormView formData={legalDemandFormData} />
             </div>
           ) : (
           /* Scrollable Content with Tabs */
