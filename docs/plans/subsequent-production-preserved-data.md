@@ -34,7 +34,9 @@ When an EPOC-ER (EPOC Disclosure) case is a **subsequent production** following 
 6. `PipelineJob.preserved` / `preservedFromCaseId` (derived from the SubCategory) → a "**Preserved**" badge on jobs.
 7. **Submit-to-Package modal:** each preserved job row shows the data category/type, a "Preserved" badge, the **date range** (`startDate – endDate`), and the **collected** date so the RS can review and select it to package.
 
+## Mixed preserved + new jobs ✅
+A subsequent-production order can add services / data categories / data types that were NOT in the EPOC-PR. The seeding **overlays** the parent's preserved jobs onto the EPOC-ER's own scope (`overlayPreservedServices` in `subsequentProduction.ts`) rather than replacing it: preserved items → collection-`Complete` + `preservedFromCaseId`; the EPOC-ER's own NEW items are left untouched (`Not Started`) so they still need fresh collection. The Collection page badges preserved jobs "Preserved" (identifier header, expanded category rows, and the Submit-to-Package / Review-&-Deliver / Complete views); new jobs flow through the normal Start Collection path. `LNS-2026-00230` seeds one new OneDrive-content job to demo the mix.
+
 ## Out of scope (future)
-- Adding supplemental NEW jobs beyond the preserved scope.
 - A forward-link on the EPOC-PR to its EPOC-ER successor(s).
 - Real preserved-snapshot retrieval from LENS-CMS (prototype clones the parent case's jobs).

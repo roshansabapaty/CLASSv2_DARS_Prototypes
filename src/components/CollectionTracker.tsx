@@ -3100,7 +3100,7 @@ export function CollectionTracker({
                   ) : (
                     <strong>{parentRef?.darsCaseNumber ?? "the preservation order"}</strong>
                   )}
-                  . No fresh collection needed — review the preserved jobs and proceed to Package &amp; Delivery.
+                  . Preserved jobs are ready to package &amp; deliver; any new data categories added on this production order still need fresh collection.
                 </div>
               </div>
             </div>
@@ -5605,6 +5605,11 @@ export function CollectionTracker({
                                                   {/* Data Category */}
                                                   <div>
                                                     <p className="text-sm font-medium text-[#323130]">{formatCategoryName(categoryKey)}</p>
+                                                    {category.preservedFromCaseId && (
+                                                      <Badge variant="outline" className="mt-1 text-xs bg-[#f3faf3] text-[#107c10] border-[#107c10]/40">
+                                                        <ShieldCheck className="w-2.5 h-2.5 mr-0.5" />Preserved
+                                                      </Badge>
+                                                    )}
                                                   </div>
                                                   {/* Account Type */}
                                                   <div>

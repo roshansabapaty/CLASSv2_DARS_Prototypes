@@ -99,6 +99,30 @@ export function buildLENS202600230FormData(): FormData {
   // Identifiers re-supplied by the IA on the EPOC-ER envelope. Same
   // values as the parent EPOC-PR but fresh task IDs — the EPOC-ER stands
   // on its own as a production order.
+  // The IA's production order adds a NEW data category that was NOT in the
+  // preservation scope (OneDrive content) — it needs fresh collection. This
+  // demonstrates a mixed case: linked preserved jobs (overlaid at case-open
+  // by applySubsequentProduction) ready to package, alongside a new job to
+  // collect.
+  const id1Services = createDefaultIdentifierServices() as Record<string, any>;
+  {
+    const svc = id1Services["oneDriveConsumer"];
+    const item = svc?.categoryGroups?.["contentData"]?.["genericAttributes"];
+    if (svc && item) {
+      svc.enabled = true;
+      svc.includeConsumerAccount = true;
+      svc.categoryGroups["contentData"]["genericAttributes"] = {
+        ...item,
+        enabled: true,
+        taskId: "TSK-ODB-CON-230-NEW",
+        jobId: "JOB-ODB-CON-230-NEW",
+        collectionStatus: "Not Started",
+        startDate: new Date("2026-01-01"),
+        endDate: new Date("2026-05-20"),
+      };
+    }
+  }
+
   const id1: AccountIdentifier = {
     id: genId(),
     value: "subject.nl@outlook.com",
@@ -108,7 +132,7 @@ export function buildLENS202600230FormData(): FormData {
     accountExistenceStatus: "not-checked",
     geoLocation: "Europe - West Europe",
     createdBy: "LE Agency",
-    services: createDefaultIdentifierServices(),
+    services: id1Services,
     checkAccounts: { accountType: "Consumer" },
     leExternalServices: ["Email", "Microsoft Account Profile"],
     leExternalServiceDates: {
