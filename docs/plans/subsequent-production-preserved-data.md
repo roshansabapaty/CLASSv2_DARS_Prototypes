@@ -37,6 +37,21 @@ When an EPOC-ER (EPOC Disclosure) case is a **subsequent production** following 
 ## Mixed preserved + new jobs ✅
 A subsequent-production order can add services / data categories / data types that were NOT in the EPOC-PR. The seeding **overlays** the parent's preserved jobs onto the EPOC-ER's own scope (`overlayPreservedServices` in `subsequentProduction.ts`) rather than replacing it: preserved items → collection-`Complete` + `preservedFromCaseId`; the EPOC-ER's own NEW items are left untouched (`Not Started`) so they still need fresh collection. The Collection page badges preserved jobs "Preserved" (identifier header, expanded category rows, and the Submit-to-Package / Review-&-Deliver / Complete views); new jobs flow through the normal Start Collection path. `LNS-2026-00230` seeds one new OneDrive-content job to demo the mix.
 
+## Manual vs automated new jobs
+New jobs carry the data type's `automated` flag. **Automated** → Start Collection drives Not Started → Started → Complete (Refresh Pipeline). **Manual** → the RS collects via the external tool, uploads to the SAS content boundary, then manually marks the collection status Complete (Start Collection does not apply). `LNS-2026-00230` seeds one of each: MSA Basic Subscriber Data (automated) + OneDrive Content (manual).
+
+## Phase 4b — Triage → Fulfillment with preserved-reuse rows (PENDING)
+Decided 2026-06-15: a subsequent-production EPOC-ER should route through **Triage → Fulfillment → Collection** (not open straight on Collection), and the Fulfillment wizard should surface the preserved jobs as **read-only "Preserved · reuse" rows** (service · data category · data type · date range) so the RS doesn't submit duplicates and reuses the previously-collected data. Status model stays **Complete + "Preserved" badge** (no new status).
+
+**Why it's a correctness requirement, not just a label:** the fulfillment submit recomputes each job's `collectionStatus` (`useCaseWorkflow.ts:255-261`) and writes services back (`FulfillmentWizard.tsx:705`). So preserved jobs MUST be **locked** in the wizard (excluded from the submit recompute) or a fulfillment submit would overwrite their preserved-`Complete` status.
+
+**Work:**
+1. Thread `preservedFromCaseId` from `FormData` through `Step2ServicesConfiguration` → `ServiceCategoryTable`. The table already has an "In Collection — disabled checkbox, read-only dates" treatment (gated on `isEditingCollectionScope`); extend the locked-item detection (`isItemSubmitted`, line 321) to also treat preserved items as locked **regardless of `isEditingCollectionScope`**, and render a "Preserved · reuse (LNS-…)" tag (reuse the `Provenance` tag system in `leBaseline.ts` / `ProvenanceTag.tsx`).
+2. Ensure the submit path skips preserved (locked) items so their status is not recomputed.
+3. Flip `LNS-2026-00230` back to `caseStage: "Waiting on Triage"` (builder + queue-types) once the wizard handles preserved jobs safely.
+
+Until 4b ships, `00230` opens on **Collection** (safe — no wizard reset risk) and still demos preserved + new (automated & manual) jobs.
+
 ## Out of scope (future)
 - A forward-link on the EPOC-PR to its EPOC-ER successor(s).
 - Real preserved-snapshot retrieval from LENS-CMS (prototype clones the parent case's jobs).

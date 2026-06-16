@@ -343,7 +343,8 @@ export const MOCK_CASES: CaseQueueItem[] = [
     requestSubType: "EPOC ER",
     requestOrigin: "LEAPI",
     // Subsequent Production (Workflow 5) — opens on Collection with the
-    // preserved jobs from LNS-2026-00220 seeded, ready for package/delivery.
+    // preserved jobs from LNS-2026-00220 seeded (+ new jobs to collect).
+    // Triage -> Fulfillment routing with wizard reuse-rows is pending Phase 4b.
     caseStage: "In Progress",
     country: "Netherlands",
     jurisdiction: "National",

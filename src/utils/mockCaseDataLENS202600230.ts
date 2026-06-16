@@ -122,6 +122,27 @@ export function buildLENS202600230FormData(): FormData {
       };
     }
   }
+  // A second NEW data category that's a MANUAL data type (OneDrive content) —
+  // the RS collects it via the external tool, uploads the file to the SAS
+  // content boundary, then manually marks the collection status Complete (no
+  // Start-Collection auto flow).
+  {
+    const svc = id1Services["oneDriveConsumer"];
+    const item = svc?.categoryGroups?.["contentData"]?.["genericAttributes"];
+    if (svc && item) {
+      svc.enabled = true;
+      svc.includeConsumerAccount = true;
+      svc.categoryGroups["contentData"]["genericAttributes"] = {
+        ...item,
+        enabled: true,
+        taskId: "TSK-ODB-CON-230-NEW",
+        jobId: "JOB-ODB-CON-230-NEW",
+        collectionStatus: "Not Started",
+        startDate: new Date("2026-01-01"),
+        endDate: new Date("2026-05-20"),
+      };
+    }
+  }
 
   const id1: AccountIdentifier = {
     id: genId(),
@@ -207,8 +228,12 @@ export function buildLENS202600230FormData(): FormData {
     requestOriginOther: "",
     otherRequestTypeDescription: "",
     // Subsequent Production (Workflow 5): this EPOC-ER follows the preserved
-    // data under LNS-2026-00220. It opens on Collection with the preserved
-    // jobs seeded (via applySubsequentProduction) ready for package + delivery.
+    // data under LNS-2026-00220. Opens on Collection with the preserved jobs
+    // seeded (via applySubsequentProduction) ready for package + delivery,
+    // alongside new jobs to collect. (Routing through Triage -> Fulfillment
+    // with the wizard surfacing preserved jobs as read-only "reuse" rows is
+    // the pending Phase 4b — it requires the wizard to lock preserved jobs so
+    // a fulfillment submit doesn't recompute their collection status.)
     eevidenceWorkflow: 5,
     caseStage: "In Progress",
     rejectionReason: "",
