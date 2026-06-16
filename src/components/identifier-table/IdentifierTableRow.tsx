@@ -892,7 +892,8 @@ export function IdentifierTableRow({
             Org Home Location vs Issuing Authority comparison in the
             tri-pane, not per-user IP geo. */}
         <td className={styles.lastLogonCell}>
-          {identifier.checkAccounts?.accountType !== "Consumer" ? (
+          {identifier.checkAccounts?.accountType !== "Consumer" &&
+           identifier.checkAccounts?.accountType !== "Enterprise-and-Consumer" ? (
             <span className={styles.lastLogonEmpty}>—</span>
           ) : !lastLogonLookup ? (
             <span className={styles.lastLogonEmpty}>
@@ -960,7 +961,8 @@ export function IdentifierTableRow({
             ) : (
               <div className={styles.actionsRow}>
                 {onOpenLoginLocation &&
-                  identifier.checkAccounts?.accountType === "Consumer" && (
+                  (identifier.checkAccounts?.accountType === "Consumer" ||
+                   identifier.checkAccounts?.accountType === "Enterprise-and-Consumer") && (
                     <Button
                       appearance="outline"
                       size="small"

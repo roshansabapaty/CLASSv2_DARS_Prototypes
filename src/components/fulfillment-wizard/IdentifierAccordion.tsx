@@ -31,6 +31,7 @@ import { NotFoundIdentifierCard } from "./NotFoundIdentifierCard";
 import { InvalidIdentifierCard } from "./InvalidIdentifierCard";
 import { ReplaceServiceDialog } from "./ReplaceServiceDialog";
 import { IdentifierAliasesPanel } from "../IdentifierAliasesPanel";
+import { RelatedAccountsPanel } from "../RelatedAccountsPanel";
 import type { LEIdentifierBaseline } from "./leBaseline";
 import type { ValidationResult } from "../../utils/validateIdentifier";
 
@@ -371,10 +372,14 @@ export function IdentifierAccordion(props: IdentifierAccordionProps) {
         </AccordionHeader>
         <AccordionPanel>
           <div className={styles.panel}>
-            {/* Account aliases from CLASS lookup — identifier-level metadata,
-                shown above the LE/RS split-pane and above terminal-state
-                cards. The panel self-hides when there is no CLASS data. */}
-            <IdentifierAliasesPanel identifier={identifier} />
+            {/* Account aliases from CLASS lookup — v2.1 shows per-account
+                structure with relevance; v2.0 falls back to flat alias list.
+                Both panels self-hide when there is no CLASS data. */}
+            {identifier.checkAccounts?.discoveredAccounts ? (
+              <RelatedAccountsPanel identifier={identifier} />
+            ) : (
+              <IdentifierAliasesPanel identifier={identifier} />
+            )}
             {rejected ? (
               <RejectedIdentifierCard
                 identifier={identifier}

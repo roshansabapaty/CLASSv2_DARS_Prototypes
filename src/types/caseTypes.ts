@@ -1043,6 +1043,94 @@ export interface IdentifierRejection {
   documentRef?: string;
 }
 
+// ── CLASSv2 v2.1 per-account entry types ──────────────────────────────────────
+
+/** A single identifier within an account's `identifiers[]` array. */
+export interface AccountNestedIdentifier {
+  identifier: string;
+  identifierType: string;
+  primary: boolean;
+  /** Consumer accounts: external email that linked this EASI to the query. */
+  externalEmailAddress?: string;
+}
+
+/** Disclosure relevance assertion per account. */
+export type DisclosureRelevance = "RELEVANT" | "NOT_RELEVANT" | "PENDING_CLASSIFICATION";
+
+/** Downstream pipeline routing per account. */
+export type DisclosureProcess = "Enterprise" | "Consumer";
+
+/**
+ * A single per-account entry in the v2.1 `relatedIdentifiers` array.
+ * Each entry represents a distinct account discovered for the LE-submitted
+ * identifier — with its own accountType, category, and nested identifiers.
+ */
+export interface RelatedIdentifierAccount {
+  accountType: "EnterpriseUser" | "Consumer";
+  tenantId?: string;
+  upn?: string;
+  puid?: string;
+  easiAlias?: string;
+  externalDirectoryObjectId?: string;
+  msaIdentityExists?: boolean;
+  hasMailboxStore?: boolean;
+  mailboxStatus?: string;
+  category: string;
+  disclosureRelevance: DisclosureRelevance;
+  disclosureProcess: DisclosureProcess;
+  identifiers: AccountNestedIdentifier[];
+}
+
+// ── CLASSv2 v2.1 Consumer User Location types ────────────────────────────────
+
+/** A single login event from Scenario 7 detailed location data. */
+export interface LocationLoginEvent {
+  ipAddress: string;
+  dateTimeChangedUtc: string;
+  country: string;
+}
+
+/** A single login entry in the Scenario 8 per-country breakdown. */
+export interface CountryLogin {
+  date: string;
+  timestamp: string;
+}
+
+/** Per-country summary in Scenario 8 response. */
+export interface CountrySummary {
+  country: string;
+  loginCount: number;
+  logins: CountryLogin[];
+}
+
+/** Most recent login across all countries. */
+export interface MostRecentLogin {
+  country: string;
+  date: string;
+  timestamp: string;
+}
+
+/** Consumer User Locations Summary (Scenario 8) response shape. */
+export interface ConsumerLocationSummary {
+  targetSelector: string;
+  identifierType: string;
+  window: { startDate: string; endDate: string };
+  consistencyIndicator?: "Consistent" | "Multiple";
+  mostRecentLogin?: MostRecentLogin;
+  dominantCountry: Array<{ country: string; loginCount: number }>;
+  countries: CountrySummary[];
+}
+
+/** Consumer User Location detail (Scenario 7) response shape. */
+export interface ConsumerLocationDetail {
+  targetSelector: string;
+  identifierType: string;
+  window: { startDateTimeUtc: string; endDateTimeUtc: string };
+  events: LocationLoginEvent[];
+}
+
+// ── AccountIdentifier ─────────────────────────────────────────────────────────
+
 export interface AccountIdentifier {
   id: string;
   value: string;
@@ -1065,6 +1153,16 @@ export interface AccountIdentifier {
     accountType?: string;
     primaryIdentifier?: string;
     relatedIdentifiers?: string[];
+
+    // ── v2.1 per-account entry data ─────────────────────────────────────
+    /** v2.1: Top-level disclosure metadata for this identifier. */
+    category?: string;
+    disclosureRelevance?: DisclosureRelevance;
+    disclosureProcess?: DisclosureProcess;
+    /** v2.1: Structured per-account entries replacing the flat string array.
+     *  Each entry is a distinct account discovered for this identifier. */
+    discoveredAccounts?: RelatedIdentifierAccount[];
+
     /** Populated when the target identifier is a member user of an
      *  EntraId tenant. Captured from the Enterprise Tenant Profile
      *  retrieved alongside account existence. Drives the
@@ -1084,6 +1182,12 @@ export interface AccountIdentifier {
     tenantAdminEmail?: string;
     tenantAdminPhone?: string;
   };
+
+  // ── v2.1 Consumer User Location data ──────────────────────────────────
+  /** Scenario 8: 30-day login location summary for consumer identifiers. */
+  consumerLocationSummary?: ConsumerLocationSummary;
+  /** Scenario 7: Detailed login events for consumer identifiers. */
+  consumerLocationDetail?: ConsumerLocationDetail;
   services: IdentifierServices;
   /** Present when RS rejected the legal demand for this identifier. */
   rejection?: IdentifierRejection;

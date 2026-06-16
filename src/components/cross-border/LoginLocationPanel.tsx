@@ -46,6 +46,7 @@ import {
 import { ResultsHeader } from "./ResultsHeader";
 import { CountrySummaryCards } from "./CountrySummaryCards";
 import { LoginTimeline } from "./LoginTimeline";
+import { ConsumerUserLocationPanel } from "../ConsumerUserLocationPanel";
 import type {
   CrossBorderAgency,
   TimelineDay,
@@ -157,7 +158,8 @@ export function LoginLocationPanel({
 
   const c = caseFormData;
   const identifier = c?.identifiers?.find((id) => id.id === identifierId);
-  const isConsumer = identifier?.checkAccounts?.accountType === "Consumer";
+  const isConsumer = identifier?.checkAccounts?.accountType === "Consumer" ||
+    identifier?.checkAccounts?.accountType === "Enterprise-and-Consumer";
 
   const [hideInJurisdiction, setHideInJurisdiction] = useState(false);
 
@@ -245,6 +247,17 @@ export function LoginLocationPanel({
           </div>
         ) : (
           <div className={styles.body}>
+            {/* CLASSv2 v2.1 Consumer User Location Summary (Scenario 8)
+                — shown when structured location data is available on the
+                identifier, above the legacy ipHistoryStore timeline. */}
+            {identifier.consumerLocationSummary && (
+              <ConsumerUserLocationPanel
+                summary={identifier.consumerLocationSummary}
+                detail={identifier.consumerLocationDetail}
+                identifierValue={identifier.value}
+              />
+            )}
+
             <div className={styles.controls}>
               <Text className={styles.queriedCaption}>
                 Queried {lookup?.queriedAt.toLocaleString(undefined, {

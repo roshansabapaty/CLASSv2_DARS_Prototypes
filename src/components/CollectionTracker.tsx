@@ -111,6 +111,7 @@ import { CopyableText } from "./CopyButton";
 import { TruncatedText } from "./ui/truncated-text";
 import { CopyableIdentifier } from "./CopyableIdentifier";
 import { IdentifierAliasesPanel } from "./IdentifierAliasesPanel";
+import { RelatedAccountsPanel } from "./RelatedAccountsPanel";
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -5412,7 +5413,11 @@ export function CollectionTracker({
                     {isExpanded && (
                       <div className="p-4">
                         <div className="mb-4">
-                          <IdentifierAliasesPanel identifier={identifier} />
+                          {identifier.checkAccounts?.discoveredAccounts ? (
+                            <RelatedAccountsPanel identifier={identifier} />
+                          ) : (
+                            <IdentifierAliasesPanel identifier={identifier} />
+                          )}
                         </div>
                         {Object.entries(identifier.services).map(([serviceKey, service]: [string, any]) => {
                           const enabledCategories: Array<[string, any]> = [];
