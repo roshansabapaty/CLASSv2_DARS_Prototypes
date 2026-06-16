@@ -45,7 +45,7 @@ export function buildLENS202600325FormData(): FormData {
     type: "Email Address",
     taskId: "LDID-325010",
     taskStatus: "InProgress",
-    accountExistenceStatus: "success",
+    accountExistenceStatus: undefined,
     createdBy: "LE Agency",
     services: createDefaultIdentifierServices(startDate, endDate),
     checkAccounts: {
@@ -234,7 +234,7 @@ export function buildLENS202600325FormData(): FormData {
     type: "Email Address",
     taskId: "LDID-325020",
     taskStatus: "InProgress",
-    accountExistenceStatus: "success",
+    accountExistenceStatus: undefined,
     createdBy: "LE Agency",
     services: createDefaultIdentifierServices(startDate, endDate),
     checkAccounts: {

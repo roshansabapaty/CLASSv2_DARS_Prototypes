@@ -87,8 +87,8 @@ export function getAccountInfo(identifier: any) {
   // ran but no services were enabled), use the per-identifier
   // `checkAccounts.accountType` populated by `runAccountExistenceCheck`.
   const ckAccountType = identifier.checkAccounts?.accountType;
-  const hasConsumer = hasConsumerFromServices || ckAccountType === "Consumer";
-  const hasEnterprise = hasEnterpriseFromServices || ckAccountType === "Enterprise";
+  const hasConsumer = hasConsumerFromServices || ckAccountType === "Consumer" || ckAccountType === "Enterprise-and-Consumer";
+  const hasEnterprise = hasEnterpriseFromServices || ckAccountType === "Enterprise" || ckAccountType === "Enterprise-and-Consumer";
   const hasAccount = hasConsumer || hasEnterprise;
 
   const storageLocations = new Set<string>();
