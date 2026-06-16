@@ -77,14 +77,20 @@ export async function runAccountExistenceCheck(
         // outcomes (e.g. the LNS-2026-00190 manifest-error scenario seeds
         // Consumer; LNS-2026-00180 seeds Enterprise). Fall back to a random
         // roll for identifiers that don't pre-seed a value.
+        // v2.1: `Enterprise-and-Consumer` maps to Consumer for the mock
+        // check flow (the dual-account nature is expressed in
+        // discoveredAccounts, not in per-service existence).
         const seededAccountType = identifier.checkAccounts?.accountType as
           | "Consumer"
           | "Enterprise"
+          | "Enterprise-and-Consumer"
           | "N/A"
           | undefined;
         let identifierAccountType: "Consumer" | "Enterprise" | "N/A";
         if (isTokenLookupOnly) {
           identifierAccountType = "N/A";
+        } else if (seededAccountType === "Enterprise-and-Consumer") {
+          identifierAccountType = "Consumer";
         } else if (seededAccountType) {
           identifierAccountType = seededAccountType;
         } else {
@@ -406,9 +412,27 @@ export async function runAccountExistenceCheck(
           identifierAccountType !== "N/A"
             ? {
                 dataLocation: identifierStorageLocation,
-                accountType: identifierAccountType,
-                primaryIdentifier: identifierPrimaryId,
-                relatedIdentifiers: identifierRelatedIdentifiers,
+                accountType: seededAccountType === "Enterprise-and-Consumer"
+                  ? "Enterprise-and-Consumer"
+                  : identifierAccountType,
+                primaryIdentifier: identifier.checkAccounts?.primaryIdentifier ?? identifierPrimaryId,
+                relatedIdentifiers: identifier.checkAccounts?.relatedIdentifiers ?? identifierRelatedIdentifiers,
+                // v2.1: preserve structured per-account data when pre-seeded
+                ...(identifier.checkAccounts?.discoveredAccounts && {
+                  discoveredAccounts: identifier.checkAccounts.discoveredAccounts,
+                  category: identifier.checkAccounts.category,
+                  disclosureRelevance: identifier.checkAccounts.disclosureRelevance,
+                  disclosureProcess: identifier.checkAccounts.disclosureProcess,
+                }),
+                // Preserve enterprise tenant context when pre-seeded
+                ...(identifier.checkAccounts?.tenantId && {
+                  tenantId: identifier.checkAccounts.tenantId,
+                  parentTpid: identifier.checkAccounts.parentTpid,
+                  tenantPrimaryDomain: identifier.checkAccounts.tenantPrimaryDomain,
+                  tenantAdminName: identifier.checkAccounts.tenantAdminName,
+                  tenantAdminEmail: identifier.checkAccounts.tenantAdminEmail,
+                  tenantAdminPhone: identifier.checkAccounts.tenantAdminPhone,
+                }),
               }
             : undefined;
 
