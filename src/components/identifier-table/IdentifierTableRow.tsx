@@ -895,6 +895,42 @@ export function IdentifierTableRow({
           {identifier.checkAccounts?.accountType !== "Consumer" &&
            identifier.checkAccounts?.accountType !== "Enterprise-and-Consumer" ? (
             <span className={styles.lastLogonEmpty}>—</span>
+          ) : identifier.consumerLocationSummary ? (
+            // v2.1: Use structured consumerLocationSummary from CLASS Scenario 8
+            identifier.consumerLocationSummary.consistencyIndicator === "Multiple" ? (
+              <div
+                className={styles.lastLogonStack}
+                style={{ cursor: onOpenLoginLocation ? "pointer" : undefined }}
+                onClick={() => onOpenLoginLocation?.(identifier.id)}
+                title="Click to view Consumer User Locations"
+              >
+                <span style={{ color: tokens.colorPaletteYellowForeground1, fontWeight: tokens.fontWeightSemibold, display: "flex", alignItems: "center", gap: "4px" }}>
+                  ⚠ Multiple Locations
+                </span>
+                <span className={styles.lastLogonCity}>
+                  {identifier.consumerLocationSummary.countries.length} countries in last 30 days
+                </span>
+                {identifier.consumerLocationSummary.dominantCountry?.[0] && (
+                  <span className={styles.lastLogonTimestamp}>
+                    Dominant: {identifier.consumerLocationSummary.dominantCountry[0].country} ({identifier.consumerLocationSummary.dominantCountry[0].loginCount} logins)
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div
+                className={styles.lastLogonStack}
+                style={{ cursor: onOpenLoginLocation ? "pointer" : undefined }}
+                onClick={() => onOpenLoginLocation?.(identifier.id)}
+                title="Click to view Consumer User Locations"
+              >
+                <span className={styles.lastLogonCountry}>
+                  {identifier.consumerLocationSummary.dominantCountry?.[0]?.country ?? "—"}
+                </span>
+                <span className={styles.lastLogonCity}>
+                  Consistent location
+                </span>
+              </div>
+            )
           ) : !lastLogonLookup ? (
             <span className={styles.lastLogonEmpty}>
               Run Check Accounts to populate
