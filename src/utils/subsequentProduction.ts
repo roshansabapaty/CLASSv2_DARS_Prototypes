@@ -78,6 +78,15 @@ function overlayPreservedServices(target: any, source: any, parentCaseId: string
         markPreservedJob(item, now);
         item.enabled = true;
         item.preservedFromCaseId = parentCaseId;
+        // Guarantee a jobId so the Fulfillment submit treats this as an
+        // EXISTING job (useCaseWorkflow `isExistingJob = !!category.jobId`)
+        // and keeps it as-is — without one, the submit would recompute the
+        // collection status and overwrite the preserved `Complete`.
+        if (!item.jobId) {
+          item.jobId = `PRES-${parentCaseId}-${svcKey}-${groupKey}-${itemKey}`
+            .replace(/[^A-Za-z0-9-]/g, "")
+            .toUpperCase();
+        }
         for (const aj of (item.additionalJobs ?? []) as Record<string, any>[]) {
           markPreservedJob(aj, now);
         }

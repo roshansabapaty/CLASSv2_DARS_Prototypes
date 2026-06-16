@@ -272,6 +272,32 @@ export function UnifiedIdentifiersView({
                       ),
                     )
                   : undefined;
+              // Preserved (subsequent-production) reuse rows — independent of
+              // isEditingCollectionScope: any item carrying `preservedFromCaseId`
+              // is shown as a locked "Preserved · reuse" row so the RS does not
+              // re-collect data already gathered under the parent EPOC-PR.
+              const svcPreservedData: Record<string, Record<string, any>> = {};
+              if (svcRecord?.categoryGroups) {
+                Object.entries(svcRecord.categoryGroups).forEach(
+                  ([groupKey, groupData]: [string, any]) => {
+                    Object.entries(groupData || {}).forEach(
+                      ([itemKey, item]: [string, any]) => {
+                        if (item?.preservedFromCaseId) {
+                          if (!svcPreservedData[groupKey]) svcPreservedData[groupKey] = {};
+                          svcPreservedData[groupKey][itemKey] = {
+                            enabled: item.enabled,
+                            collectionStatus: item.collectionStatus,
+                            startDate: item.startDate,
+                            endDate: item.endDate,
+                            jobId: item.jobId,
+                            preservedFromCaseId: item.preservedFromCaseId,
+                          };
+                        }
+                      },
+                    );
+                  },
+                );
+              }
               return (
                 <ServiceCategoryTable
                   serviceId={serviceId}
@@ -280,8 +306,10 @@ export function UnifiedIdentifiersView({
                   categoryDateRanges={svcDateRanges}
                   additionalDateRanges={svcAddRanges}
                   submittedData={submittedData}
+                  preservedData={svcPreservedData}
                   isEditingCollectionScope={isEditingCollectionScope}
                   onToggleItem={(groupKey, itemKey) => {
+                    if (svcPreservedData?.[groupKey]?.[itemKey]) return;
                     const group = svcGroups.find((g) => g.key === groupKey);
                     const item = group?.items.find((i) => i.key === itemKey);
                     const currentlySelected = (items[serviceId]?.[groupKey] || []).includes(itemKey);

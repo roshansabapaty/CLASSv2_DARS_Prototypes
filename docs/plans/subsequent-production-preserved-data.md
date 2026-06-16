@@ -47,13 +47,14 @@ Decided 2026-06-15: a subsequent-production EPOC-ER should route through **Triag
 
 **Correctness is already handled** (verified): the fulfillment submit keeps existing-jobId jobs as-is (`useCaseWorkflow.ts:366,480` — `isExistingJob = !!category.jobId`), and `handleFinish` MERGES from `latestIdentifier.services` (`FulfillmentWizard.tsx:642`). Preserved jobs carry a `jobId`, so they survive Triage→Fulfillment→submit without losing their preserved-`Complete` status. So Phase 4b is the read-only **reuse UX**, not a data-loss fix.
 
-**Work / status:**
-1. ✅ **`ServiceCategoryTable` preserved support** — new optional `preservedData` prop; `isItemPreserved` locks the item (read-only) regardless of `isEditingCollectionScope`; preserved items render as locked rows with a **"Preserved · reuse (LNS-…)"** badge + status/date-range; excluded from "addable" and from toggling.
-2. ✅ **Per-identifier (individual) wiring** — `Step2ServicesConfiguration` renderBody (the per-identifier config + the "Edit Fulfillment Plan" path) derives `svcPreservedData` from `identifier.services[*]…preservedFromCaseId` and passes it + guards `onToggleItem`.
-3. ⏳ **Bulk / unified wizard paths** — the other two `ServiceCategoryTable` render sites (`Step2…:2071` bulk mode, `UnifiedIdentifiersView:276`) are cross-identifier and don't yet thread per-identifier preserved data. Needed before a fresh Triage→Fulfillment reliably shows reuse rows in the default (bulk/unified) view.
-4. ⏳ **Flip `LNS-2026-00230` to `Waiting on Triage`** once the bulk/unified paths are covered.
+**Work / status — ✅ COMPLETE:**
+1. ✅ **`ServiceCategoryTable` preserved support** — new optional `preservedData` prop; `isItemPreserved` locks the item (read-only) regardless of `isEditingCollectionScope`; preserved items render as locked green rows with a **"Preserved · reuse (LNS-…)"** badge + Collection Job ID + `Complete` status + preserved date range; excluded from "addable" and from toggling.
+2. ✅ **Live wiring — `UnifiedIdentifiersView`** (the reframed Step 2 UI, rendered unconditionally). Derives `svcPreservedData` from `identifier.services[serviceId].categoryGroups` items carrying `preservedFromCaseId` (NOT gated on `isEditingCollectionScope`), passes `preservedData`, and guards `onToggleItem`. Also wired the per-identifier `IndividualServiceConfigDialog`.
+   - **Note:** the legacy `configMode` bulk/individual blocks (incl. the `Step2…:2071` `ServiceCategoryTable`) are dead code — wrapped in `{false && (…)}` (`Step2…:1777`, "Legacy Mode Selection (hidden)"). The single LIVE Step 2 table is in `UnifiedIdentifiersView`, so no bulk-path wiring was needed.
+3. ✅ **`subsequentProduction.ts` jobId guarantee** — `overlayPreservedServices` now synthesizes a stable `jobId` (`PRES-<parent>-<svc>-<group>-<item>`) when the cloned parent item lacks one, so the Fulfillment submit treats preserved jobs as EXISTING (`useCaseWorkflow isExistingJob = !!category.jobId`) and never recomputes their `Complete` status.
+4. ✅ **`LNS-2026-00230` flipped to `Waiting on Triage`** (builder + queue-types). It now routes Triage → Fulfillment (reuse rows shown) → Collection → Package & Delivery, with the seeded new jobs (automated MSA subscriber + manual OneDrive content) still requiring fresh collection.
 
-Until 3–4 land, `00230` stays on **Collection** (safe). The reuse rows are already visible via the **per-identifier config / "Edit Fulfillment Plan"** path.
+**End-to-end demo (00230):** open from queue → Triage → advance to Fulfillment → wizard shows the preserved MSA/Email jobs as locked "Preserved · reuse (LNS-2026-00220)" rows + the two new jobs as normal selectable rows → submit → Collection page shows preserved jobs `Complete` (Preserved badge) ready to package, new jobs `Not Started` to collect.
 
 ## Out of scope (future)
 - A forward-link on the EPOC-PR to its EPOC-ER successor(s).

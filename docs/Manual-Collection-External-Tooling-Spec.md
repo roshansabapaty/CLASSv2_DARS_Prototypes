@@ -73,7 +73,7 @@ These terms are used precisely throughout the spec and map directly to code.
 |---|---|---|
 | **Automated flag** | Per-data-category-item boolean. `automated: true` → programmatic collection exists. `automated: false` → **manual collection required (external tool).** Absent/undefined → treated as automated (see §4.3 data-quality note). | `CategoryItemConfig.automated` in `lensServicesConfig.ts` |
 | **`isManualCategory(serviceKey, "group:item")`** | The single resolver that decides manual vs automated for any category. Returns `true` only when the item's `automated === false`. **This function is the contract** — every surface keys off it. | `lensServicesConfig.ts` |
-| **Data category item ("data type")** | The leaf unit the RS selects and collects, e.g. *Detailed Billing*, *Strike Logs*, *OneDrive Content*. Grouped under a **category group** (Subscriber / Authentication / Traffic / Content). | `SERVICE_CATEGORY_GROUPS` |
+| **Data category item ("data type")** | The leaf unit the RS selects and collects, e.g. *Detailed Billing*, *Strike Logs*, *BitLocker Key*. Grouped under a **category group** (Subscriber / Authentication / Traffic / Content). | `SERVICE_CATEGORY_GROUPS` |
 | **Job** | A single (identifier × service × category) unit of work, with its own `jobId` and C/P/D status. Manual and automated jobs share the same shape. | `SubCategory` in `caseTypes.ts` |
 | **Content Boundary** | The LENS region bucket where collection runs / data is staged. Exactly **10**: United States, Europe, United Kingdom, Asia Pacific, Brazil, India, Canada, France, Switzerland, Mexico. | `COLLECTION_BOUNDARIES` |
 | **Storage Location → Boundary** | The account's Azure storage location (from the account check) rolls up to one of the 10 boundaries. | `mapStorageLocationToCollectionBoundary()` |
@@ -91,8 +91,6 @@ These terms are used precisely throughout the spec and map directly to code.
 
 | Service (`key`) | Account type | Manual data types (category group → item) |
 |---|---|---|
-| OneDrive for Business (`oneDriveForBusiness`) | Enterprise | Content → OneDrive Content |
-| SharePoint Online (`sharePointOnline`) | Enterprise | Content → SharePoint Content |
 | DevTunnels (`devTunnels`) | — | Traffic → Device Info; Content → DevTunnels Content |
 | BitLocker (`bitlocker`) | — | Content → BitLocker Key |
 | Azure Storage (`azureStorage`) | Enterprise | Traffic → ARM Logs / Netflow IP; Content → Blobs / Sites / File Shares / Tables & Queues; Content → Unified Audit Logs |
@@ -119,7 +117,6 @@ These are the highest-UX-risk services: on one identifier, the RS will see some 
 | Exchange Enterprise (`exchangeEnterprise`) | Email Headers (Non-Content), Email Content, Email Headers, Contacts, Calendar | **Password Change History** |
 | Teams for Business (`teamsForBusiness`) | Generic Content (chat) | **2FA/MFA/Proof** |
 | Teams for Life (`teamsForLife`) | Generic Content (chat) | **Teams Live Intercept** |
-| OneDrive Consumer (`oneDriveConsumer`) | Generic Traffic Data (API Logs) | **OneDrive Content** |
 
 ### 4.3 Data-quality note (must resolve with config owner)
 
@@ -340,7 +337,7 @@ This is a deliberate reuse: rather than build a separate document surface, an au
 Manual collection is program-agnostic; **delivery** is where eEvidence diverges. Once a manual job reaches `Collection = Complete` and enters Publish → Delivery:
 
 - **≤25MB:** delivered by push to the IA via `POST /eevidence/outcome` through WISP — identical to automated jobs.
-- **>25MB:** out-of-band secure delivery (active open item in MVP spec §10.3) — relevant because **manual content categories (OneDrive/SharePoint/Azure content, Xbox video/voice) are exactly the large payloads** most likely to exceed 25MB. Engineering should expect manual jobs to be over-represented in the >25MB path.
+- **>25MB:** out-of-band secure delivery (active open item in MVP spec §10.3) — relevant because **manual content categories (Azure content, Xbox video/voice) are exactly the large payloads** most likely to exceed 25MB. Engineering should expect manual jobs to be over-represented in the >25MB path.
 - **Delivery acknowledgement** is tracked per task via `POST /eevidence/deliverystatus` (`Complete` → `Acknowledged` / `Failed`); manual jobs use the same `deliveryStatus` callback states (`DeliveryAcknowledged`, `Failed` with retry).
 - **Preservation (EPOC-PR):** for manually-collected preservation data, a per-category `No Data`/unavailability must be reflected in the `DataPreserved` NotificationObject's supplemental per-category detail.
 
@@ -380,9 +377,10 @@ The MVP data model is intentionally forward-compatible: the per-job `dataLocatio
 
 The generic flow (§6–§9) is the spine. Each standalone tool plugs into it at the **Collection** step. These profiles are advisory until a `collectionTool` field exists in config (Open Q7); today the RS infers the tool from the service.
 
+> **OneDrive Tool — no longer a manual route.** All OneDrive (Business + Consumer) and SharePoint Online content are now **automated** data types. DCS submits these jobs to the appropriate DFS owner to start collection through the standard automated pipeline; they no longer appear in the Manual Collection surface. The OneDrive Tool is retained here only as historical context for the MVP "parity" exclusion.
+
 | Tool | Services / data types it serves (from §4) | RS sub-flow at Collection | Notes for engineering |
 |---|---|---|---|
-| **OneDrive Tool** | OneDrive for Business *content*, OneDrive Consumer *content*, SharePoint Online *content* | RS runs the OneDrive Tool against the identifier, exports content, stages to `cpt/{identifier}` in the derived boundary, returns to DARS → `Complete` + boundary. | Large payloads — expect >25MB delivery path (§11). Parity target named explicitly in MVP exclusion. |
 | **Compliance Portal** | Exchange enterprise *Password Change History*, Entra/MSA traffic items (List of Accounts/Domains, billing, reverse lookups), Unified Audit Logs (Azure) | RS runs eDiscovery/Compliance Portal searches/exports, stages results, records status + notes (search ID in notes). | Parity target named in MVP exclusion. Capture the portal search/case ID in Collection Notes for audit linkage. |
 | **CRM** | Subscriber/billing items requiring CRM lookup (e.g., Basic/Detailed Billing, account profile attributes) | RS queries CRM, transcribes/export, stages, records. | Parity target named in MVP exclusion. Often *small* payloads (subscriber/billing) → ≤25MB push path. |
 | **Partner team (Xbox / Minecraft)** | All Xbox data types; Minecraft content/purchase history | RS **tasks the partner team** (out of band), who collect and stage to the collection point; RS records `Blocked` while waiting, then `Complete` on return. | This is the clearest "DARS user depends on another team" case. `Blocked` + Collection Notes (ticket/contact) are essential. Highest SLA risk (external turnaround). |

@@ -342,10 +342,10 @@ export const MOCK_CASES: CaseQueueItem[] = [
     requestType: "eEvidence",
     requestSubType: "EPOC ER",
     requestOrigin: "LEAPI",
-    // Subsequent Production (Workflow 5) — opens on Collection with the
-    // preserved jobs from LNS-2026-00220 seeded (+ new jobs to collect).
-    // Triage -> Fulfillment routing with wizard reuse-rows is pending Phase 4b.
-    caseStage: "In Progress",
+    // Subsequent Production (Workflow 5) — routes through Triage -> Fulfillment.
+    // The preserved jobs from LNS-2026-00220 are seeded and shown in the wizard
+    // as read-only "Preserved · reuse" rows (+ new jobs to collect). (Phase 4b.)
+    caseStage: "Waiting on Triage",
     country: "Netherlands",
     jurisdiction: "National",
     natureOfCrime: ["OtherFinancialCrimeOrFraud", "Cybercrime"],

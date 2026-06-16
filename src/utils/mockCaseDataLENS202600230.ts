@@ -228,14 +228,14 @@ export function buildLENS202600230FormData(): FormData {
     requestOriginOther: "",
     otherRequestTypeDescription: "",
     // Subsequent Production (Workflow 5): this EPOC-ER follows the preserved
-    // data under LNS-2026-00220. Opens on Collection with the preserved jobs
-    // seeded (via applySubsequentProduction) ready for package + delivery,
-    // alongside new jobs to collect. (Routing through Triage -> Fulfillment
-    // with the wizard surfacing preserved jobs as read-only "reuse" rows is
-    // the pending Phase 4b — it requires the wizard to lock preserved jobs so
-    // a fulfillment submit doesn't recompute their collection status.)
+    // data under LNS-2026-00220. Routes through Triage -> Fulfillment: the
+    // preserved jobs are seeded via applySubsequentProduction and surfaced in
+    // the Fulfillment wizard (UnifiedIdentifiersView) as read-only
+    // "Preserved · reuse" rows so the RS doesn't submit duplicates and reuses
+    // them, alongside any new jobs that still need fresh collection. After
+    // submit they flow to Collection -> Package & Delivery. (Phase 4b.)
     eevidenceWorkflow: 5,
-    caseStage: "In Progress",
+    caseStage: "Waiting on Triage",
     rejectionReason: "",
     caseEscalated: false,
     escalationNotes: "",

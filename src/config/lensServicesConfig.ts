@@ -181,7 +181,7 @@ export const SERVICE_CATEGORY_GROUPS: Partial<Record<string, CategoryGroupConfig
       key: "contentData",
       name: "Content Data",
       items: [
-        { key: "genericAttributes", name: "Content Data", info: "• OneDrive Content", automated: false, defaultSelected: true },
+        { key: "genericAttributes", name: "Content Data", info: "• OneDrive Content", automated: true, defaultSelected: true },
       ],
     },
   ],
@@ -190,7 +190,7 @@ export const SERVICE_CATEGORY_GROUPS: Partial<Record<string, CategoryGroupConfig
       key: "contentData",
       name: "Content Data",
       items: [
-        { key: "genericAttributes", name: "Content Data", info: "• SharePoint Content", automated: false, defaultSelected: true },
+        { key: "genericAttributes", name: "Content Data", info: "• SharePoint Content", automated: true, defaultSelected: true },
       ],
     },
   ],
@@ -206,7 +206,7 @@ export const SERVICE_CATEGORY_GROUPS: Partial<Record<string, CategoryGroupConfig
       key: "contentData",
       name: "Content Data",
       items: [
-        { key: "genericAttributes", name: "Content Data", info: "OneDrive Content", automated: false, defaultSelected: true },
+        { key: "genericAttributes", name: "Content Data", info: "OneDrive Content", automated: true, defaultSelected: true },
       ],
     },
   ],
