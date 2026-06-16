@@ -861,6 +861,31 @@ export const MOCK_CASES: CaseQueueItem[] = [
     identifierTypes: { email: 1 },
     servicesRequested: ["Email"],
   },
+  // CLASSv2 v2.1 Demo — andyryan@microsoft.com (enterprise dual-account)
+  // + roshankp@outlook.com (consumer with B2B guests + location data).
+  // Exercises RelatedAccountsPanel and ConsumerUserLocationPanel.
+  {
+    caseId: "LNS-2026-00325",
+    createDate: "Jun 10, 2026",
+    caseType: "Law Enforcement Request",
+    assigneeName: "Roshan Sabapaty",
+    requestType: "Subpoena",
+    requestSubType: "Federal Subpoena",
+    requestOrigin: "Email forward",
+    caseStage: "In Progress",
+    country: "United States",
+    jurisdiction: "Federal",
+    natureOfCrime: ["Cybercrime", "IdentityTheft"],
+    isThreatToLife: false,
+    casePriority: "Routine",
+    dueDate: "Jul 10, 2026",
+    hasEnterpriseAccounts: true,
+    hasAzureAccounts: false,
+    accountExistenceChecked: true,
+    identifierCount: 2,
+    identifierTypes: { email: 2 },
+    servicesRequested: ["Email", "Microsoft Account Profile", "OneDrive"],
+  },
 ];
 
 // ---------------------------------------------------------------------------

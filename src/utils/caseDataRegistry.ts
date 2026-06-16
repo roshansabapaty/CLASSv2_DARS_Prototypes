@@ -50,6 +50,7 @@ import { buildLENS202600270FormData } from "./mockCaseDataLENS202600270";
 import { buildLENS202600280FormData } from "./mockCaseDataLENS202600280";
 import { buildLENS202600300FormData } from "./mockCaseDataLENS202600300";
 import { buildLENS202600310FormData } from "./mockCaseDataLENS202600310";
+import { buildLENS202600325FormData } from "./mockCaseDataLENS202600325";
 
 export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
   "LNS-2025-00095": buildLENS202500095FormData,
@@ -108,6 +109,10 @@ export const CASE_DATA_BUILDERS: Record<string, () => FormData> = {
   // exercising a different resolver failure mode (unmapped-name x2 +
   // wrong-account-type x2). See mockCaseDataLENS202600310.ts.
   "LNS-2026-00310": buildLENS202600310FormData,
+  // CLASSv2 v2.1 Demo — andyryan@microsoft.com (enterprise + consumer
+  // dual-account) and roshankp@outlook.com (consumer with B2B guests).
+  // Demonstrates Related Accounts Panel + Consumer User Location panels.
+  "LNS-2026-00325": buildLENS202600325FormData,
 };
 
 const cache = new Map<string, FormData>();
