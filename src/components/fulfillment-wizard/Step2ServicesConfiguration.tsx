@@ -461,6 +461,23 @@ function IndividualServiceConfigDialog({
             }}
             renderBody={(serviceId) => {
               const svcSubmittedData = submittedCollectionData?.services[serviceId];
+              // Subsequent Production — jobs already collected under a prior
+              // EPOC-PR (preservedFromCaseId on the live identifier services).
+              // Surfaced as read-only "Preserved · reuse" rows.
+              const svcPreservedData = (() => {
+                const groups = identifier.services?.[serviceId]?.categoryGroups;
+                if (!groups) return undefined;
+                const out: Record<string, Record<string, any>> = {};
+                Object.entries(groups).forEach(([gKey, group]: [string, any]) => {
+                  Object.entries(group || {}).forEach(([iKey, item]: [string, any]) => {
+                    if (item?.preservedFromCaseId) {
+                      if (!out[gKey]) out[gKey] = {};
+                      out[gKey][iKey] = item;
+                    }
+                  });
+                });
+                return Object.keys(out).length ? out : undefined;
+              })();
               // Strip serviceId prefix for the table (expects "groupKey:itemKey" keys)
               const tableCatDateRanges = Object.fromEntries(
                 Object.entries(categoryDateRanges)
@@ -476,9 +493,12 @@ function IndividualServiceConfigDialog({
                   categoryDateRanges={tableCatDateRanges}
                   additionalDateRanges={additionalDateRanges}
                   submittedData={svcSubmittedData?.categoryGroups}
+                  preservedData={svcPreservedData}
                   isEditingCollectionScope={isEditingCollectionScope}
                   onToggleItem={(groupKey, itemKey) => {
                     if (isCategorySubmitted(serviceId, groupKey, itemKey)) return;
+                    // Preserved (reused) jobs are locked — can't be toggled.
+                    if (svcPreservedData?.[groupKey]?.[itemKey]) return;
                     // Prevent un-toggling of locked items (e.g. genericAttributes on msaProfile)
                     const group = svcGroups.find((g) => g.key === groupKey);
                     const item = group?.items.find((i) => i.key === itemKey);

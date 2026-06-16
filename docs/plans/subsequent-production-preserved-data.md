@@ -45,12 +45,15 @@ Decided 2026-06-15: a subsequent-production EPOC-ER should route through **Triag
 
 **Why it's a correctness requirement, not just a label:** the fulfillment submit recomputes each job's `collectionStatus` (`useCaseWorkflow.ts:255-261`) and writes services back (`FulfillmentWizard.tsx:705`). So preserved jobs MUST be **locked** in the wizard (excluded from the submit recompute) or a fulfillment submit would overwrite their preserved-`Complete` status.
 
-**Work:**
-1. Thread `preservedFromCaseId` from `FormData` through `Step2ServicesConfiguration` → `ServiceCategoryTable`. The table already has an "In Collection — disabled checkbox, read-only dates" treatment (gated on `isEditingCollectionScope`); extend the locked-item detection (`isItemSubmitted`, line 321) to also treat preserved items as locked **regardless of `isEditingCollectionScope`**, and render a "Preserved · reuse (LNS-…)" tag (reuse the `Provenance` tag system in `leBaseline.ts` / `ProvenanceTag.tsx`).
-2. Ensure the submit path skips preserved (locked) items so their status is not recomputed.
-3. Flip `LNS-2026-00230` back to `caseStage: "Waiting on Triage"` (builder + queue-types) once the wizard handles preserved jobs safely.
+**Correctness is already handled** (verified): the fulfillment submit keeps existing-jobId jobs as-is (`useCaseWorkflow.ts:366,480` — `isExistingJob = !!category.jobId`), and `handleFinish` MERGES from `latestIdentifier.services` (`FulfillmentWizard.tsx:642`). Preserved jobs carry a `jobId`, so they survive Triage→Fulfillment→submit without losing their preserved-`Complete` status. So Phase 4b is the read-only **reuse UX**, not a data-loss fix.
 
-Until 4b ships, `00230` opens on **Collection** (safe — no wizard reset risk) and still demos preserved + new (automated & manual) jobs.
+**Work / status:**
+1. ✅ **`ServiceCategoryTable` preserved support** — new optional `preservedData` prop; `isItemPreserved` locks the item (read-only) regardless of `isEditingCollectionScope`; preserved items render as locked rows with a **"Preserved · reuse (LNS-…)"** badge + status/date-range; excluded from "addable" and from toggling.
+2. ✅ **Per-identifier (individual) wiring** — `Step2ServicesConfiguration` renderBody (the per-identifier config + the "Edit Fulfillment Plan" path) derives `svcPreservedData` from `identifier.services[*]…preservedFromCaseId` and passes it + guards `onToggleItem`.
+3. ⏳ **Bulk / unified wizard paths** — the other two `ServiceCategoryTable` render sites (`Step2…:2071` bulk mode, `UnifiedIdentifiersView:276`) are cross-identifier and don't yet thread per-identifier preserved data. Needed before a fresh Triage→Fulfillment reliably shows reuse rows in the default (bulk/unified) view.
+4. ⏳ **Flip `LNS-2026-00230` to `Waiting on Triage`** once the bulk/unified paths are covered.
+
+Until 3–4 land, `00230` stays on **Collection** (safe). The reuse rows are already visible via the **per-identifier config / "Edit Fulfillment Plan"** path.
 
 ## Out of scope (future)
 - A forward-link on the EPOC-PR to its EPOC-ER successor(s).

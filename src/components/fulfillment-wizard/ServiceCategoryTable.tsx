@@ -47,6 +47,11 @@ export interface ServiceCategoryTableProps {
   additionalDateRanges: Record<string, Array<{ start: string; end: string }>>;
   /** Submitted job data: groupKey → itemKey → data */
   submittedData?: Record<string, Record<string, SubmittedItemData>>;
+  /** Subsequent Production — jobs already collected under a prior EPOC-PR,
+   *  surfaced as read-only "Preserved · reuse" rows: groupKey → itemKey →
+   *  data (carries `preservedFromCaseId`). Locked regardless of
+   *  `isEditingCollectionScope` so the RS can't re-submit a duplicate. */
+  preservedData?: Record<string, Record<string, any>>;
   isEditingCollectionScope: boolean;
   onToggleItem: (groupKey: string, itemKey: string) => void;
   onDateChange: (groupKey: string, itemKey: string, field: "start" | "end", value: string) => void;
@@ -283,6 +288,7 @@ export function ServiceCategoryTable({
   categoryDateRanges,
   additionalDateRanges,
   submittedData,
+  preservedData,
   isEditingCollectionScope,
   onToggleItem,
   onDateChange,
@@ -322,6 +328,10 @@ export function ServiceCategoryTable({
     if (!isEditingCollectionScope || !submittedData) return false;
     return !!(submittedData[groupKey]?.[itemKey]?.enabled && submittedData[groupKey]?.[itemKey]?.jobId);
   };
+  // Subsequent Production — a job already collected under the parent EPOC-PR.
+  // Locked (read-only "reuse" row) regardless of isEditingCollectionScope.
+  const isItemPreserved = (groupKey: string, itemKey: string): boolean =>
+    !!preservedData?.[groupKey]?.[itemKey]?.preservedFromCaseId;
   const nonSubmittedItems = allItems.filter(({ groupKey, itemKey }) => !isItemSubmitted(groupKey, itemKey));
   const totalSelectedCount = Object.values(selectedItems).reduce((acc, keys) => acc + keys.length, 0);
   const allNonSubmittedSelected =
@@ -455,12 +465,14 @@ export function ServiceCategoryTable({
           const visibleItems = group.items.filter(
             (item) =>
               isItemSubmitted(group.key, item.key) ||
+              isItemPreserved(group.key, item.key) ||
               (selectedItems[group.key]?.includes(item.key) ?? false)
           );
-          // Items available to add: not selected and not submitted
+          // Items available to add: not selected, not submitted, not preserved
           const addableItems = group.items.filter(
             (item) =>
               !isItemSubmitted(group.key, item.key) &&
+              !isItemPreserved(group.key, item.key) &&
               !(selectedItems[group.key]?.includes(item.key) ?? false)
           );
 
@@ -477,19 +489,21 @@ export function ServiceCategoryTable({
               {visibleItems.map((item) => {
                 const isSelected = selectedItems[group.key]?.includes(item.key) ?? false;
                 const submitted = isItemSubmitted(group.key, item.key);
+                const preserved = isItemPreserved(group.key, item.key);
+                const preservedSource = preservedData?.[group.key]?.[item.key]?.preservedFromCaseId;
                 const itemDateKey = `${group.key}:${item.key}`;
                 const addRangesKey = `${serviceId}:${group.key}:${item.key}`;
                 const dateRange = categoryDateRanges[itemDateKey] || { start: "", end: "" };
                 const addRanges = additionalDateRanges[addRangesKey] || [];
-                const itemData = submittedData?.[group.key]?.[item.key];
+                const itemData = submittedData?.[group.key]?.[item.key] ?? preservedData?.[group.key]?.[item.key];
                 const status = itemData?.collectionStatus;
                 const existingJobId = itemData?.jobId || "—";
                 const submittedDates = itemData?.startDate || itemData?.endDate
                   ? { start: formatDate(itemData.startDate), end: formatDate(itemData.endDate) }
                   : null;
 
-                // Submitted item: locked row with job sub-table
-                if (submitted) {
+                // Submitted OR preserved (reused) item: locked read-only row
+                if (submitted || preserved) {
                   const totalJobs = 1 + addRanges.length;
                   return (
                     <React.Fragment key={`${group.key}:${item.key}`}>
@@ -519,6 +533,11 @@ export function ServiceCategoryTable({
                             <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-[#dff6dd] text-[#107c10] border-[#107c10]">
                               {totalJobs} job{totalJobs !== 1 ? "s" : ""}
                             </Badge>
+                            {preserved && (
+                              <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-[#f3faf3] text-[#107c10] border-[#107c10]/40">
+                                Preserved · reuse{preservedSource ? ` (${preservedSource})` : ""}
+                              </Badge>
+                            )}
                           </div>
                           {isEditingCollectionScope && (
                             <Button
