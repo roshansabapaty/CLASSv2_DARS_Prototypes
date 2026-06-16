@@ -150,6 +150,33 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
   },
+  aliasToggleRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalXS,
+    paddingTop: "2px",
+  },
+  aliasToggleButton: {
+    minWidth: "auto",
+    height: "20px",
+    paddingLeft: tokens.spacingHorizontalXS,
+    paddingRight: tokens.spacingHorizontalXS,
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorBrandForeground1,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  aliasHoverHint: {
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorNeutralForeground4,
+    fontStyle: "italic",
+    cursor: "help",
+  },
+  discoveryNote: {
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorNeutralForeground3,
+    fontStyle: "italic",
+    paddingBottom: "4px",
+  },
   seeMoreRow: {
     display: "flex",
     justifyContent: "center",
@@ -223,10 +250,11 @@ function AccountTypeTag({ accountType }: { accountType: string }) {
   );
 }
 
-function AccountCard({ account, showCategory }: { account: RelatedIdentifierAccount; showCategory?: boolean }) {
+function AccountCard({ account, showCategory, isPrimary }: { account: RelatedIdentifierAccount; showCategory?: boolean; isPrimary?: boolean }) {
   const styles = useStyles();
   const primaryId = account.identifiers.find((id) => id.primary);
   const aliases = account.identifiers.filter((id) => !id.primary);
+  const [aliasesExpanded, setAliasesExpanded] = React.useState(false);
 
   return (
     <div className={styles.accountCard}>
@@ -243,6 +271,20 @@ function AccountCard({ account, showCategory }: { account: RelatedIdentifierAcco
             </Tag>
           </Tooltip>
         )}
+        {isPrimary && (
+          <Tooltip content="Data collection will be triggered for this account when selected" relationship="description">
+            <Badge appearance="tint" color="brand" size="small">
+              Included in collection
+            </Badge>
+          </Tooltip>
+        )}
+        {!isPrimary && (
+          <Tooltip content="Related accounts are shown for discovery only — data collection is not triggered for these accounts" relationship="description">
+            <Badge appearance="tint" color="subtle" size="small">
+              Discovery only
+            </Badge>
+          </Tooltip>
+        )}
       </div>
 
       {/* Primary identifier for this account */}
@@ -256,14 +298,46 @@ function AccountCard({ account, showCategory }: { account: RelatedIdentifierAcco
         </div>
       )}
 
-      {/* Other identifiers (aliases within this account) */}
-      {aliases.map((alias, i) => (
-        <div key={`${alias.identifier}-${i}`} className={styles.identifierRow}>
-          <CopyableIdentifier value={alias.identifier} copyLabel="Copy alias" variant="inline" />
-          <Tag size="extra-small" appearance="outline">{alias.identifierType}</Tag>
-          <span className={styles.aliasLabel}>Alias</span>
-        </div>
-      ))}
+      {/* Aliases — collapsed by default, toggle to expand */}
+      {aliases.length > 0 && (
+        <>
+          <div className={styles.aliasToggleRow}>
+            <Button
+              appearance="subtle"
+              size="small"
+              className={styles.aliasToggleButton}
+              icon={aliasesExpanded ? <ChevronUpRegular fontSize={12} /> : <ChevronDownRegular fontSize={12} />}
+              iconPosition="after"
+              onClick={() => setAliasesExpanded((v) => !v)}
+              aria-expanded={aliasesExpanded}
+              aria-label={aliasesExpanded ? "Hide aliases" : `Show ${aliases.length} alias${aliases.length === 1 ? "" : "es"}`}
+            >
+              {aliases.length} alias{aliases.length === 1 ? "" : "es"}
+            </Button>
+            {!aliasesExpanded && (
+              <Tooltip
+                content={
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px", maxWidth: "350px" }}>
+                    {aliases.map((a, i) => (
+                      <span key={i} style={{ fontFamily: "monospace", fontSize: "12px" }}>{a.identifier}</span>
+                    ))}
+                  </div>
+                }
+                relationship="description"
+              >
+                <span className={styles.aliasHoverHint}>hover to preview</span>
+              </Tooltip>
+            )}
+          </div>
+          {aliasesExpanded && aliases.map((alias, i) => (
+            <div key={`${alias.identifier}-${i}`} className={styles.identifierRow}>
+              <CopyableIdentifier value={alias.identifier} copyLabel="Copy alias" variant="inline" />
+              <Tag size="extra-small" appearance="outline">{alias.identifierType}</Tag>
+              <span className={styles.aliasLabel}>Alias</span>
+            </div>
+          ))}
+        </>
+      )}
 
       {/* Account metadata line */}
       <div className={styles.metadataRow}>
@@ -345,7 +419,7 @@ export function RelatedAccountsPanel({ identifier }: RelatedAccountsPanelProps) 
             Primary Accounts ({primaryAccounts.length})
           </div>
           {primaryAccounts.map((account, i) => (
-            <AccountCard key={`primary-${i}`} account={account} showCategory />
+            <AccountCard key={`primary-${i}`} account={account} showCategory isPrimary />
           ))}
         </>
       )}
@@ -356,8 +430,11 @@ export function RelatedAccountsPanel({ identifier }: RelatedAccountsPanelProps) 
           <div className={styles.sectionLabel}>
             Related Accounts ({relatedAccounts.length})
           </div>
+          <span className={styles.discoveryNote}>
+            Related accounts are shown for discovery purposes only. Data collection is triggered only for primary accounts when the identifier checkbox is selected.
+          </span>
           {visibleRelated.map((account, i) => (
-            <AccountCard key={`related-${i}`} account={account} showCategory />
+            <AccountCard key={`related-${i}`} account={account} showCategory isPrimary={false} />
           ))}
           {hiddenRelatedCount > 0 && (
             <div className={styles.seeMoreRow}>
