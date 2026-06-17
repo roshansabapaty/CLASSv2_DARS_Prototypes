@@ -1,5 +1,11 @@
 import * as React from "react";
 import { Badge, Tag, Tooltip, makeStyles, tokens } from "@fluentui/react-components";
+import {
+  CheckmarkCircleRegular,
+  DismissCircleRegular,
+  QuestionCircleRegular,
+  GlobeRegular,
+} from "@fluentui/react-icons";
 import type { RelatedIdentifierAccount, ServiceProfileData } from "../types/caseTypes";
 
 const useStyles = makeStyles({
@@ -37,46 +43,37 @@ const useStyles = makeStyles({
     letterSpacing: "0.04em",
     color: tokens.colorNeutralForeground3,
   },
+  nameRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
+  },
   name: {
     fontSize: tokens.fontSizeBase300,
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground1,
   },
-  row: {
+  storageRow: {
     display: "flex",
-    alignItems: "flex-start",
-    columnGap: tokens.spacingHorizontalS,
-    flexWrap: "wrap" as const,
+    alignItems: "center",
+    gap: tokens.spacingHorizontalS,
   },
-  label: {
-    minWidth: "150px",
+  storageLabel: {
     fontSize: tokens.fontSizeBase100,
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground3,
     textTransform: "uppercase" as const,
     letterSpacing: "0.04em",
   },
-  value: {
-    display: "flex",
-    alignItems: "center",
-    columnGap: tokens.spacingHorizontalXS,
-    rowGap: tokens.spacingVerticalXS,
-    flexWrap: "wrap" as const,
-    fontSize: tokens.fontSizeBase200,
-    color: tokens.colorNeutralForeground1,
-  },
-  note: {
-    fontSize: tokens.fontSizeBase100,
-    color: tokens.colorPaletteYellowForeground1,
-  },
-  volumeGrid: {
+  servicesGrid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+    gridTemplateColumns: "1fr 1fr",
     columnGap: tokens.spacingHorizontalM,
     rowGap: tokens.spacingVerticalXS,
     width: "100%",
+    marginTop: "2px",
   },
-  volumeCard: {
+  serviceCard: {
     display: "flex",
     flexDirection: "column",
     rowGap: "2px",
@@ -102,14 +99,43 @@ const useStyles = makeStyles({
     borderBottomLeftRadius: tokens.borderRadiusSmall,
     borderBottomRightRadius: tokens.borderRadiusSmall,
   },
-  volumeTitle: {
+  serviceCardNotFound: {
+    opacity: 0.6,
+  },
+  serviceHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  serviceName: {
     fontSize: tokens.fontSizeBase200,
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground1,
   },
-  volumeMeta: {
+  serviceStatus: {
+    display: "flex",
+    alignItems: "center",
+    gap: "4px",
+    fontSize: tokens.fontSizeBase200,
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  statusFound: {
+    color: tokens.colorPaletteGreenForeground1,
+  },
+  statusNotFound: {
+    color: tokens.colorNeutralForeground4,
+  },
+  statusUnavailable: {
+    color: tokens.colorPaletteYellowForeground1,
+  },
+  serviceMeta: {
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
+  },
+  tenantNote: {
+    fontSize: tokens.fontSizeBase100,
+    color: tokens.colorPaletteYellowForeground1,
+    fontStyle: "italic",
   },
 });
 
@@ -117,37 +143,18 @@ function formatStorageSize(sizeMb: number): string {
   if (sizeMb >= 1024) {
     return `${(sizeMb / 1024).toFixed(1)} GB`;
   }
-
   return `${sizeMb} MB`;
 }
 
 function formatDisplayDate(iso?: string): string {
-  if (!iso) {
-    return "—";
-  }
-
+  if (!iso) return "—";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-
+  if (Number.isNaN(date.getTime())) return iso;
   return new Intl.DateTimeFormat("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
   }).format(date);
-}
-
-function getStatusBadgeAppearance(status: "found" | "not_found" | "unavailable") {
-  if (status === "found") {
-    return { appearance: "filled" as const, color: "success" as const, label: "Found" };
-  }
-
-  if (status === "not_found") {
-    return { appearance: "tint" as const, color: "warning" as const, label: "Not found" };
-  }
-
-  return { appearance: "outline" as const, color: "subtle" as const, label: "Unavailable" };
 }
 
 export interface ServiceProfilePanelProps {
@@ -158,11 +165,20 @@ export interface ServiceProfilePanelProps {
 export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePanelProps) {
   const styles = useStyles();
 
-  if (!profile) {
-    return null;
-  }
+  if (!profile) return null;
 
   const fullName = [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim();
+  const storageRegion = profile.storageLocation?.join(", ") ?? "—";
+
+  // Build per-service status map from servicesChecked
+  const serviceStatusMap = new Map<string, "found" | "not_found" | "unavailable">();
+  profile.servicesChecked?.forEach(({ service, status }) => {
+    serviceStatusMap.set(service, status);
+  });
+
+  const exchangeStatus = serviceStatusMap.get("Exchange") ?? "not_found";
+  const oneDriveStatus = serviceStatusMap.get("OneDrive") ?? "not_found";
+
   const hasTenantLocationMismatch =
     accountType === "EnterpriseUser" &&
     Boolean(
@@ -174,107 +190,98 @@ export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePane
 
   return (
     <div className={styles.root}>
-      <span className={styles.sectionTitle}>Service Profile</span>
-      {fullName && <span className={styles.name}>{fullName}</span>}
+      <span className={styles.sectionTitle}>Service Profile · Scenario 2</span>
 
-      {profile.storageLocation && profile.storageLocation.length > 0 && (
-        <div className={styles.row}>
-          <span className={styles.label}>Storage Location</span>
-          <div className={styles.value}>
-            {profile.storageLocation.map((region) => (
-              <Tag key={region} size="extra-small" appearance="outline">
-                {region}
-              </Tag>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {accountType === "EnterpriseUser" && profile.tenantRegisteredLocation && (
-        <div className={styles.row}>
-          <span className={styles.label}>Tenant Registered</span>
-          <div className={styles.value}>
-            <Tag size="extra-small" appearance="brand">
-              {profile.tenantRegisteredLocation}
+      {/* Name + Storage Location row */}
+      <div className={styles.nameRow}>
+        {fullName && <span className={styles.name}>{fullName}</span>}
+        {accountType === "EnterpriseUser" && profile.tenantRegisteredLocation && (
+          <Tooltip content={`Tenant registered in ${profile.tenantRegisteredLocation}`} relationship="description">
+            <Tag size="extra-small" appearance="brand" shape="circular">
+              Tenant: {profile.tenantRegisteredLocation}
             </Tag>
-            {hasTenantLocationMismatch && (
-              <span className={styles.note}>
-                Tenant registration differs from storage region.
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {profile.servicesProvisioned && profile.servicesProvisioned.length > 0 && (
-        <div className={styles.row}>
-          <span className={styles.label}>Services Provisioned</span>
-          <div className={styles.value}>
-            {profile.servicesProvisioned.map((service) => (
-              <Badge key={service} appearance="tint" color="success" size="small">
-                {service} ✓
-              </Badge>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className={styles.row}>
-        <span className={styles.label}>Mailbox Created</span>
-        <div className={styles.value}>{formatDisplayDate(profile.whenMailboxCreated)}</div>
+          </Tooltip>
+        )}
       </div>
 
-      {profile.volumeOfData && (
-        <div className={styles.row}>
-          <span className={styles.label}>Volume of Data</span>
-          <div className={styles.volumeGrid}>
-            {profile.volumeOfData.exchange && (
-              <div className={styles.volumeCard}>
-                <span className={styles.volumeTitle}>Exchange</span>
-                <span className={styles.volumeMeta}>
-                  {formatStorageSize(profile.volumeOfData.exchange.mailboxSizeMB)}
-                </span>
-                <span className={styles.volumeMeta}>
-                  {profile.volumeOfData.exchange.itemCount.toLocaleString()} items
-                </span>
-              </div>
-            )}
-            {profile.volumeOfData.oneDrive && (
-              <div className={styles.volumeCard}>
-                <span className={styles.volumeTitle}>OneDrive</span>
-                <span className={styles.volumeMeta}>
-                  {formatStorageSize(profile.volumeOfData.oneDrive.storageSizeMB)}
-                </span>
-                <span className={styles.volumeMeta}>
-                  {profile.volumeOfData.oneDrive.fileCount.toLocaleString()} files
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Storage Location — single location per account */}
+      <div className={styles.storageRow}>
+        <GlobeRegular fontSize={14} />
+        <span className={styles.storageLabel}>Data Storage Location</span>
+        <Tag size="small" appearance="outline">
+          {storageRegion}
+        </Tag>
+        {hasTenantLocationMismatch && (
+          <span className={styles.tenantNote}>
+            ⚠ Storage region differs from tenant registration
+          </span>
+        )}
+      </div>
 
-      {profile.servicesChecked && profile.servicesChecked.length > 0 && (
-        <div className={styles.row}>
-          <span className={styles.label}>Services Checked</span>
-          <div className={styles.value}>
-            {profile.servicesChecked.map(({ service, status }) => {
-              const badge = getStatusBadgeAppearance(status);
-              return (
-                <Tooltip
-                  key={`${service}-${status}`}
-                  content={`${service}: ${badge.label}`}
-                  relationship="description"
-                >
-                  <Badge appearance={badge.appearance} color={badge.color} size="small">
-                    {service} {badge.label}
-                  </Badge>
-                </Tooltip>
-              );
-            })}
+      {/* Per-service existence cards */}
+      <div className={styles.servicesGrid}>
+        {/* Exchange card */}
+        <div className={`${styles.serviceCard} ${exchangeStatus !== "found" ? styles.serviceCardNotFound : ""}`}>
+          <div className={styles.serviceHeader}>
+            <span className={styles.serviceName}>Exchange</span>
+            <ServiceStatusIndicator status={exchangeStatus} />
           </div>
+          {exchangeStatus === "found" && profile.volumeOfData?.exchange ? (
+            <>
+              <span className={styles.serviceMeta}>
+                Mailbox: {formatStorageSize(profile.volumeOfData.exchange.mailboxSizeMB)} · {profile.volumeOfData.exchange.itemCount.toLocaleString()} items
+              </span>
+              <span className={styles.serviceMeta}>
+                Created: {formatDisplayDate(profile.whenMailboxCreated)}
+              </span>
+            </>
+          ) : exchangeStatus === "found" ? (
+            <span className={styles.serviceMeta}>Provisioned (no volume data)</span>
+          ) : (
+            <span className={styles.serviceMeta}>Not provisioned for this account</span>
+          )}
         </div>
-      )}
+
+        {/* OneDrive card */}
+        <div className={`${styles.serviceCard} ${oneDriveStatus !== "found" ? styles.serviceCardNotFound : ""}`}>
+          <div className={styles.serviceHeader}>
+            <span className={styles.serviceName}>OneDrive</span>
+            <ServiceStatusIndicator status={oneDriveStatus} />
+          </div>
+          {oneDriveStatus === "found" && profile.volumeOfData?.oneDrive ? (
+            <span className={styles.serviceMeta}>
+              Storage: {formatStorageSize(profile.volumeOfData.oneDrive.storageSizeMB)} · {profile.volumeOfData.oneDrive.fileCount.toLocaleString()} files
+            </span>
+          ) : oneDriveStatus === "found" ? (
+            <span className={styles.serviceMeta}>Provisioned (no volume data)</span>
+          ) : (
+            <span className={styles.serviceMeta}>Not provisioned for this account</span>
+          )}
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ServiceStatusIndicator({ status }: { status: "found" | "not_found" | "unavailable" }) {
+  const styles = useStyles();
+  if (status === "found") {
+    return (
+      <span className={`${styles.serviceStatus} ${styles.statusFound}`}>
+        <CheckmarkCircleRegular fontSize={16} /> Yes
+      </span>
+    );
+  }
+  if (status === "not_found") {
+    return (
+      <span className={`${styles.serviceStatus} ${styles.statusNotFound}`}>
+        <DismissCircleRegular fontSize={16} /> No
+      </span>
+    );
+  }
+  return (
+    <span className={`${styles.serviceStatus} ${styles.statusUnavailable}`}>
+      <QuestionCircleRegular fontSize={16} /> Unavailable
+    </span>
   );
 }
