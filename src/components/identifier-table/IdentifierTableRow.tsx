@@ -892,7 +892,7 @@ export function IdentifierTableRow({
         <td className={styles.accountCheckCell}>
           <div className={styles.accountCheckStack}>
             <AccountCheckCell identifier={identifier} />
-            {identifier.checkAccounts?.geoLocationMismatch && (
+            {identifier.accountExistenceStatus === "success" && identifier.checkAccounts?.geoLocationMismatch && (
               <Tooltip
                 content="Consumer account profile data is stored in a different region than enterprise account data."
                 relationship="description"
