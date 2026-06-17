@@ -39,13 +39,21 @@ Open case **LNS-2026-00325** (CLASSv2 v2.1 Demo) from the case queue. It has two
    - Summary: consistency indicator, per-country breakdown with login counts
    - Detail: full event list with timestamps, IPs, and countries
 
-4. **Service Configuration** — The identifier checkbox triggers data collection for **primary accounts only**. Related accounts are discovery-only (no data collection).
+4. **Service Profile** — Each primary account card shows a "Service Profile" section with:
+   - Per-service existence: Exchange and OneDrive shown as **✓ Yes** (green) or **✗ No** (grey/dimmed)
+   - When provisioned: mailbox size, item count, creation date (Exchange) and storage size, file count (OneDrive)
+   - Data storage location shown once per account (same region for both services)
+   - Enterprise accounts show tenant registered location; warning if storage region differs
+   - **Geo Mismatch** warning badge when consumer and enterprise data are stored in different regions (e.g., Andy's enterprise in US, consumer in North Europe)
+
+5. **Service Configuration** — The identifier checkbox triggers data collection for **primary accounts only**. Related accounts are discovery-only (no data collection).
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `src/components/RelatedAccountsPanel.tsx` | v2.1 per-account display component |
+| `src/components/ServiceProfilePanel.tsx` | Per-account service profile (Exchange/OneDrive existence + storage) |
 | `src/components/ConsumerUserLocationPanel.tsx` | Location summary + detail drill-down |
 | `src/utils/mockCaseDataLENS202600325.ts` | Demo case mock data (real CLASS patterns) |
 | `src/types/caseTypes.ts` | v2.1 type definitions (~line 1070) |
