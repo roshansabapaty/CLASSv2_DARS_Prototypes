@@ -27,10 +27,12 @@ import {
   StarRegular,
   ShieldCheckmarkRegular,
   InfoRegular,
+  WarningRegular,
 } from "@fluentui/react-icons";
 import type { AccountIdentifier, RelatedIdentifierAccount } from "../types/caseTypes";
 import { CopyableIdentifier } from "./CopyableIdentifier";
 import { inferIdentifierType } from "./IdentifierAliasesPanel";
+import { ServiceProfilePanel } from "./ServiceProfilePanel";
 
 const RELATED_VISIBLE_DEFAULT = 2;
 
@@ -357,6 +359,9 @@ function AccountCard({ account, showCategory, isPrimary }: { account: RelatedIde
           <span>Mailbox: {account.hasMailboxStore ? "✓" : "✗"}</span>
         )}
       </div>
+      {account.profile && (
+        <ServiceProfilePanel profile={account.profile} accountType={account.accountType} />
+      )}
     </div>
   );
 }
@@ -398,6 +403,16 @@ export function RelatedAccountsPanel({ identifier }: RelatedAccountsPanelProps) 
             <Tag size="extra-small" appearance="brand" shape="circular">
               Enterprise & Consumer
             </Tag>
+          )}
+          {ca?.geoLocationMismatch && (
+            <Tooltip
+              content="Consumer profile data is stored in a different region than the enterprise profile data for this identifier."
+              relationship="description"
+            >
+              <Badge appearance="tint" color="warning" size="small" icon={<WarningRegular />}>
+                Geo Mismatch
+              </Badge>
+            </Tooltip>
           )}
           {ca?.disclosureRelevance && (
             <RelevanceBadge relevance={ca.disclosureRelevance} />

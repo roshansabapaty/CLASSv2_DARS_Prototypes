@@ -50,6 +50,7 @@ export function buildLENS202600325FormData(): FormData {
     services: createDefaultIdentifierServices(startDate, endDate),
     checkAccounts: {
       accountType: "Enterprise-and-Consumer",
+      geoLocationMismatch: true,
       primaryIdentifier: "andyryan@microsoft.com",
       relatedIdentifiers: [
         "Andy.Ryan@microsoft.com",
@@ -89,6 +90,22 @@ export function buildLENS202600325FormData(): FormData {
           category: "Primary Enterprise",
           disclosureRelevance: "RELEVANT",
           disclosureProcess: "Enterprise",
+          profile: {
+            firstName: "Andy",
+            lastName: "Ryan",
+            tenantRegisteredLocation: "United States",
+            storageLocation: ["United States"],
+            servicesProvisioned: ["Exchange", "OneDrive"],
+            whenMailboxCreated: "2015-03-15T08:30:00Z",
+            volumeOfData: {
+              exchange: { mailboxSizeMB: 4096, itemCount: 28500 },
+              oneDrive: { storageSizeMB: 12800, fileCount: 1250 },
+            },
+            servicesChecked: [
+              { service: "Exchange", status: "found" },
+              { service: "OneDrive", status: "found" },
+            ],
+          },
           identifiers: [
             { identifier: "andyryan@microsoft.com", identifierType: "SmtpAddress", primary: true },
             { identifier: "Andy.Ryan@microsoft.com", identifierType: "SmtpAddress", primary: false },
@@ -117,6 +134,20 @@ export function buildLENS202600325FormData(): FormData {
           category: "Primary Consumer",
           disclosureRelevance: "RELEVANT",
           disclosureProcess: "Consumer",
+          profile: {
+            firstName: "Andy",
+            lastName: "Ryan",
+            storageLocation: ["North Europe"],
+            servicesProvisioned: ["Exchange"],
+            whenMailboxCreated: "2019-06-22T14:15:00Z",
+            volumeOfData: {
+              exchange: { mailboxSizeMB: 256, itemCount: 1820 },
+            },
+            servicesChecked: [
+              { service: "Exchange", status: "found" },
+              { service: "OneDrive", status: "not_found" },
+            ],
+          },
           identifiers: [
             { identifier: "andyryan@microsoft.com", identifierType: "SmtpAddress", primary: true, externalEmailAddress: "andyryan@microsoft.com" },
             { identifier: "340019355E015", identifierType: "PUID", primary: false },
@@ -263,6 +294,7 @@ export function buildLENS202600325FormData(): FormData {
     services: createDefaultIdentifierServices(startDate, endDate),
     checkAccounts: {
       accountType: "Consumer",
+      geoLocationMismatch: false,
       primaryIdentifier: "roshanpadmanabhan@hotmail.com",
       relatedIdentifiers: [
         "roshankp@outlook.com",
@@ -290,6 +322,21 @@ export function buildLENS202600325FormData(): FormData {
           msaIdentityExists: true,
           hasMailboxStore: true,
           mailboxStatus: "Active",
+          profile: {
+            firstName: "Roshan",
+            lastName: "Padmanabhan",
+            storageLocation: ["Southeast Asia"],
+            servicesProvisioned: ["Exchange", "OneDrive"],
+            whenMailboxCreated: "2018-11-03T09:45:00Z",
+            volumeOfData: {
+              exchange: { mailboxSizeMB: 512, itemCount: 3200 },
+              oneDrive: { storageSizeMB: 2048, fileCount: 185 },
+            },
+            servicesChecked: [
+              { service: "Exchange", status: "found" },
+              { service: "OneDrive", status: "found" },
+            ],
+          },
           identifiers: [
             { identifier: "roshanpadmanabhan@hotmail.com", identifierType: "SmtpAddress", primary: true },
             { identifier: "roshankp@outlook.com", identifierType: "SmtpAddress", primary: false },

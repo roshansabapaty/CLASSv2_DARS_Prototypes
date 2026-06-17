@@ -1060,6 +1060,30 @@ export type DisclosureRelevance = "RELEVANT" | "NOT_RELEVANT" | "PENDING_CLASSIF
 /** Downstream pipeline routing per account. */
 export type DisclosureProcess = "Enterprise" | "Consumer";
 
+/** Scenario 2 service profile data returned for a discovered account. */
+export interface ServiceProfileData {
+  firstName?: string;
+  lastName?: string;
+  tenantRegisteredLocation?: string;
+  storageLocation?: string[];
+  servicesProvisioned?: string[];
+  whenMailboxCreated?: string;
+  volumeOfData?: {
+    exchange?: {
+      mailboxSizeMB: number;
+      itemCount: number;
+    };
+    oneDrive?: {
+      storageSizeMB: number;
+      fileCount: number;
+    };
+  };
+  servicesChecked?: Array<{
+    service: string;
+    status: "found" | "not_found" | "unavailable";
+  }>;
+}
+
 /**
  * A single per-account entry in the v2.1 `relatedIdentifiers` array.
  * Each entry represents a distinct account discovered for the LE-submitted
@@ -1079,6 +1103,7 @@ export interface RelatedIdentifierAccount {
   disclosureRelevance: DisclosureRelevance;
   disclosureProcess: DisclosureProcess;
   identifiers: AccountNestedIdentifier[];
+  profile?: ServiceProfileData;
 }
 
 // ── CLASSv2 v2.1 Consumer User Location types ────────────────────────────────
@@ -1151,6 +1176,7 @@ export interface AccountIdentifier {
   checkAccounts?: {
     dataLocation?: string;
     accountType?: string;
+    geoLocationMismatch?: boolean;
     primaryIdentifier?: string;
     relatedIdentifiers?: string[];
 

@@ -39,6 +39,7 @@ import {
   ChevronRightRegular,
   ChevronDownRegular,
   GlobeLocationRegular,
+  WarningRegular,
 } from "@fluentui/react-icons";
 import { ETSIDesiredStatusChip } from "../fulfillment-wizard/ETSIDesiredStatusChip";
 import { validateIdentifierFormat } from "../../utils/caseHelpers";
@@ -217,6 +218,12 @@ const useStyles = makeStyles({
     paddingBottom: tokens.spacingVerticalS,
     paddingLeft: tokens.spacingHorizontalS,
     paddingRight: tokens.spacingHorizontalS,
+  },
+  accountCheckStack: {
+    display: "flex",
+    flexDirection: "column",
+    rowGap: "4px",
+    alignItems: "flex-start",
   },
   // "Last Logon Location" column — populated when the user runs the
   // IP History lookup. Empty / muted until then.
@@ -883,7 +890,19 @@ export function IdentifierTableRow({
 
         {/* Account Check */}
         <td className={styles.accountCheckCell}>
-          <AccountCheckCell identifier={identifier} />
+          <div className={styles.accountCheckStack}>
+            <AccountCheckCell identifier={identifier} />
+            {identifier.checkAccounts?.geoLocationMismatch && (
+              <Tooltip
+                content="Consumer account profile data is stored in a different region than enterprise account data."
+                relationship="description"
+              >
+                <Badge appearance="tint" color="warning" size="small" icon={<WarningRegular />}>
+                  Geo mismatch
+                </Badge>
+              </Tooltip>
+            )}
+          </div>
         </td>
 
         {/* Consumer User Location Summary — populated by the Check

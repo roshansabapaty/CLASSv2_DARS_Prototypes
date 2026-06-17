@@ -23,6 +23,7 @@ interface AccountCheckResult {
   checkAccounts?: {
     dataLocation?: string;
     accountType?: string;
+    geoLocationMismatch?: boolean;
     primaryIdentifier?: string;
     relatedIdentifiers?: string[];
   };
@@ -415,6 +416,7 @@ export async function runAccountExistenceCheck(
                 accountType: seededAccountType === "Enterprise-and-Consumer"
                   ? "Enterprise-and-Consumer"
                   : identifierAccountType,
+                geoLocationMismatch: identifier.checkAccounts?.geoLocationMismatch,
                 primaryIdentifier: identifier.checkAccounts?.primaryIdentifier ?? identifierPrimaryId,
                 relatedIdentifiers: identifier.checkAccounts?.relatedIdentifiers ?? identifierRelatedIdentifiers,
                 // v2.1: preserve structured per-account data when pre-seeded
