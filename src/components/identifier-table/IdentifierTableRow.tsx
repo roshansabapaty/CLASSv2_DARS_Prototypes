@@ -914,7 +914,7 @@ export function IdentifierTableRow({
           {identifier.checkAccounts?.accountType !== "Consumer" &&
            identifier.checkAccounts?.accountType !== "Enterprise-and-Consumer" ? (
             <span className={styles.lastLogonEmpty}>—</span>
-          ) : identifier.consumerLocationSummary ? (
+          ) : identifier.accountExistenceStatus === "success" && identifier.consumerLocationSummary ? (
             // v2.1: Use structured consumerLocationSummary from CLASS Scenario 8
             identifier.consumerLocationSummary.consistencyIndicator === "Multiple" ? (
               <div
