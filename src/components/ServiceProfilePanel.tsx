@@ -192,7 +192,7 @@ export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePane
     <div className={styles.root}>
       <span className={styles.sectionTitle}>Service Profile</span>
 
-      {/* Name + Storage Location row */}
+      {/* Name row */}
       <div className={styles.nameRow}>
         {fullName && <span className={styles.name}>{fullName}</span>}
         {accountType === "EnterpriseUser" && profile.tenantRegisteredLocation && (
@@ -202,15 +202,6 @@ export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePane
             </Tag>
           </Tooltip>
         )}
-      </div>
-
-      {/* Storage Location — single location per account */}
-      <div className={styles.storageRow}>
-        <GlobeRegular fontSize={14} />
-        <span className={styles.storageLabel}>Data Storage Location</span>
-        <Tag size="small" appearance="outline">
-          {storageRegion}
-        </Tag>
         {hasTenantLocationMismatch && (
           <span className={styles.tenantNote}>
             ⚠ Storage region differs from tenant registration
@@ -226,17 +217,22 @@ export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePane
             <span className={styles.serviceName}>Exchange</span>
             <ServiceStatusIndicator status={exchangeStatus} />
           </div>
-          {exchangeStatus === "found" && profile.volumeOfData?.exchange ? (
+          {exchangeStatus === "found" ? (
             <>
               <span className={styles.serviceMeta}>
-                Mailbox: {formatStorageSize(profile.volumeOfData.exchange.mailboxSizeMB)} · {profile.volumeOfData.exchange.itemCount.toLocaleString()} items
+                <GlobeRegular fontSize={12} /> Storage: {storageRegion}
               </span>
-              <span className={styles.serviceMeta}>
-                Created: {formatDisplayDate(profile.whenMailboxCreated)}
-              </span>
+              {profile.volumeOfData?.exchange && (
+                <>
+                  <span className={styles.serviceMeta}>
+                    Mailbox: {formatStorageSize(profile.volumeOfData.exchange.mailboxSizeMB)} · {profile.volumeOfData.exchange.itemCount.toLocaleString()} items
+                  </span>
+                  <span className={styles.serviceMeta}>
+                    Created: {formatDisplayDate(profile.whenMailboxCreated)}
+                  </span>
+                </>
+              )}
             </>
-          ) : exchangeStatus === "found" ? (
-            <span className={styles.serviceMeta}>Provisioned (no volume data)</span>
           ) : (
             <span className={styles.serviceMeta}>Not provisioned for this account</span>
           )}
@@ -248,12 +244,17 @@ export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePane
             <span className={styles.serviceName}>OneDrive</span>
             <ServiceStatusIndicator status={oneDriveStatus} />
           </div>
-          {oneDriveStatus === "found" && profile.volumeOfData?.oneDrive ? (
-            <span className={styles.serviceMeta}>
-              Storage: {formatStorageSize(profile.volumeOfData.oneDrive.storageSizeMB)} · {profile.volumeOfData.oneDrive.fileCount.toLocaleString()} files
-            </span>
-          ) : oneDriveStatus === "found" ? (
-            <span className={styles.serviceMeta}>Provisioned (no volume data)</span>
+          {oneDriveStatus === "found" ? (
+            <>
+              <span className={styles.serviceMeta}>
+                <GlobeRegular fontSize={12} /> Storage: {storageRegion}
+              </span>
+              {profile.volumeOfData?.oneDrive && (
+                <span className={styles.serviceMeta}>
+                  Storage: {formatStorageSize(profile.volumeOfData.oneDrive.storageSizeMB)} · {profile.volumeOfData.oneDrive.fileCount.toLocaleString()} files
+                </span>
+              )}
+            </>
           ) : (
             <span className={styles.serviceMeta}>Not provisioned for this account</span>
           )}
