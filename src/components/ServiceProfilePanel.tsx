@@ -190,7 +190,7 @@ export function ServiceProfilePanel({ profile, accountType }: ServiceProfilePane
 
   return (
     <div className={styles.root}>
-      <span className={styles.sectionTitle}>Service Profile · Scenario 2</span>
+      <span className={styles.sectionTitle}>Service Profile</span>
 
       {/* Name + Storage Location row */}
       <div className={styles.nameRow}>
