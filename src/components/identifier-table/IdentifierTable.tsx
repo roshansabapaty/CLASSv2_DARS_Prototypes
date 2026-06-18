@@ -221,7 +221,9 @@ export function IdentifierTable({
           (svc: any) =>
             svc?.accountExistence?.consumerExists ||
             svc?.accountExistence?.enterpriseExists,
-        );
+        ) || id.checkAccounts?.accountType === "Consumer"
+          || id.checkAccounts?.accountType === "Enterprise"
+          || id.checkAccounts?.accountType === "Enterprise-and-Consumer";
         if (hasAccount) found++;
         else notFound++;
       } else if (acs === "not-found") {

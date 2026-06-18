@@ -388,7 +388,10 @@ export const IdentifiersSummaryView = React.memo(function IdentifiersSummaryView
       (identifier.services.teams.accountExistence?.consumerExists || 
        identifier.services.teams.accountExistence?.enterpriseExists) ||
       (identifier.services.azure.accountExistence?.consumerExists || 
-       identifier.services.azure.accountExistence?.enterpriseExists);
+       identifier.services.azure.accountExistence?.enterpriseExists) ||
+      identifier.checkAccounts?.accountType === "Consumer" ||
+      identifier.checkAccounts?.accountType === "Enterprise" ||
+      identifier.checkAccounts?.accountType === "Enterprise-and-Consumer";
     
     if (hasAccount) {
       return { icon: CheckCircle2, color: "text-green-600", bg: "bg-green-50", label: "Found" };
