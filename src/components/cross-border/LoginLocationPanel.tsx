@@ -250,46 +250,51 @@ export function LoginLocationPanel({
             {/* CLASSv2 v2.1 Consumer User Location Summary (Scenario 8)
                 — shown when structured location data is available on the
                 identifier, above the legacy ipHistoryStore timeline. */}
-            {identifier.consumerLocationSummary && (
+            {identifier.consumerLocationSummary ? (
+              // v2.1: Structured ConsumerUserLocationPanel replaces legacy
+              // ipHistoryStore display entirely — no need to show the old
+              // ResultsHeader / CountrySummaryCards / Timeline below.
               <ConsumerUserLocationPanel
                 summary={identifier.consumerLocationSummary}
                 detail={identifier.consumerLocationDetail}
                 identifierValue={identifier.value}
               />
-            )}
-
-            <div className={styles.controls}>
-              <Text className={styles.queriedCaption}>
-                Queried {lookup?.queriedAt.toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}{" · "}window {lookup?.rangeStart} → {lookup?.rangeEnd}
-              </Text>
-              <Switch
-                checked={hideInJurisdiction}
-                onChange={(_, d) => setHideInJurisdiction(d.checked)}
-                label="Hide in-jurisdiction"
-                labelPosition="before"
-              />
-            </div>
-
-            <ResultsHeader result={result} />
-
-            {result.countrySummaries.length > 0 && (
+            ) : (
               <>
-                <Divider>By country</Divider>
-                <CountrySummaryCards summaries={result.countrySummaries} />
+                <div className={styles.controls}>
+                  <Text className={styles.queriedCaption}>
+                    Queried {lookup?.queriedAt.toLocaleString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}{" · "}window {lookup?.rangeStart} → {lookup?.rangeEnd}
+                  </Text>
+                  <Switch
+                    checked={hideInJurisdiction}
+                    onChange={(_, d) => setHideInJurisdiction(d.checked)}
+                    label="Hide in-jurisdiction"
+                    labelPosition="before"
+                  />
+                </div>
+
+                <ResultsHeader result={result} />
+
+                {result.countrySummaries.length > 0 && (
+                  <>
+                    <Divider>By country</Divider>
+                    <CountrySummaryCards summaries={result.countrySummaries} />
+                  </>
+                )}
+
+                <Divider>Timeline</Divider>
+                <LoginTimeline
+                  timeline={visibleTimeline}
+                  impossibleEventIds={impossibleSet}
+                />
               </>
             )}
-
-            <Divider>Timeline</Divider>
-            <LoginTimeline
-              timeline={visibleTimeline}
-              impossibleEventIds={impossibleSet}
-            />
           </div>
         )}
       </DrawerBody>
