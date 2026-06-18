@@ -80,7 +80,9 @@ export function useCaseComputedValues({
       } else if (identifier.accountExistenceStatus === "success") {
         const hasAccount = Object.values(identifier.services).some(service =>
           service.accountExistence?.consumerExists || service.accountExistence?.enterpriseExists
-        );
+        ) || identifier.checkAccounts?.accountType === "Consumer"
+          || identifier.checkAccounts?.accountType === "Enterprise"
+          || identifier.checkAccounts?.accountType === "Enterprise-and-Consumer";
         
         if (hasAccount) {
           accountsFound++;
